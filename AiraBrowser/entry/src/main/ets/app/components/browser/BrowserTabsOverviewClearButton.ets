@@ -17,10 +17,10 @@ import { BrowserBottomChromeHdsMaterialSurface } from './BrowserBottomChromeHdsM
 import { isHdsBottomMaterialAvailable } from './BrowserBottomChromeHdsMaterialTokens';
 import { resolveBrowserFloatingGlassMaterialTintForTone } from './BrowserFloatingGlassMaterialTokens';
 
-export const BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE: number = 52;
+export const BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE: number = 44;
 
 const BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_EDGE_GAP: number = 16;
-const BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_ICON_SIZE: number = 24;
+const BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_ICON_SIZE: number = 22;
 const BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SHADOW_RADIUS: number = 40;
 const BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SHADOW_OFFSET_Y: number = 0;
 

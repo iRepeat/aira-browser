@@ -18,7 +18,7 @@ import { resolveBrowserFloatingGlassMaterialTintForTone } from './BrowserFloatin
 import { BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE } from './BrowserTabsOverviewClearButton';
 
 const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_EDGE_GAP: number = 16;
-const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_ICON_SIZE: number = 24;
+const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_ICON_SIZE: number = 22;
 const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_SHADOW_RADIUS: number = 40;
 const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_SHADOW_OFFSET_Y: number = 0;
 

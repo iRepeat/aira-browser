@@ -43,8 +43,8 @@ import {
   systemMaterialModifier
 } from '../common/FloatingGlassMaterialTokens';
 
-const BROWSER_BOTTOM_CHROME_RENDER_HEIGHT: number = 52;
-const BROWSER_BOTTOM_CHROME_ICON_SIZE: number = 24;
+const BROWSER_BOTTOM_CHROME_RENDER_HEIGHT: number = 44;
+const BROWSER_BOTTOM_CHROME_ICON_SIZE: number = 22;
 const BROWSER_BOTTOM_CHROME_EDGE_HIGHLIGHT_WIDTH: number = 0.5;
 const BROWSER_BOTTOM_CHROME_SHADOW_RADIUS: number = 6;
 const BROWSER_BOTTOM_CHROME_ENABLED_OPACITY: number = 1;

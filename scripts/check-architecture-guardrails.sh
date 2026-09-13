@@ -998,11 +998,11 @@ check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CH
   'BROWSER_BOTTOM_CHROME_COMPACT_HEIGHT: number = 32' \
   "Scroll-Compact must keep the refined 32vp capsule height."
 check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
-  'BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y: number = 20' \
-  "Scroll-Compact must keep the 32vp capsule inside the 52vp interaction rail."
+  'BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y: number = 12' \
+  "Scroll-Compact must bottom-align the 32vp capsule inside the 44vp interaction rail."
 check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
-  'BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y: number = 20' \
-  "Scroll-Compact must preserve the requested 40vp movement with the refined capsule."
+  'BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y: number = 12' \
+  "Scroll-Compact must translate the floating surface with the refined capsule."
 check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
   'BROWSER_BOTTOM_CHROME_COMPACT_DISPLAY_SCALE: number = 14 / 15' \
   "Scroll-Compact must reduce display text visually without animating paragraph metrics."
