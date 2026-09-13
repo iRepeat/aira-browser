@@ -18,6 +18,12 @@ export struct BrowserFloatingGlassMaterialSurface {
   @Prop materialInteractive: boolean = true;
   @Prop materialEnabled: boolean = false;
   @Prop backgroundBlurEnabled: boolean = true;
+  /**
+   * True when an ancestor draws the immersive material for this cluster. This surface then
+   * contributes only its content: its fill, blur and border would otherwise stack on top of
+   * the material and hide it.
+   */
+  @Prop hostMaterialActive: boolean = false;
   @Prop overlayColor: ResourceColor | undefined = undefined;
   @Prop overlayOpacity: number = 0;
   @Prop materialBorderWidth: number = 0;
@@ -38,6 +44,7 @@ export struct BrowserFloatingGlassMaterialSurface {
         materialInteractive: this.materialInteractive,
         materialEnabled: this.materialEnabled,
         backgroundBlurEnabled: this.backgroundBlurEnabled,
+        hostMaterialActive: this.hostMaterialActive,
         overlayColor: this.overlayColor,
         overlayOpacity: this.overlayOpacity,
         materialBorderWidth: this.materialBorderWidth,

@@ -18,6 +18,8 @@ import { SettingsContentKind } from '../../../core/settings/SettingsContentLayou
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import { AiraRenderableIconId } from '../../../core/resources/GeneratedAiraIconCatalog';
 import { AiraIcon } from '../common/AiraIcon';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 
 export type SettingsHdsBackIconKind = 'close' | 'back';
 
@@ -222,28 +224,36 @@ export struct SettingsHdsScaffold {
 
   @Builder
   private buildGlassBackButton() {
-    Button() {
-      AiraIcon({
-        airaIconId: 'browser.toolbar.back',
-        iconSize: SETTINGS_TITLE_BAR_ACTION_ICON_SIZE,
-        iconColor: this.resolveTitleActionIconColor()
+    Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterial()) {
+        this.buildTitleActionMaterialPlate()
+      }
+      Button() {
+        AiraIcon({
+          airaIconId: 'browser.toolbar.back',
+          iconSize: SETTINGS_TITLE_BAR_ACTION_ICON_SIZE,
+          iconColor: this.resolveTitleActionIconColor()
+        })
+      }
+      .width(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
+      .height(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
+      .type(ButtonType.Normal)
+      .stateEffect(true)
+      .backgroundColor(this.resolveTitleActionBackground())
+      .borderRadius(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2)
+      .accessibilityText(this.resolveBackLabel())
+      .onClick(() => {
+        this.onBack();
       })
     }
     .width(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
     .height(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
-    .type(ButtonType.Normal)
-    .stateEffect(true)
-    .backgroundColor(this.headerButtonBackground)
     .borderRadius(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2)
     .position({
       x: SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_LEFT,
       y: this.resolveCustomMenuActionButtonTop()
     })
     .zIndex(4)
-    .accessibilityText(this.resolveBackLabel())
-    .onClick(() => {
-      this.onBack();
-    })
   }
 
   @Builder
@@ -288,72 +298,88 @@ export struct SettingsHdsScaffold {
 
   @Builder
   private buildGlassMenuAction(menuAction: SettingsHdsMenuAction) {
-    Button() {
-      if (menuAction.airaIconId !== undefined) {
-        AiraIcon({
-          airaIconId: menuAction.airaIconId,
-          iconSize: SETTINGS_TITLE_BAR_ACTION_ICON_SIZE,
-          iconColor: this.resolveTitleActionIconColor()
-        })
-      } else {
-        SymbolGlyph(this.resolveMenuActionIcon(menuAction.icon))
-          .fontSize(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
-          .fontWeight(FontWeight.Medium)
-          .fontColor([this.resolveTitleActionIconColor()])
+    Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterial()) {
+        this.buildTitleActionMaterialPlate()
       }
+      Button() {
+        if (menuAction.airaIconId !== undefined) {
+          AiraIcon({
+            airaIconId: menuAction.airaIconId,
+            iconSize: SETTINGS_TITLE_BAR_ACTION_ICON_SIZE,
+            iconColor: this.resolveTitleActionIconColor()
+          })
+        } else {
+          SymbolGlyph(this.resolveMenuActionIcon(menuAction.icon))
+            .fontSize(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
+            .fontWeight(FontWeight.Medium)
+            .fontColor([this.resolveTitleActionIconColor()])
+        }
+      }
+      .width(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
+      .height(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
+      .type(ButtonType.Normal)
+      .stateEffect(true)
+      .backgroundColor(this.resolveTitleActionBackground())
+      .borderRadius(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2)
+      .enabled(menuAction.enabled !== false)
+      .accessibilityText(menuAction.label)
+      .onClick(() => {
+        if (menuAction.enabled !== false) {
+          menuAction.action();
+        }
+      })
     }
     .width(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
     .height(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
-    .type(ButtonType.Normal)
-    .stateEffect(true)
-    .backgroundColor(this.headerButtonBackground)
     .borderRadius(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2)
-    .enabled(menuAction.enabled !== false)
-    .accessibilityText(menuAction.label)
-    .onClick(() => {
-      if (menuAction.enabled !== false) {
-        menuAction.action();
-      }
-    })
   }
 
   @Builder
   private buildCustomMenuActionButtonControl() {
-    Button() {
-      if (this.menuActionAiraIconId !== undefined) {
-        AiraIcon({
-          airaIconId: this.menuActionAiraIconId,
-          iconSize: SETTINGS_TITLE_BAR_ACTION_ICON_SIZE,
-          iconColor: this.resolveTitleActionIconColor()
-        })
-      } else if (this.menuActionImageIcon !== undefined) {
-        Stack({ alignContent: Alignment.Center }) {
-          ForEach([this.resolveMenuActionImageRenderKey()], (_renderKey: string) => {
-            this.buildMenuActionImage()
-          }, (renderKey: string) => renderKey)
-        }
-          .width(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
-          .height(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
-      } else {
-        SymbolGlyph(this.resolveMenuActionIcon(this.menuActionIcon))
-          .fontSize(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
-          .fontWeight(FontWeight.Medium)
-          .fontColor([this.resolveTitleActionIconColor()])
+    Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterial()) {
+        this.buildTitleActionMaterialPlate()
       }
+      Button() {
+        if (this.menuActionAiraIconId !== undefined) {
+          AiraIcon({
+            airaIconId: this.menuActionAiraIconId,
+            iconSize: SETTINGS_TITLE_BAR_ACTION_ICON_SIZE,
+            iconColor: this.resolveTitleActionIconColor()
+          })
+        } else if (this.menuActionImageIcon !== undefined) {
+          Stack({ alignContent: Alignment.Center }) {
+            ForEach([this.resolveMenuActionImageRenderKey()], (_renderKey: string) => {
+              this.buildMenuActionImage()
+            }, (renderKey: string) => renderKey)
+          }
+            .width(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
+            .height(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
+        } else {
+          SymbolGlyph(this.resolveMenuActionIcon(this.menuActionIcon))
+            .fontSize(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
+            .fontWeight(FontWeight.Medium)
+            .fontColor([this.resolveTitleActionIconColor()])
+        }
+      }
+      .width(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
+      .height(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
+      .type(ButtonType.Normal)
+      .backgroundColor(this.resolveTitleActionBackground())
+      .borderRadius(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2)
+      .enabled(this.menuActionEnabled)
+      .stateEffect(true)
+      .accessibilityText(this.menuActionLabel)
+      .onClick(() => {
+        if (this.menuActionEnabled) {
+          this.onMenuAction();
+        }
+      })
     }
     .width(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
     .height(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
-    .type(ButtonType.Normal)
-    .backgroundColor(this.headerButtonBackground)
     .borderRadius(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2)
-    .enabled(this.menuActionEnabled)
-    .stateEffect(true)
-    .accessibilityText(this.menuActionLabel)
-    .onClick(() => {
-      if (this.menuActionEnabled) {
-        this.onMenuAction();
-      }
-    })
   }
 
   @Builder
@@ -367,20 +393,54 @@ export struct SettingsHdsScaffold {
 
   @Builder
   private buildGlassPrivateIndicator() {
-    Button() {
-      SymbolGlyph($r('sys.symbol.lock_fill'))
-        .fontSize(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
-        .fontWeight(FontWeight.Medium)
-        .fontColor([this.resolveTitleActionIconColor()])
+    Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterial()) {
+        this.buildTitleActionMaterialPlate()
+      }
+      Button() {
+        SymbolGlyph($r('sys.symbol.lock_fill'))
+          .fontSize(SETTINGS_TITLE_BAR_ACTION_ICON_SIZE)
+          .fontWeight(FontWeight.Medium)
+          .fontColor([this.resolveTitleActionIconColor()])
+      }
+      .width(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
+      .height(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
+      .type(ButtonType.Normal)
+      .stateEffect(false)
+      .backgroundColor(this.resolveTitleActionBackground())
+      .borderRadius(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2)
+      .hitTestBehavior(HitTestMode.None)
+      .accessibilityText('私密模式')
     }
     .width(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
     .height(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE)
-    .type(ButtonType.Normal)
-    .stateEffect(false)
-    .backgroundColor(this.headerButtonBackground)
     .borderRadius(SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2)
-    .hitTestBehavior(HitTestMode.None)
-    .accessibilityText('私密模式')
+  }
+
+  /**
+   * Immersive light-sense backplate for a title-bar action. The action keeps its own Button
+   * and gesture; the plate only supplies the material behind it.
+   */
+  @Builder
+  private buildTitleActionMaterialPlate() {
+    HdsImmersiveMaterialSurface({
+      plateWidth: SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE,
+      plateHeight: SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE,
+      plateRadius: SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_SIZE / 2
+    })
+  }
+
+  private shouldUseHdsMaterial(): boolean {
+    return isHdsMaterialAvailable();
+  }
+
+  /**
+   * The material paints the button surface itself, so the opaque HeaderButtonBackground has
+   * to step aside or it would hide the material (the same rule as the bottom chrome).
+   */
+  private resolveTitleActionBackground(): ResourceColor {
+    return this.shouldUseHdsMaterial() ?
+      $r('sys.color.ohos_id_color_background_transparent') : this.headerButtonBackground;
   }
 
   private refreshTopSafeInset(): void {

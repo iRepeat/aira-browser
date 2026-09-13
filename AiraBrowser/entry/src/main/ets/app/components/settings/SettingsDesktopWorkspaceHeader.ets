@@ -3,6 +3,8 @@ import {
   BROWSER_DESKTOP_MENU_CORNER_RADIUS_VP
 } from '../../../core/browser/BrowserDesktopMenuPresentationTokens';
 import { AiraIcon } from '../common/AiraIcon';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import {
   BrowserDesktopContextMenu,
   BrowserDesktopContextMenuItem
@@ -35,24 +37,38 @@ export struct SettingsDesktopWorkspaceHeader {
   build() {
     Row({ space: 10 }) {
       if (this.showBackButton) {
-        Button() {
-          AiraIcon({
-            airaIconId: 'browser.toolbar.back',
-            iconSize: 17,
-            iconColor: this.iconColor
+        Stack({ alignContent: Alignment.Center }) {
+          if (isHdsMaterialAvailable()) {
+            HdsImmersiveMaterialSurface({
+              plateWidth: SETTINGS_DESKTOP_WORKSPACE_HEADER_BUTTON_SIZE,
+              plateHeight: SETTINGS_DESKTOP_WORKSPACE_HEADER_BUTTON_SIZE,
+              plateRadius: SETTINGS_DESKTOP_WORKSPACE_HEADER_BUTTON_SIZE / 2
+            })
+          }
+          Button() {
+            AiraIcon({
+              airaIconId: 'browser.toolbar.back',
+              iconSize: 17,
+              iconColor: this.iconColor
+            })
+          }
+          .width(SETTINGS_DESKTOP_WORKSPACE_HEADER_BUTTON_SIZE)
+          .height(SETTINGS_DESKTOP_WORKSPACE_HEADER_BUTTON_SIZE)
+          .type(ButtonType.Circle)
+          .buttonStyle(ButtonStyleMode.TEXTUAL)
+          // The material paints the surface; an opaque fill would hide it.
+          .backgroundColor(isHdsMaterialAvailable() ?
+            $r('sys.color.ohos_id_color_background_transparent') : this.buttonBackgroundColor)
+          .stateEffect(true)
+          .focusable(true)
+          .accessibilityText('返回上一级设置')
+          .onClick(() => {
+            this.onBack?.();
           })
         }
         .width(SETTINGS_DESKTOP_WORKSPACE_HEADER_BUTTON_SIZE)
         .height(SETTINGS_DESKTOP_WORKSPACE_HEADER_BUTTON_SIZE)
-        .type(ButtonType.Circle)
-        .buttonStyle(ButtonStyleMode.TEXTUAL)
-        .backgroundColor(this.buttonBackgroundColor)
-        .stateEffect(true)
-        .focusable(true)
-        .accessibilityText('返回上一级设置')
-        .onClick(() => {
-          this.onBack?.();
-        })
+        .borderRadius(SETTINGS_DESKTOP_WORKSPACE_HEADER_BUTTON_SIZE / 2)
       }
 
       if (this.showTitle && !this.showBackButton) {

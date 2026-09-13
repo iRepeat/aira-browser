@@ -10,6 +10,8 @@ import { AiraRenderableIconId } from '../../../core/resources/GeneratedAiraIconC
 import { APP_STANDARD_HORIZONTAL_PADDING } from '../common/AppLayoutTokens';
 import { AiraIcon } from '../common/AiraIcon';
 import { FloatingGlassMaterialSurface } from '../common/FloatingGlassMaterialSurface';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import { resolveFloatingGlassMaterialTintForMode } from '../common/FloatingGlassMaterialTokens';
 import { BrowserSheetResponsiveLayoutViewModel } from '../../../core/browser/BrowserSheetResponsiveLayoutViewModel';
 
@@ -394,15 +396,28 @@ export struct BrowserSheetIconButton {
   @Prop buttonSize: number = 36;
   @Prop actionEnabled: boolean = true;
   @Prop accessibilityLabel: string = '';
+  /**
+   * Opt-in immersive light-sense backplate. Off by default because this button is shared by
+   * many sheets and overlays; the settings sheet header is the surface that opted in.
+   */
+  @Prop immersiveMaterialEnabled: boolean = false;
   onAction: () => void = () => {};
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterial()) {
+        HdsImmersiveMaterialSurface({
+          plateWidth: this.buttonSize,
+          plateHeight: this.buttonSize,
+          plateRadius: this.buttonSize / 2
+        })
+      }
       FloatingGlassMaterialSurface({
         surfaceWidth: this.buttonSize,
         surfaceHeight: this.buttonSize,
         surfaceRadius: this.buttonSize / 2,
-        tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode)
+        tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
+        hostMaterialActive: this.shouldUseHdsMaterial()
       }) {
         Button() {
           if (this.airaIconId !== undefined) {
@@ -441,6 +456,10 @@ export struct BrowserSheetIconButton {
       return this.iconColor;
     }
     return this.storedPrimaryTextColor;
+  }
+
+  private shouldUseHdsMaterial(): boolean {
+    return this.immersiveMaterialEnabled && isHdsMaterialAvailable();
   }
 }
 

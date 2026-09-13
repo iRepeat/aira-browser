@@ -32,8 +32,8 @@ import {
   createHiddenDownloadToolbarIndicatorState
 } from '../../../core/download/DownloadToolbarIndicatorViewModel';
 import { BrowserBottomChromeImmersiveMaterialSurface } from './BrowserBottomChromeImmersiveMaterialSurface';
-import { BrowserBottomChromeHdsMaterialSurface } from './BrowserBottomChromeHdsMaterialSurface';
-import { isHdsBottomMaterialAvailable } from './BrowserBottomChromeHdsMaterialTokens';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import {
   BROWSER_BOTTOM_CHROME_LIGHT_EDGE_HIGHLIGHT_COLOR
 } from './BrowserFloatingGlassMaterialTokens';
@@ -194,7 +194,7 @@ export struct BrowserBottomChromeRenderer {
   private buildLeadingOuterMaterial() {
     Stack({ alignContent: Alignment.Center }) {
       if (this.shouldUseHdsMaterialPlate()) {
-        BrowserBottomChromeHdsMaterialSurface({
+        HdsImmersiveMaterialSurface({
           plateWidth: this.animatedFrame.leadingOuterWidth,
           plateHeight: this.resolveOuterVisualSize(this.animatedFrame.leadingOuterWidth),
           plateRadius: this.resolveOuterVisualSize(this.animatedFrame.leadingOuterWidth) / 2
@@ -241,7 +241,7 @@ export struct BrowserBottomChromeRenderer {
   private buildTrailingOuterMaterial() {
     Stack({ alignContent: Alignment.Center }) {
       if (this.shouldUseHdsMaterialPlate()) {
-        BrowserBottomChromeHdsMaterialSurface({
+        HdsImmersiveMaterialSurface({
           plateWidth: this.animatedFrame.trailingOuterWidth,
           plateHeight: this.resolveOuterVisualSize(this.animatedFrame.trailingOuterWidth),
           plateRadius: this.resolveOuterVisualSize(this.animatedFrame.trailingOuterWidth) / 2
@@ -299,7 +299,7 @@ export struct BrowserBottomChromeRenderer {
     Stack({ alignContent: Alignment.Top }) {
       Stack({ alignContent: Alignment.Center }) {
         if (this.shouldUseHdsMaterialPlate()) {
-          BrowserBottomChromeHdsMaterialSurface({
+          HdsImmersiveMaterialSurface({
             plateWidth: this.animatedFrame.centerWidth,
             plateHeight: this.animatedFrame.centerHeight,
             plateRadius: this.animatedFrame.centerRadius
@@ -1480,6 +1480,6 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private shouldUseHdsMaterialPlate(): boolean {
-    return this.hdsMaterialPlateEnabled && isHdsBottomMaterialAvailable();
+    return this.hdsMaterialPlateEnabled && isHdsMaterialAvailable();
   }
 }

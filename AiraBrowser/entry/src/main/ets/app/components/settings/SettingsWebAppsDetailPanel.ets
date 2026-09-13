@@ -38,6 +38,8 @@ import { sharedWebAppInstallRepository } from '../../../data/webapps/WebAppInsta
 import { WebAppDetailSettingsScreen } from './WebAppDetailSettingsScreen';
 import { WebAppSettingsScreen } from './WebAppSettingsScreen';
 import { SettingsHdsScaffold } from './SettingsHdsScaffold';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import {
   SettingsGroupCard,
   SettingsGroupDivider,
@@ -360,20 +362,34 @@ export struct SettingsWebAppsDetailPanel {
   @Builder
   private buildEmbeddedBackHeader(title: string) {
     Row({ space: 10 }) {
-      Button() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor([this.secondaryTextColor])
+      Stack({ alignContent: Alignment.Center }) {
+        if (isHdsMaterialAvailable()) {
+          HdsImmersiveMaterialSurface({
+            plateWidth: 36,
+            plateHeight: 36,
+            plateRadius: 18
+          })
+        }
+        Button() {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor([this.secondaryTextColor])
+        }
+        .width(36)
+        .height(36)
+        .type(ButtonType.Circle)
+        // The material paints the surface; the opaque fill would hide it.
+        .backgroundColor(isHdsMaterialAvailable() ?
+          $r('sys.color.ohos_id_color_background_transparent') : this.headerButtonBackground)
+        .stateEffect(true)
+        .onClick(() => {
+          this.onBack?.();
+        })
       }
       .width(36)
       .height(36)
-      .type(ButtonType.Circle)
-      .backgroundColor(this.headerButtonBackground)
-      .stateEffect(true)
-      .onClick(() => {
-        this.onBack?.();
-      })
+      .borderRadius(18)
 
       Text(title)
         .fontSize(20)

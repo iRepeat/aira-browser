@@ -15,6 +15,8 @@ import { BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY } from '../../../core/theme/Bro
 import { resolveWindowTopSafeInsetVp } from '../../../core/browser/BrowserWindowAvoidAreaCoordinator';
 import { AiraIcon } from './AiraIcon';
 import { FloatingGlassMaterialSurface } from './FloatingGlassMaterialSurface';
+import { HdsImmersiveMaterialSurface } from './HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from './HdsImmersiveMaterialTokens';
 import {
   createFloatingGlassMaterialIfAvailable,
   resolveFloatingGlassMaterialBackgroundColor,
@@ -277,8 +279,12 @@ export struct ManagementHdsScaffold {
         surfaceHeight: MANAGEMENT_TITLE_ACTION_SIZE,
         surfaceRadius: MANAGEMENT_TITLE_ACTION_SIZE / 2,
         tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
-        materialEnabled: true
+        materialEnabled: true,
+        hostMaterialActive: this.shouldUseHdsMaterial()
       }) {
+        if (this.shouldUseHdsMaterial()) {
+          this.buildTitleActionMaterialPlate()
+        }
         Button() {
           if (this.backIconKind === 'close') {
             SymbolGlyph($r('sys.symbol.xmark'))
@@ -345,8 +351,12 @@ export struct ManagementHdsScaffold {
         surfaceHeight: MANAGEMENT_TITLE_ACTION_SIZE,
         surfaceRadius: MANAGEMENT_TITLE_ACTION_SIZE / 2,
         tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
-        materialEnabled: true
+        materialEnabled: true,
+        hostMaterialActive: this.shouldUseHdsMaterial()
       }) {
+        if (this.shouldUseHdsMaterial()) {
+          this.buildTitleActionMaterialPlate()
+        }
         Button() {
           SymbolGlyph(this.resolveMenuActionIcon(menuAction))
             .fontSize(MANAGEMENT_TITLE_ACTION_ICON_SIZE)
@@ -381,8 +391,12 @@ export struct ManagementHdsScaffold {
         surfaceHeight: MANAGEMENT_TITLE_ACTION_SIZE,
         surfaceRadius: MANAGEMENT_TITLE_ACTION_SIZE / 2,
         tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
-        materialEnabled: true
+        materialEnabled: true,
+        hostMaterialActive: this.shouldUseHdsMaterial()
       }) {
+        if (this.shouldUseHdsMaterial()) {
+          this.buildTitleActionMaterialPlate()
+        }
         Button() {
           AiraIcon({
             airaIconId: 'browser.toolbar.more',
@@ -434,8 +448,12 @@ export struct ManagementHdsScaffold {
         surfaceHeight: MANAGEMENT_TITLE_ACTION_SIZE,
         surfaceRadius: MANAGEMENT_TITLE_ACTION_SIZE / 2,
         tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
-        materialEnabled: true
+        materialEnabled: true,
+        hostMaterialActive: this.shouldUseHdsMaterial()
       }) {
+        if (this.shouldUseHdsMaterial()) {
+          this.buildTitleActionMaterialPlate()
+        }
         SymbolGlyph($r('sys.symbol.lock_fill'))
           .fontSize(MANAGEMENT_TITLE_ACTION_ICON_SIZE)
           .fontWeight(FontWeight.Medium)
@@ -477,9 +495,31 @@ export struct ManagementHdsScaffold {
     return (this.useTopSafeInset ? this.resolveTopSafeInset() : 0) + MANAGEMENT_TITLE_ACTION_TOP_INSET;
   }
 
+  /**
+   * Backplate that carries the immersive light-sense material behind a title-bar action.
+   * A cluster renders it first so HDS materializes onto the button without owning any of
+   * the button's own gestures.
+   */
+  @Builder
+  private buildTitleActionMaterialPlate() {
+    HdsImmersiveMaterialSurface({
+      plateWidth: MANAGEMENT_TITLE_ACTION_SIZE,
+      plateHeight: MANAGEMENT_TITLE_ACTION_SIZE,
+      plateRadius: MANAGEMENT_TITLE_ACTION_SIZE / 2
+    })
+  }
+
+  private shouldUseHdsMaterial(): boolean {
+    return isHdsMaterialAvailable();
+  }
+
   @Builder
   private buildTitleActionShadowCaster() {
-    if (this.elevateTitleActions) {
+    // The cast fill is near-opaque on purpose, to lift a button off scrolled content. Behind
+    // the immersive material it would instead be the sampled backdrop, turning the glass into
+    // a flat disc, so the material-backed case draws no caster and lets the material be the
+    // surface (the same trade the floating bottom chrome makes).
+    if (this.elevateTitleActions && !this.shouldUseHdsMaterial()) {
       Stack()
         .width(MANAGEMENT_TITLE_ACTION_SIZE)
         .height(MANAGEMENT_TITLE_ACTION_SIZE)

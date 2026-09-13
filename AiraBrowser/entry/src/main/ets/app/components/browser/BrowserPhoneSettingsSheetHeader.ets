@@ -23,6 +23,7 @@ export struct BrowserPhoneSettingsSheetHeader {
           buttonSize: PHONE_SETTINGS_SHEET_HEADER_HEIGHT,
           iconColor: this.storedPrimaryTextColor,
           accessibilityLabel: this.backAccessibilityText,
+          immersiveMaterialEnabled: true,
           onAction: (): void => {
             this.onBack();
           }

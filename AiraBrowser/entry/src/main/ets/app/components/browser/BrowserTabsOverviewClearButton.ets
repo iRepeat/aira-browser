@@ -13,8 +13,8 @@ import {
 } from '../../../core/theme/BrowserBottomPanelNeutralTheme';
 import { AiraIcon } from '../common/AiraIcon';
 import { BrowserBottomChromeImmersiveMaterialSurface } from './BrowserBottomChromeImmersiveMaterialSurface';
-import { BrowserBottomChromeHdsMaterialSurface } from './BrowserBottomChromeHdsMaterialSurface';
-import { isHdsBottomMaterialAvailable } from './BrowserBottomChromeHdsMaterialTokens';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import { resolveBrowserFloatingGlassMaterialTintForTone } from './BrowserFloatingGlassMaterialTokens';
 
 export const BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE: number = 44;
@@ -46,7 +46,7 @@ export struct BrowserTabsOverviewClearButton {
   build() {
     Stack({ alignContent: Alignment.Center }) {
       if (this.shouldUseHdsMaterialPlate()) {
-        BrowserBottomChromeHdsMaterialSurface({
+        HdsImmersiveMaterialSurface({
           plateWidth: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE,
           plateHeight: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE,
           plateRadius: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE / 2
@@ -147,7 +147,7 @@ export struct BrowserTabsOverviewClearButton {
   }
 
   private shouldUseHdsMaterialPlate(): boolean {
-    return isHdsBottomMaterialAvailable();
+    return isHdsMaterialAvailable();
   }
 
   private resolvePrimaryColor(): ResourceColor {

@@ -1,6 +1,8 @@
 import { BROWSER_GLOBAL_SYMBOL_WEIGHT } from './BrowserIconStyle';
 import { BrowserArkWebMediaButtonState } from '../../../core/browser/media/BrowserArkWebMediaTakeoverCoordinator';
 import { BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY } from '../../../core/theme/BrowserThemeStorageKeys';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import { BrowserFloatingGlassMaterialSurface } from './BrowserFloatingGlassMaterialSurface';
 import { resolveBrowserFloatingGlassMaterialTintForMode } from './BrowserFloatingGlassMaterialTokens';
 
@@ -20,11 +22,19 @@ export struct BrowserArkWebMediaTakeoverFloatingButton {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterialPlate()) {
+        HdsImmersiveMaterialSurface({
+          plateWidth: ARKWEB_MEDIA_BUTTON_SIZE,
+          plateHeight: ARKWEB_MEDIA_BUTTON_SIZE,
+          plateRadius: ARKWEB_MEDIA_BUTTON_SIZE / 2
+        })
+      }
       BrowserFloatingGlassMaterialSurface({
         surfaceWidth: ARKWEB_MEDIA_BUTTON_SIZE,
         surfaceHeight: ARKWEB_MEDIA_BUTTON_SIZE,
         surfaceRadius: ARKWEB_MEDIA_BUTTON_SIZE / 2,
-        tintColor: resolveBrowserFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode)
+        tintColor: resolveBrowserFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
+        hostMaterialActive: this.shouldUseHdsMaterialPlate()
       }) {
         Button({ type: ButtonType.Circle }) {
           SymbolGlyph($r('sys.symbol.play_fill'))
@@ -46,6 +56,10 @@ export struct BrowserArkWebMediaTakeoverFloatingButton {
     .width(ARKWEB_MEDIA_BUTTON_SIZE)
     .height(ARKWEB_MEDIA_BUTTON_SIZE)
     .opacity(this.busy ? ARKWEB_MEDIA_BUSY_OPACITY : 1)
+  }
+
+  private shouldUseHdsMaterialPlate(): boolean {
+    return isHdsMaterialAvailable();
   }
 
   private buildAccessibilityText(): string {

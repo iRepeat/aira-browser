@@ -24,8 +24,8 @@ import {
 } from '../../../core/theme/BrowserBottomPanelNeutralTheme';
 import { AiraIcon } from '../common/AiraIcon';
 import { BrowserBottomChromeImmersiveMaterialSurface } from './BrowserBottomChromeImmersiveMaterialSurface';
-import { BrowserBottomChromeHdsMaterialSurface } from './BrowserBottomChromeHdsMaterialSurface';
-import { isHdsBottomMaterialAvailable } from './BrowserBottomChromeHdsMaterialTokens';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import { resolveBrowserFloatingGlassMaterialTintForTone } from './BrowserFloatingGlassMaterialTokens';
 
 export const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT: number = 44;
@@ -86,7 +86,7 @@ export struct BrowserTabsOverviewBottomChrome {
   private buildOuterButton(target: string, iconId: AiraRenderableIconId, accessibilityText: string) {
     Stack({ alignContent: Alignment.Center }) {
       if (this.shouldUseHdsMaterialPlate()) {
-        BrowserBottomChromeHdsMaterialSurface({
+        HdsImmersiveMaterialSurface({
           plateWidth: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_OUTER_SIZE,
           plateHeight: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT,
           plateRadius: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT / 2
@@ -141,7 +141,7 @@ export struct BrowserTabsOverviewBottomChrome {
   private buildSectionSwitcher() {
     Stack({ alignContent: Alignment.Center }) {
       if (this.shouldUseHdsMaterialPlate()) {
-        BrowserBottomChromeHdsMaterialSurface({
+        HdsImmersiveMaterialSurface({
           plateWidth: this.resolveSectionSwitcherWidth(),
           plateHeight: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT,
           plateRadius: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT / 2
@@ -255,7 +255,7 @@ export struct BrowserTabsOverviewBottomChrome {
   }
 
   private shouldUseHdsMaterialPlate(): boolean {
-    return isHdsBottomMaterialAvailable();
+    return isHdsMaterialAvailable();
   }
 
   /**

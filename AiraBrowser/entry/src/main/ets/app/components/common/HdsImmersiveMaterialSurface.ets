@@ -1,21 +1,21 @@
 import { HdsTabs, HdsTabsController, HdsTabsFloatingStyle, hdsMaterial } from '@kit.UIDesignKit';
 
 /**
- * Per-capsule HDS material plate for the floating bottom chrome.
+ * Immersive light-sense backplate for any floating chrome cluster.
  *
- * HdsTabs is the only component that exposes the immersive light-sense material, so each
- * chrome cluster renders one of these purely as its backplate and draws nothing itself;
- * the cluster keeps owning its content and gestures on the layer above.
+ * HdsTabs is the only component that exposes the immersive material, so a cluster renders
+ * one of these purely as its backplate and draws nothing itself; the cluster keeps owning
+ * its content and gestures on the layer above.
  *
  * Geometry notes, both learned the hard way:
  * - The floating style (which carries systemMaterialEffect) only takes effect when
  *   barOverlap is true with vertical false and barPosition End. Dropping barOverlap
  *   disables the material entirely and the plate renders transparent.
  * - A floating bar sizes itself from its tab count, so with a single item it collapses
- *   into a centered sliver. barWidth pins it to the capsule's own width instead.
+ *   into a centered sliver. barWidth pins it to the cluster's own width instead.
  */
 @Component
-export struct BrowserBottomChromeHdsMaterialSurface {
+export struct HdsImmersiveMaterialSurface {
   @Prop plateWidth: number = 1;
   @Prop plateHeight: number = 1;
   @Prop plateRadius: number = 0;
@@ -44,9 +44,9 @@ export struct BrowserBottomChromeHdsMaterialSurface {
     .width('100%')
     .height('100%')
     .borderRadius(this.plateRadius)
-    // The plate must stay clipped to the capsule outline: HDS materializes its bar as a
-    // rectangle, so without this the square body and its square shadow leak past the round
-    // capsule. The drop shadow is drawn by a separate unclipped layer in the renderer.
+    // Stay clipped to the cluster outline: HDS materializes its bar as a rectangle, so
+    // without this the square body leaks past a rounded plate. Anything that needs a drop
+    // shadow must draw it on its own unclipped layer.
     .clip(true)
     .opacity(this.plateOpacity)
     .hitTestBehavior(HitTestMode.None)

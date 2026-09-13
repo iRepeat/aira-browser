@@ -17,6 +17,8 @@ import {
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { SettingsHdsScaffold } from './SettingsHdsScaffold';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import {
   SettingsFooterText,
   SettingsGroupCard,
@@ -113,20 +115,34 @@ export struct WebAppDetailSettingsScreen {
   @Builder
   private buildEmbeddedHeader() {
     Row({ space: 10 }) {
-      Button() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor([this.storedSecondaryTextColor])
+      Stack({ alignContent: Alignment.Center }) {
+        if (isHdsMaterialAvailable()) {
+          HdsImmersiveMaterialSurface({
+            plateWidth: 36,
+            plateHeight: 36,
+            plateRadius: 18
+          })
+        }
+        Button() {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor([this.storedSecondaryTextColor])
+        }
+        .width(36)
+        .height(36)
+        .type(ButtonType.Circle)
+        // The material paints the surface; the opaque fill would hide it.
+        .backgroundColor(isHdsMaterialAvailable() ?
+          $r('sys.color.ohos_id_color_background_transparent') : this.storedPressedBackgroundColor)
+        .stateEffect(true)
+        .onClick(() => {
+          this.onBack?.();
+        })
       }
       .width(36)
       .height(36)
-      .type(ButtonType.Circle)
-      .backgroundColor(this.storedPressedBackgroundColor)
-      .stateEffect(true)
-      .onClick(() => {
-        this.onBack?.();
-      })
+      .borderRadius(18)
 
       Text(this.state.title)
         .fontSize(20)

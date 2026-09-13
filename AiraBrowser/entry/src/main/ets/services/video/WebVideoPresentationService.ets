@@ -2003,21 +2003,25 @@ export class WebVideoPresentationService {
       return false;
     }
     // The buttons float over page content rather than the app's own chrome, so they cannot read
-    // the native theme tokens. The palette mirrors the app's floating-glass surfaces: a light
-    // frosted chip with dark glyphs in light mode, and a translucent light chip with white glyphs
-    // in dark mode. The drop shadow stays subtle so the group does not read as a dark blob.
+    // the native theme tokens. The palette mirrors the app's immersive light-sense material: a
+    // thin translucent surface, a bright rim that reads as the material's light effect, and an
+    // inner highlight along the top edge. The drop shadow stays wide and soft so the group does
+    // not read as a dark blob, and the heavy backdrop blur is what keeps the chip legible over
+    // arbitrary page content without going opaque.
     var actionToolbarThemePalettes = {
       light: {
         iconColor: '#16181D',
-        background: 'rgba(255,255,255,.72)',
-        borderColor: 'rgba(22,24,29,.12)',
-        shadow: '0 2px 10px rgba(22,24,29,.16)'
+        background: 'rgba(255,255,255,.46)',
+        borderColor: 'rgba(255,255,255,.78)',
+        highlight: 'inset 0 1px 0 rgba(255,255,255,.92)',
+        shadow: '0 6px 18px rgba(22,24,29,.14)'
       },
       dark: {
         iconColor: '#FFFFFF',
-        background: 'rgba(255,255,255,.16)',
-        borderColor: 'rgba(255,255,255,.28)',
-        shadow: '0 2px 12px rgba(0,0,0,.20)'
+        background: 'rgba(255,255,255,.13)',
+        borderColor: 'rgba(255,255,255,.24)',
+        highlight: 'inset 0 1px 0 rgba(255,255,255,.22)',
+        shadow: '0 6px 20px rgba(0,0,0,.30)'
       }
     };
     var resolveActionToolbarTheme = function (mode) {
@@ -2082,7 +2086,8 @@ export class WebVideoPresentationService {
         var themedButton = actionToolbarButtons[buttonIndex];
         themedButton.style.border = '1px solid ' + appliedActionToolbarTheme.borderColor;
         themedButton.style.color = appliedActionToolbarTheme.iconColor;
-        themedButton.style.boxShadow = appliedActionToolbarTheme.shadow;
+        themedButton.style.boxShadow = appliedActionToolbarTheme.highlight + ',' +
+          appliedActionToolbarTheme.shadow;
         // Re-derive the surface so a theme flip cannot strand a stale background on the button.
         setButtonState(themedButton, themedButton.getAttribute('data-state') || 'idle', themedButton.title);
       }
@@ -2099,8 +2104,8 @@ export class WebVideoPresentationService {
         'background:' + appliedActionToolbarTheme.background, 'color:' + appliedActionToolbarTheme.iconColor,
         'cursor:pointer',
         'touch-action:none', '-webkit-tap-highlight-color:transparent',
-        '-webkit-backdrop-filter:blur(24px) saturate(1.45)', 'backdrop-filter:blur(24px) saturate(1.45)',
-        'box-shadow:' + appliedActionToolbarTheme.shadow
+        '-webkit-backdrop-filter:blur(30px) saturate(1.8)', 'backdrop-filter:blur(30px) saturate(1.8)',
+        'box-shadow:' + appliedActionToolbarTheme.highlight + ',' + appliedActionToolbarTheme.shadow
       ].join(';');
       button.appendChild(createIcon(iconPaths));
       button.addEventListener('pointerdown', function (event) {

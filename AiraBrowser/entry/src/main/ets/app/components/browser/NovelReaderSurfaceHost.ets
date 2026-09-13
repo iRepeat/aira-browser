@@ -13,6 +13,8 @@ import {
   NovelReaderLayoutViewModel
 } from '../../../core/novel/NovelReaderLayoutViewModel';
 import { AiraIcon } from '../common/AiraIcon';
+import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurface';
+import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import { BrowserFloatingGlassMaterialSurface } from './BrowserFloatingGlassMaterialSurface';
 import { resolveBrowserBottomChromeMaterialTintForMode } from './BrowserFloatingGlassMaterialTokens';
 import { NovelReaderOverlay } from './NovelReaderOverlay';
@@ -64,18 +66,30 @@ export struct NovelReaderSurfaceHost {
         .zIndex(NOVEL_READER_OVERLAY_Z_INDEX)
     } else if (this.shouldShowReentryButton()) {
       Button({ type: ButtonType.Circle }) {
-        BrowserFloatingGlassMaterialSurface({
-          surfaceWidth: NOVEL_REENTRY_BUTTON_SIZE,
-          surfaceHeight: NOVEL_REENTRY_BUTTON_SIZE,
-          surfaceRadius: NOVEL_REENTRY_BUTTON_SIZE / 2,
-          tintColor: resolveBrowserBottomChromeMaterialTintForMode(this.storedResolvedThemeMode)
-        }) {
-          AiraIcon({
-            airaIconId: 'browser.toolbar.reader',
-            iconSize: NOVEL_REENTRY_ICON_SIZE,
-            iconColor: resolveBrowserBottomNeutralPrimaryColor(this.storedResolvedThemeMode)
-          })
+        Stack({ alignContent: Alignment.Center }) {
+          if (this.shouldUseHdsMaterialPlate()) {
+            HdsImmersiveMaterialSurface({
+              plateWidth: NOVEL_REENTRY_BUTTON_SIZE,
+              plateHeight: NOVEL_REENTRY_BUTTON_SIZE,
+              plateRadius: NOVEL_REENTRY_BUTTON_SIZE / 2
+            })
+          }
+          BrowserFloatingGlassMaterialSurface({
+            surfaceWidth: NOVEL_REENTRY_BUTTON_SIZE,
+            surfaceHeight: NOVEL_REENTRY_BUTTON_SIZE,
+            surfaceRadius: NOVEL_REENTRY_BUTTON_SIZE / 2,
+            tintColor: resolveBrowserBottomChromeMaterialTintForMode(this.storedResolvedThemeMode),
+            hostMaterialActive: this.shouldUseHdsMaterialPlate()
+          }) {
+            AiraIcon({
+              airaIconId: 'browser.toolbar.reader',
+              iconSize: NOVEL_REENTRY_ICON_SIZE,
+              iconColor: resolveBrowserBottomNeutralPrimaryColor(this.storedResolvedThemeMode)
+            })
+          }
         }
+        .width(NOVEL_REENTRY_BUTTON_SIZE)
+        .height(NOVEL_REENTRY_BUTTON_SIZE)
       }
       .width(NOVEL_REENTRY_BUTTON_SIZE)
       .height(NOVEL_REENTRY_BUTTON_SIZE)
@@ -128,6 +142,10 @@ export struct NovelReaderSurfaceHost {
     }
     return this.state.reentryAvailable && this.webPageVisible && this.state.scope.tabId.length > 0 &&
       this.state.scope.tabId === this.activeTabId && this.state.reentryPageUrl.length > 0;
+  }
+
+  private shouldUseHdsMaterialPlate(): boolean {
+    return isHdsMaterialAvailable();
   }
 
   private resolveButtonX(): number {

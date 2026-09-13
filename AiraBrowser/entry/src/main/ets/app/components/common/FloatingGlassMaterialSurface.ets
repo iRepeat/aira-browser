@@ -22,6 +22,12 @@ export struct FloatingGlassMaterialSurface {
   @Prop materialShadowEnabled: boolean = false;
   @Prop materialInteractive: boolean = true;
   @Prop materialEnabled: boolean = false;
+  /**
+   * True when an ancestor draws the immersive material for this cluster. This surface then
+   * contributes only its content: its fill, blur and border would otherwise stack on top of
+   * the material and hide it.
+   */
+  @Prop hostMaterialActive: boolean = false;
   @Prop backgroundBlurEnabled: boolean = false;
   @Prop overlayColor: ResourceColor | undefined = undefined;
   @Prop overlayOpacity: number = 0;
@@ -31,7 +37,7 @@ export struct FloatingGlassMaterialSurface {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      if (!this.shouldApplyMaterial()) {
+      if (!this.shouldApplyMaterial() && !this.hostMaterialActive) {
         Stack()
           .width('100%')
           .height('100%')
@@ -50,7 +56,7 @@ export struct FloatingGlassMaterialSurface {
 
       this.content()
 
-      if (this.resolveBorderWidth() > 0) {
+      if (this.resolveBorderWidth() > 0 && !this.hostMaterialActive) {
         Stack()
           .width('100%')
           .height('100%')
@@ -67,7 +73,8 @@ export struct FloatingGlassMaterialSurface {
     .borderRadius(this.resolveSurfaceRadius())
     .clip(true)
     .backgroundBlurStyle(
-      this.shouldApplyBackgroundBlur() ? FLOATING_GLASS_MATERIAL_BLUR_STYLE : BlurStyle.NONE,
+      this.shouldApplyBackgroundBlur() && !this.hostMaterialActive ?
+        FLOATING_GLASS_MATERIAL_BLUR_STYLE : BlurStyle.NONE,
       FLOATING_GLASS_MATERIAL_ADAPTIVE_OPTIONS
     )
     .attributeModifier(systemMaterialModifier(this.shouldApplyMaterial() ? createFloatingGlassMaterial(
