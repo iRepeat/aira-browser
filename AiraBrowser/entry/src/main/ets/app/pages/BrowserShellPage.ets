@@ -594,6 +594,7 @@ import {
   BrowserHostedWebOwnershipCoordinator
 } from '../../core/browser/BrowserHostedWebOwnershipCoordinator';
 import { BROWSER_SYSTEM_FONT_SIZE_SCALE_STORAGE_KEY } from '../../core/browser/BrowserSystemFontScaleCoordinator';
+import { BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY } from '../../core/theme/BrowserThemeStorageKeys';
 import {
   BrowserWebTextZoomAction,
   BrowserWebTextZoomState,
@@ -5057,6 +5058,10 @@ struct BrowserShellPage {
   @State privateModeClearDataSelected: boolean = false;
   @StorageProp(BROWSER_SYSTEM_FONT_SIZE_SCALE_STORAGE_KEY) @Watch('handleSystemFontSizeScaleChange')
   private systemFontSizeScale: number = 1;
+  // The injected video action toolbar paints its own floating chips, so a resolved-mode change
+  // must refresh it explicitly; the toolbar is not part of the native theme invalidation path.
+  @StorageProp(BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY) @Watch('handleResolvedThemeModeChange')
+  private storedResolvedThemeMode: string = 'light';
   @State webTextZoomActionVersion: number = 0;
   @State webTextZoomSheetState: BrowserWebTextZoomState =
     this.webTextZoomViewModel.buildState(this.webTextZoomRatio);
@@ -9464,6 +9469,16 @@ struct BrowserShellPage {
 
   private handleSystemFontSizeScaleChange(): void {
     this.browserHostedRuntimeSurfacePort.updateCurrentActiveConfigFromHost();
+  }
+
+  private handleResolvedThemeModeChange(): void {
+    const tabId = this.activeTabId.trim();
+    if (tabId.length <= 0 || !this.isWebPageVisible() || !this.isWebVideoTakeoverExperimentEnabled()) {
+      return;
+    }
+    void this.arkWebMediaTakeoverCoordinator
+      .ensureWebActionToolbar(tabId, true)
+      .catch((_error: Error): void => {});
   }
 
   private resolveEffectiveWebTextZoomRatio(): number {

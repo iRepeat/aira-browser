@@ -16,9 +16,11 @@ import {
   WebVideoLiveCommandResult,
   WebVideoLivePresentationMode,
   WebVideoLiveSessionTarget,
+  WebVideoLiveThemeMode,
   WebVideoPresentationService
 } from '../../../services/video/WebVideoPresentationService';
 import { BrowserRuntimeLifecyclePort } from '../../../services/web/BrowserRuntimeLifecyclePort';
+import { BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY } from '../../theme/BrowserThemeStorageKeys';
 import {
   MediaEvidenceScope,
   MediaFrameDocumentType
@@ -724,13 +726,16 @@ export class BrowserArkWebMediaTakeoverCoordinator {
       return false;
     }
     const targetKey = session.targetKey;
-    if (this.actionToolbarTargetByTab.get(normalizedTabId) === targetKey) {
+    // The installed toolbar carries theme-dependent colors, so a theme flip must re-run the
+    // install path (which re-applies the palette on the existing toolbar) instead of reusing it.
+    const installKey = targetKey + '|' + this.resolveWebLiveThemeMode();
+    if (this.actionToolbarTargetByTab.get(normalizedTabId) === installKey) {
       return true;
     }
     if (this.actionToolbarInstallInFlightByTab.has(normalizedTabId)) {
       return false;
     }
-    this.actionToolbarInstallInFlightByTab.set(normalizedTabId, targetKey);
+    this.actionToolbarInstallInFlightByTab.set(normalizedTabId, installKey);
     try {
       const result = await this.webVideoPresentationService.installActionToolbar(
         this.runtimeLifecyclePort.resolveController(normalizedTabId),
@@ -742,10 +747,10 @@ export class BrowserArkWebMediaTakeoverCoordinator {
       if (!result.ok || !stillCurrent) {
         return false;
       }
-      this.actionToolbarTargetByTab.set(normalizedTabId, targetKey);
+      this.actionToolbarTargetByTab.set(normalizedTabId, installKey);
       return true;
     } finally {
-      if (this.actionToolbarInstallInFlightByTab.get(normalizedTabId) === targetKey) {
+      if (this.actionToolbarInstallInFlightByTab.get(normalizedTabId) === installKey) {
         this.actionToolbarInstallInFlightByTab.delete(normalizedTabId);
       }
     }
@@ -1181,8 +1186,13 @@ export class BrowserArkWebMediaTakeoverCoordinator {
       tabId: tabId,
       frameRuntimeId: binding.frameRuntimeId,
       transport: binding.transport,
-      presentationMode: this.resolveWebLivePresentationMode(tabId)
+      presentationMode: this.resolveWebLivePresentationMode(tabId),
+      themeMode: this.resolveWebLiveThemeMode()
     };
+  }
+
+  private resolveWebLiveThemeMode(): WebVideoLiveThemeMode {
+    return AppStorage.get<string>(BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY) === 'dark' ? 'dark' : 'light';
   }
 
   private resolveWebLivePresentationMode(tabId: string): WebVideoLivePresentationMode {

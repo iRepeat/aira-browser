@@ -20,6 +20,7 @@ import {
 
 export type WebVideoLiveTargetTransport = 'document_direct' | 'frame_proxy';
 export type WebVideoLivePresentationMode = 'viewport_promoted' | 'preserve_surface';
+export type WebVideoLiveThemeMode = 'light' | 'dark';
 
 export interface WebVideoLiveSessionTarget {
   runtimeId: string;
@@ -29,6 +30,7 @@ export interface WebVideoLiveSessionTarget {
   frameRuntimeId?: string;
   transport?: WebVideoLiveTargetTransport;
   presentationMode?: WebVideoLivePresentationMode;
+  themeMode?: WebVideoLiveThemeMode;
 }
 
 export type WebVideoLiveCommandAction =
@@ -472,6 +474,7 @@ export class WebVideoPresentationService {
     const fullscreenRequestResultEvent = JSON.stringify(WEB_VIDEO_FULLSCREEN_REQUEST_RESULT_EVENT);
     const frameRuntimeId = JSON.stringify(target.frameRuntimeId?.trim() ?? '');
     const presentationMode = JSON.stringify(target.presentationMode ?? 'viewport_promoted');
+    const themeMode = JSON.stringify(target.themeMode === 'dark' ? 'dark' : 'light');
     const action = JSON.stringify(command.action);
     const value = Number.isFinite(command.value ?? 0) ? command.value ?? 0 : 0;
   return `
@@ -582,6 +585,7 @@ export class WebVideoPresentationService {
   var commandAction = ${action};
   var commandValue = ${value};
   var requestedPresentationMode = ${presentationMode};
+  var expectedThemeMode = ${themeMode};
   var liveWatchdogIntervalMs = 180;
   var liveWatchdogRecoveryLimit = 40;
   var livePresentationRegistryProperty = '__airaVideoAssistantLivePresentationRegistry';
@@ -1981,6 +1985,9 @@ export class WebVideoPresentationService {
     if (existingToolbar) {
       try {
         existingToolbar.__airaFullscreenRequestPending = false;
+        if (typeof existingToolbar.__airaApplyTheme === 'function') {
+          existingToolbar.__airaApplyTheme(expectedThemeMode);
+        }
         if (typeof existingToolbar.__airaResetInteractionState === 'function') {
           existingToolbar.__airaResetInteractionState();
         }
@@ -1995,15 +2002,39 @@ export class WebVideoPresentationService {
     if (!toolbarHost) {
       return false;
     }
+    // The buttons float over page content rather than the app's own chrome, so they cannot read
+    // the native theme tokens. The palette mirrors the app's floating-glass surfaces: a light
+    // frosted chip with dark glyphs in light mode, and a translucent light chip with white glyphs
+    // in dark mode. The drop shadow stays subtle so the group does not read as a dark blob.
+    var actionToolbarThemePalettes = {
+      light: {
+        iconColor: '#16181D',
+        background: 'rgba(255,255,255,.72)',
+        borderColor: 'rgba(22,24,29,.12)',
+        shadow: '0 2px 10px rgba(22,24,29,.16)'
+      },
+      dark: {
+        iconColor: '#FFFFFF',
+        background: 'rgba(255,255,255,.16)',
+        borderColor: 'rgba(255,255,255,.28)',
+        shadow: '0 2px 12px rgba(0,0,0,.20)'
+      }
+    };
+    var resolveActionToolbarTheme = function (mode) {
+      return mode === 'dark' ? actionToolbarThemePalettes.dark : actionToolbarThemePalettes.light;
+    };
+    var appliedActionToolbarTheme = resolveActionToolbarTheme(expectedThemeMode);
     var toolbar = ownerDocument.createElement('div');
     toolbar.id = toolbarId;
     toolbar.setAttribute('data-aira-video-runtime-id', expectedRuntimeId);
+    toolbar.setAttribute('data-aira-theme', expectedThemeMode === 'dark' ? 'dark' : 'light');
     toolbar.setAttribute('role', 'toolbar');
     toolbar.setAttribute('aria-label', 'Aira 视频操作');
     toolbar.style.cssText = [
       'position:fixed', 'left:8px', 'top:8px', 'z-index:2147483647',
       'display:flex', 'align-items:center', 'gap:8px', 'box-sizing:border-box',
-      'color:#fff', 'pointer-events:auto', 'touch-action:none', 'user-select:none',
+      'color:' + appliedActionToolbarTheme.iconColor,
+      'pointer-events:auto', 'touch-action:none', 'user-select:none',
       'visibility:hidden'
     ].join(';');
     var svgNamespace = 'http://www.w3.org/2000/svg';
@@ -2041,31 +2072,52 @@ export class WebVideoPresentationService {
       }
       return icon;
     };
+    var actionToolbarButtons = [];
+    var applyActionToolbarTheme = function (mode) {
+      appliedActionToolbarTheme = resolveActionToolbarTheme(mode);
+      var resolvedMode = appliedActionToolbarTheme === actionToolbarThemePalettes.dark ? 'dark' : 'light';
+      toolbar.setAttribute('data-aira-theme', resolvedMode);
+      toolbar.style.color = appliedActionToolbarTheme.iconColor;
+      for (var buttonIndex = 0; buttonIndex < actionToolbarButtons.length; buttonIndex += 1) {
+        var themedButton = actionToolbarButtons[buttonIndex];
+        themedButton.style.border = '1px solid ' + appliedActionToolbarTheme.borderColor;
+        themedButton.style.color = appliedActionToolbarTheme.iconColor;
+        themedButton.style.boxShadow = appliedActionToolbarTheme.shadow;
+        // Re-derive the surface so a theme flip cannot strand a stale background on the button.
+        setButtonState(themedButton, themedButton.getAttribute('data-state') || 'idle', themedButton.title);
+      }
+    };
     var createButton = function (iconPaths, accessibilityLabel) {
       var button = ownerDocument.createElement('button');
       button.type = 'button';
       button.setAttribute('aria-label', accessibilityLabel);
+      button.setAttribute('data-state', 'idle');
       button.style.cssText = [
         'width:40px', 'height:40px', 'box-sizing:border-box', 'padding:0', 'margin:0',
         'display:inline-flex', 'align-items:center', 'justify-content:center',
-        'border:1px solid rgba(255,255,255,.28)', 'border-radius:50%',
-        'background:rgba(255,255,255,.16)', 'color:#fff', 'cursor:pointer',
+        'border:1px solid ' + appliedActionToolbarTheme.borderColor, 'border-radius:50%',
+        'background:' + appliedActionToolbarTheme.background, 'color:' + appliedActionToolbarTheme.iconColor,
+        'cursor:pointer',
         'touch-action:none', '-webkit-tap-highlight-color:transparent',
         '-webkit-backdrop-filter:blur(24px) saturate(1.45)', 'backdrop-filter:blur(24px) saturate(1.45)',
-        'box-shadow:0 3px 16px rgba(0,0,0,.28)'
+        'box-shadow:' + appliedActionToolbarTheme.shadow
       ].join(';');
       button.appendChild(createIcon(iconPaths));
       button.addEventListener('pointerdown', function (event) {
         event.stopPropagation();
       }, true);
       toolbar.appendChild(button);
+      actionToolbarButtons.push(button);
       return button;
     };
     var setButtonState = function (button, state, title) {
       button.setAttribute('data-state', state);
       button.title = title;
       button.style.opacity = state === 'unavailable' ? '0.48' : '1';
-      button.style.background = state === 'busy' ? 'rgba(10,89,247,.92)' : 'rgba(255,255,255,.16)';
+      var busy = state === 'busy';
+      button.style.background = busy ? 'rgba(10,89,247,.92)' : appliedActionToolbarTheme.background;
+      // The busy chip is a filled blue, so its glyph stays white in both modes for contrast.
+      button.style.color = busy ? '#FFFFFF' : appliedActionToolbarTheme.iconColor;
     };
     var castButton = createButton(castIconPaths, '投屏');
     var pipButton = createButton(pictureInPictureIconPaths, '小窗播放');
@@ -2504,6 +2556,7 @@ export class WebVideoPresentationService {
       }
     }, true);
     toolbar.__airaRefresh = scheduleToolbarRefresh;
+    toolbar.__airaApplyTheme = applyActionToolbarTheme;
     toolbar.__airaResetInteractionState = resetToolbarInteractionState;
     toolbar.__airaCleanup = function () {
       try {
