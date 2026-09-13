@@ -18,12 +18,14 @@ import {
   BROWSER_THEME_STORAGE_ON_ACCENT_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import {
-  resolveBrowserBottomFloatingMaterialShadowColor,
+  resolveBrowserTabsOverviewFloatingMaterialShadowColor,
   resolveBrowserBottomNeutralPrimaryColor,
   resolveBrowserBottomNeutralSecondaryColor
 } from '../../../core/theme/BrowserBottomPanelNeutralTheme';
 import { AiraIcon } from '../common/AiraIcon';
 import { BrowserBottomChromeImmersiveMaterialSurface } from './BrowserBottomChromeImmersiveMaterialSurface';
+import { BrowserBottomChromeHdsMaterialSurface } from './BrowserBottomChromeHdsMaterialSurface';
+import { isHdsBottomMaterialAvailable } from './BrowserBottomChromeHdsMaterialTokens';
 import { resolveBrowserFloatingGlassMaterialTintForTone } from './BrowserFloatingGlassMaterialTokens';
 
 export const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT: number = 52;
@@ -35,8 +37,8 @@ const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_OUTER_SIZE: number = 52;
 const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_BLOCK_GAP: number = 8;
 const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_ICON_SIZE: number = 24;
 const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_INSET: number = 4;
-const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SHADOW_RADIUS: number = 6;
-const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SHADOW_OFFSET_Y: number = 2;
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SHADOW_RADIUS: number = 40;
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SHADOW_OFFSET_Y: number = 0;
 
 @Component
 export struct BrowserTabsOverviewBottomChrome {
@@ -83,12 +85,20 @@ export struct BrowserTabsOverviewBottomChrome {
   @Builder
   private buildOuterButton(target: string, iconId: AiraRenderableIconId, accessibilityText: string) {
     Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterialPlate()) {
+        BrowserBottomChromeHdsMaterialSurface({
+          plateWidth: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_OUTER_SIZE,
+          plateHeight: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT,
+          plateRadius: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT / 2
+        })
+      }
       BrowserBottomChromeImmersiveMaterialSurface({
         surfaceWidth: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_OUTER_SIZE,
         surfaceHeight: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT,
         surfaceRadius: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT / 2,
         materialTint: this.resolveMaterialTint(),
-        fallbackColor: $r('app.color.browser_bottom_toolbar_glass_background')
+        fallbackColor: $r('app.color.browser_bottom_toolbar_glass_background'),
+        hostMaterialActive: this.shouldUseHdsMaterialPlate()
       }) {
         Stack({ alignContent: Alignment.Center }) {
           AiraIcon({
@@ -130,12 +140,20 @@ export struct BrowserTabsOverviewBottomChrome {
   @Builder
   private buildSectionSwitcher() {
     Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterialPlate()) {
+        BrowserBottomChromeHdsMaterialSurface({
+          plateWidth: this.resolveSectionSwitcherWidth(),
+          plateHeight: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT,
+          plateRadius: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT / 2
+        })
+      }
       BrowserBottomChromeImmersiveMaterialSurface({
         surfaceWidth: '100%',
         surfaceHeight: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT,
         surfaceRadius: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT / 2,
         materialTint: this.resolveMaterialTint(),
-        fallbackColor: $r('app.color.browser_bottom_toolbar_glass_background')
+        fallbackColor: $r('app.color.browser_bottom_toolbar_glass_background'),
+        hostMaterialActive: this.shouldUseHdsMaterialPlate()
       }) {
         SegmentedTabs({
           options: [
@@ -236,6 +254,20 @@ export struct BrowserTabsOverviewBottomChrome {
     return resolveBrowserFloatingGlassMaterialTintForTone(this.resolveChromeTone());
   }
 
+  private shouldUseHdsMaterialPlate(): boolean {
+    return isHdsBottomMaterialAvailable();
+  }
+
+  /**
+   * The middle cluster spans whatever the two outer buttons and the gaps leave over, and
+   * the HDS floating bar needs that span as a concrete value rather than a percentage.
+   */
+  private resolveSectionSwitcherWidth(): number {
+    const reserved = (BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_OUTER_SIZE +
+      BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_BLOCK_GAP) * 2;
+    return Math.max(1, this.resolveChromeWidth() - reserved);
+  }
+
   private resolvePrimaryColor(): ResourceColor {
     return this.adaptiveForeground ? $r('sys.color.icon_primary') :
       resolveBrowserBottomNeutralPrimaryColor(this.resolveMaterialMode());
@@ -244,7 +276,7 @@ export struct BrowserTabsOverviewBottomChrome {
   private resolveMaterialShadow(): ShadowOptions {
     return {
       radius: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SHADOW_RADIUS,
-      color: resolveBrowserBottomFloatingMaterialShadowColor(this.resolveMaterialMode()),
+      color: resolveBrowserTabsOverviewFloatingMaterialShadowColor(this.resolveMaterialMode()),
       offsetX: 0,
       offsetY: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SHADOW_OFFSET_Y
     };

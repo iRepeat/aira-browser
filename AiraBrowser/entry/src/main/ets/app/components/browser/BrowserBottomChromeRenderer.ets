@@ -32,6 +32,8 @@ import {
   createHiddenDownloadToolbarIndicatorState
 } from '../../../core/download/DownloadToolbarIndicatorViewModel';
 import { BrowserBottomChromeImmersiveMaterialSurface } from './BrowserBottomChromeImmersiveMaterialSurface';
+import { BrowserBottomChromeHdsMaterialSurface } from './BrowserBottomChromeHdsMaterialSurface';
+import { isHdsBottomMaterialAvailable } from './BrowserBottomChromeHdsMaterialTokens';
 import {
   BROWSER_BOTTOM_CHROME_LIGHT_EDGE_HIGHLIGHT_COLOR
 } from './BrowserFloatingGlassMaterialTokens';
@@ -112,6 +114,12 @@ export struct BrowserBottomChromeRenderer {
   @Watch('syncPresentation')
   presentation: BrowserBottomChromePresentation = DEFAULT_BROWSER_BOTTOM_CHROME_PRESENTATION;
   @Prop materialTint: ResourceColor = '';
+  /**
+   * Opt-in for the immersive light-sense material behind the three chrome clusters.
+   * Only the floating bottom panel turns this on; callers that render the chrome
+   * elsewhere leave it off and keep the capsules' own blurred fallback.
+   */
+  @Prop hdsMaterialPlateEnabled: boolean = false;
   @Prop materialShadowColor: ResourceColor = '';
   @Prop edgeHighlightColor: ResourceColor = BROWSER_BOTTOM_CHROME_LIGHT_EDGE_HIGHLIGHT_COLOR;
   @Prop primaryIconColor: ResourceColor = '';
@@ -185,11 +193,19 @@ export struct BrowserBottomChromeRenderer {
   @Builder
   private buildLeadingOuterMaterial() {
     Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterialPlate()) {
+        BrowserBottomChromeHdsMaterialSurface({
+          plateWidth: this.animatedFrame.leadingOuterWidth,
+          plateHeight: this.resolveOuterVisualSize(this.animatedFrame.leadingOuterWidth),
+          plateRadius: this.resolveOuterVisualSize(this.animatedFrame.leadingOuterWidth) / 2
+        })
+      }
       BrowserBottomChromeImmersiveMaterialSurface({
         surfaceWidth: '100%',
         surfaceHeight: this.resolveOuterVisualSize(this.animatedFrame.leadingOuterWidth),
         surfaceRadius: this.resolveOuterVisualSize(this.animatedFrame.leadingOuterWidth) / 2,
         materialTint: this.materialTint,
+        hostMaterialActive: this.shouldUseHdsMaterialPlate(),
         materialShadowEnabled: false,
         edgeHighlightWidth: BROWSER_BOTTOM_CHROME_EDGE_HIGHLIGHT_WIDTH,
         edgeHighlightColor: this.edgeHighlightColor
@@ -224,11 +240,19 @@ export struct BrowserBottomChromeRenderer {
   @Builder
   private buildTrailingOuterMaterial() {
     Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterialPlate()) {
+        BrowserBottomChromeHdsMaterialSurface({
+          plateWidth: this.animatedFrame.trailingOuterWidth,
+          plateHeight: this.resolveOuterVisualSize(this.animatedFrame.trailingOuterWidth),
+          plateRadius: this.resolveOuterVisualSize(this.animatedFrame.trailingOuterWidth) / 2
+        })
+      }
       BrowserBottomChromeImmersiveMaterialSurface({
         surfaceWidth: '100%',
         surfaceHeight: this.resolveOuterVisualSize(this.animatedFrame.trailingOuterWidth),
         surfaceRadius: this.resolveOuterVisualSize(this.animatedFrame.trailingOuterWidth) / 2,
         materialTint: this.materialTint,
+        hostMaterialActive: this.shouldUseHdsMaterialPlate(),
         materialShadowEnabled: false,
         edgeHighlightWidth: BROWSER_BOTTOM_CHROME_EDGE_HIGHLIGHT_WIDTH,
         edgeHighlightColor: this.edgeHighlightColor
@@ -274,11 +298,19 @@ export struct BrowserBottomChromeRenderer {
   private buildCenterMaterialRail() {
     Stack({ alignContent: Alignment.Top }) {
       Stack({ alignContent: Alignment.Center }) {
+        if (this.shouldUseHdsMaterialPlate()) {
+          BrowserBottomChromeHdsMaterialSurface({
+            plateWidth: this.animatedFrame.centerWidth,
+            plateHeight: this.animatedFrame.centerHeight,
+            plateRadius: this.animatedFrame.centerRadius
+          })
+        }
         BrowserBottomChromeImmersiveMaterialSurface({
           surfaceWidth: '100%',
           surfaceHeight: this.animatedFrame.centerHeight,
           surfaceRadius: this.animatedFrame.centerRadius,
           materialTint: this.materialTint,
+          hostMaterialActive: this.shouldUseHdsMaterialPlate(),
           materialShadowEnabled: false,
           edgeHighlightWidth: BROWSER_BOTTOM_CHROME_EDGE_HIGHLIGHT_WIDTH,
           edgeHighlightColor: this.edgeHighlightColor
@@ -1445,5 +1477,9 @@ export struct BrowserBottomChromeRenderer {
       offsetX: 0,
       offsetY: 0
     };
+  }
+
+  private shouldUseHdsMaterialPlate(): boolean {
+    return this.hdsMaterialPlateEnabled && isHdsBottomMaterialAvailable();
   }
 }

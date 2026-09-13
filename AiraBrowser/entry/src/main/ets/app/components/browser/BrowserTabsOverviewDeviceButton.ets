@@ -6,19 +6,21 @@ import {
   BROWSER_FLOATING_CHROME_RELEASE_DURATION_MS
 } from '../../../core/browser/BrowserBottomAddressPanelMetrics';
 import {
-  resolveBrowserBottomFloatingMaterialShadowColor,
+  resolveBrowserTabsOverviewFloatingMaterialShadowColor,
   resolveBrowserBottomNeutralPressedColor,
   resolveBrowserBottomNeutralPrimaryColor
 } from '../../../core/theme/BrowserBottomPanelNeutralTheme';
 import { AiraIcon } from '../common/AiraIcon';
 import { BrowserBottomChromeImmersiveMaterialSurface } from './BrowserBottomChromeImmersiveMaterialSurface';
+import { BrowserBottomChromeHdsMaterialSurface } from './BrowserBottomChromeHdsMaterialSurface';
+import { isHdsBottomMaterialAvailable } from './BrowserBottomChromeHdsMaterialTokens';
 import { resolveBrowserFloatingGlassMaterialTintForTone } from './BrowserFloatingGlassMaterialTokens';
 import { BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE } from './BrowserTabsOverviewClearButton';
 
 const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_EDGE_GAP: number = 16;
 const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_ICON_SIZE: number = 24;
-const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_SHADOW_RADIUS: number = 6;
-const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_SHADOW_OFFSET_Y: number = 2;
+const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_SHADOW_RADIUS: number = 40;
+const BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_SHADOW_OFFSET_Y: number = 0;
 
 @Component
 export struct BrowserTabsOverviewDeviceButton {
@@ -39,12 +41,20 @@ export struct BrowserTabsOverviewDeviceButton {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
+      if (this.shouldUseHdsMaterialPlate()) {
+        BrowserBottomChromeHdsMaterialSurface({
+          plateWidth: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE,
+          plateHeight: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE,
+          plateRadius: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE / 2
+        })
+      }
       BrowserBottomChromeImmersiveMaterialSurface({
         surfaceWidth: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE,
         surfaceHeight: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE,
         surfaceRadius: BROWSER_TABS_OVERVIEW_CLEAR_BUTTON_SIZE / 2,
         materialTint: this.resolveMaterialTint(),
-        fallbackColor: $r('app.color.browser_bottom_toolbar_glass_background')
+        fallbackColor: $r('app.color.browser_bottom_toolbar_glass_background'),
+        hostMaterialActive: this.shouldUseHdsMaterialPlate()
       }) {
         Stack({ alignContent: Alignment.Center }) {
           AiraIcon({
@@ -121,6 +131,10 @@ export struct BrowserTabsOverviewDeviceButton {
     return resolveBrowserFloatingGlassMaterialTintForTone(this.regularChromeIconTone);
   }
 
+  private shouldUseHdsMaterialPlate(): boolean {
+    return isHdsBottomMaterialAvailable();
+  }
+
   private resolveMaterialMode(): string {
     return this.regularChromeIconTone === 'dark' ? 'dark' : 'light';
   }
@@ -137,7 +151,7 @@ export struct BrowserTabsOverviewDeviceButton {
   private resolveMaterialShadow(): ShadowOptions {
     return {
       radius: BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_SHADOW_RADIUS,
-      color: resolveBrowserBottomFloatingMaterialShadowColor(this.resolveMaterialMode()),
+      color: resolveBrowserTabsOverviewFloatingMaterialShadowColor(this.resolveMaterialMode()),
       offsetX: 0,
       offsetY: BROWSER_TABS_OVERVIEW_DEVICE_BUTTON_SHADOW_OFFSET_Y
     };

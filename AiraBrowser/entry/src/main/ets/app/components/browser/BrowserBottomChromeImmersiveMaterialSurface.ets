@@ -24,6 +24,12 @@ export struct BrowserBottomChromeImmersiveMaterialSurface {
   @Prop materialLightEffectEnabled: boolean = true;
   @Prop materialLightEffectColor: ResourceColor = BROWSER_BOTTOM_CHROME_IMMERSIVE_LIGHT_EFFECT_COLOR;
   @Prop materialEnabled: boolean = false;
+  /**
+   * True when an ancestor supplies the immersive light-sense material for this capsule.
+   * The material carries its own blur and rim treatment, so the local blurred fallback
+   * and the hand-drawn edge highlight are dropped rather than stacked on top of it.
+   */
+  @Prop hostMaterialActive: boolean = false;
   @Prop edgeHighlightWidth: number = 0;
   @Prop edgeHighlightColor: ResourceColor = $r('sys.color.ohos_id_color_background_transparent');
   @Prop overlayColor: ResourceColor | undefined = undefined;
@@ -34,7 +40,9 @@ export struct BrowserBottomChromeImmersiveMaterialSurface {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      if (!this.shouldApplyMaterial()) {
+      // The host material already paints this surface; drawing the fallback tint on top of
+      // it is what made the light theme read as an extra white veil.
+      if (!this.shouldApplyMaterial() && !this.hostMaterialActive) {
         Stack()
           .width('100%')
           .height('100%')
@@ -69,10 +77,8 @@ export struct BrowserBottomChromeImmersiveMaterialSurface {
     .height(this.surfaceHeight)
     .borderRadius(this.resolveSurfaceRadius())
     .clip(true)
-    // The fallback blur is mutually exclusive with systemMaterial: custom browser
-    // chrome is not a supported immersive-material placement on every device.
     .backgroundBlurStyle(
-      this.shouldApplyMaterial() ? BlurStyle.NONE : BROWSER_FLOATING_GLASS_MATERIAL_BLUR_STYLE,
+      this.resolveFallbackBlurStyle(),
       BROWSER_FLOATING_GLASS_MATERIAL_ADAPTIVE_OPTIONS
     )
     .attributeModifier(systemMaterialModifier(this.shouldApplyMaterial() ? createFloatingGlassMaterial(
@@ -97,7 +103,17 @@ export struct BrowserBottomChromeImmersiveMaterialSurface {
   }
 
   private resolveEdgeHighlightWidth(): number {
+    if (this.hostMaterialActive) {
+      return 0;
+    }
     return this.edgeHighlightWidth > 0 ? Math.max(0, this.edgeHighlightWidth) : this.resolveBorderWidth();
+  }
+
+  private resolveFallbackBlurStyle(): BlurStyle {
+    if (this.hostMaterialActive) {
+      return BlurStyle.NONE;
+    }
+    return this.shouldApplyMaterial() ? BlurStyle.NONE : BROWSER_FLOATING_GLASS_MATERIAL_BLUR_STYLE;
   }
 
   private resolveEdgeHighlightColor(): ResourceColor {

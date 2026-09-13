@@ -91,6 +91,21 @@ export function resolveBrowserBottomFloatingMaterialShadowColor(
     BROWSER_BOTTOM_FLOATING_MATERIAL_SHADOW_LIGHT;
 }
 
+/**
+ * The tabs overview chrome needs a markedly softer shadow than the shared neutral one: at
+ * 25% black its floating buttons read as a hard rim around the material. Both themes use
+ * 7% black here; split them apart if the light theme ever needs its own weight.
+ */
+const BROWSER_TABS_OVERVIEW_FLOATING_MATERIAL_SHADOW_LIGHT: string = '#12000000';
+const BROWSER_TABS_OVERVIEW_FLOATING_MATERIAL_SHADOW_DARK: string = '#12000000';
+
+export function resolveBrowserTabsOverviewFloatingMaterialShadowColor(
+  mode: BrowserResolvedThemeMode | string
+): ResourceColor {
+  return isBrowserBottomNeutralDarkMode(mode) ? BROWSER_TABS_OVERVIEW_FLOATING_MATERIAL_SHADOW_DARK :
+    BROWSER_TABS_OVERVIEW_FLOATING_MATERIAL_SHADOW_LIGHT;
+}
+
 export function resolveBrowserBottomFloatingHeaderColor(input: BrowserBottomFloatingHeaderColorInput): ResourceColor {
   if (input.keepDefaultChrome) {
     return resolveBrowserBottomFloatingHeaderDefaultColor(input.resolvedThemeMode);

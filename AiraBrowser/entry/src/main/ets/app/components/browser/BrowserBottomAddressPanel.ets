@@ -840,6 +840,7 @@ export struct BrowserBottomAddressPanel {
     BrowserBottomChromeRenderer({
       presentation: this.liveBottomChromePresentation,
       materialTint: this.resolveBottomChromeMaterialTint(),
+      hdsMaterialPlateEnabled: true,
       materialShadowColor: resolveBrowserBottomFloatingMaterialShadowColor(this.resolveNeutralThemeMode()),
       edgeHighlightColor: resolveBrowserBottomChromeEdgeHighlightColor(this.resolveNeutralThemeMode()),
       primaryIconColor: this.resolveIconColor(true),
