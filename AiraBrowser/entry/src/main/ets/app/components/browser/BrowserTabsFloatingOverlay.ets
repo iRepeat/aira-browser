@@ -173,6 +173,14 @@ export struct BrowserTabsFloatingOverlay {
   private chromeMountTimer: number = 0;
   private entryDisplacementTargetId: string = '';
   private entryReturnTabId: string = '';
+  /**
+   * True only for the cold open, whose cards are mounted as the grid is first built and can
+   * fly in as they appear. A resident re-open reuses an already-built grid, so it enters
+   * plainly: neither the coordinated fly-in nor a per-card mount fly-in runs there. Letting
+   * either run on an already-laid-out grid made cards jump back from off-screen and settle,
+   * which read as a jitter.
+   */
+  private isFirstOpenInFlight: boolean = true;
   private handledCloseAllRequestVersion: number = 0;
   private entryTargetPreparationState: BrowserTabsFloatingEntryTargetPreparationState =
     new BrowserTabsFloatingEntryTargetCoordinator().buildIdleState();
@@ -235,6 +243,9 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   private handleOpenRequested(): void {
+    // A resident re-open reuses the built grid, so it enters plainly: no coordinated
+    // fly-in and no per-card mount fly-in.
+    this.isFirstOpenInFlight = false;
     this.initializeForOpen();
   }
 
@@ -250,7 +261,9 @@ export struct BrowserTabsFloatingOverlay {
     // a resident overlay must clear it here or every later open stays non-interactive.
     this.closeAllExitActive = false;
     this.syncLayoutState();
-    this.entryProgress = this.resolveEntryInitialProgress();
+    // A cold open starts at 0 so its freshly mounted cards fly in; a resident re-open starts
+    // settled so an already-built grid enters plainly instead of jumping back and settling.
+    this.entryProgress = this.isFirstOpenInFlight ? this.resolveEntryInitialProgress() : 1;
     this.entryDisplacementTargetId = this.entryDisplacementTabId.trim();
     this.entryDisplacementProgress = this.resolveEntryDisplacementInitialProgress();
     this.entryTargetPreparationState =
@@ -1276,7 +1289,8 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   private shouldRunLateMountEntryAnimation(item: BrowserTabsFloatingItem): boolean {
-    return this.lateMountEntryAnimationEnabled &&
+    return this.isFirstOpenInFlight &&
+      this.lateMountEntryAnimationEnabled &&
       this.sideEntryAnimationEnabled &&
       !this.exiting &&
       !this.closeAllExitActive &&
