@@ -505,6 +505,9 @@ struct SettingsDetailPage {
       (enabled: boolean): void => {
         void this.applyPrivateModePreserveCookiesOnClose(enabled);
       },
+      (enabled: boolean): void => {
+        void this.applyAllowUserScriptsInPrivateMode(enabled);
+      },
       (settings: BrowserAppearanceSettings): void => {
         void this.applyAppearanceSettings(settings);
       },
@@ -703,6 +706,31 @@ struct SettingsDetailPage {
     } catch (_error) {
       this.refreshState();
       this.showToast('隐私模式 Cookie 设置更新失败。');
+    }
+  }
+
+  private async applyAllowUserScriptsInPrivateMode(enabled: boolean): Promise<void> {
+    const previousSettings = sharedPreferencesRepository.getPreferences().general;
+    const nextSettings: BrowserGeneralSettings = {
+      startupRestorePolicy: previousSettings.startupRestorePolicy,
+      tabAutoClosePolicy: previousSettings.tabAutoClosePolicy,
+      privateTabRestorePolicy: previousSettings.privateTabRestorePolicy,
+      privateModeAuthenticationEnabled: previousSettings.privateModeAuthenticationEnabled,
+      alwaysUsePrivateMode: previousSettings.alwaysUsePrivateMode === true,
+      privateModePreserveCookiesOnClose: previousSettings.privateModePreserveCookiesOnClose,
+      privateModeThemeEnabled: previousSettings.privateModeThemeEnabled,
+      allowUserScriptsInPrivateMode: enabled
+    };
+    try {
+      await this.interactionCoordinator.commitGeneralSettings({
+        dataScope: this.dataScope,
+        privacyMode: this.privacyMode
+      }, nextSettings);
+      this.refreshState();
+      this.showToast(enabled ? '隐私模式会运行用户脚本。' : '隐私模式不再运行用户脚本。');
+    } catch (_error) {
+      this.refreshState();
+      this.showToast('隐私模式用户脚本设置更新失败。');
     }
   }
 

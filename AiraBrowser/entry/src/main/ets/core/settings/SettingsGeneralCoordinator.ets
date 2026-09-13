@@ -19,6 +19,7 @@ export interface SettingsGeneralState {
   alwaysUsePrivateMode: boolean;
   privateModePreserveCookiesOnClose: boolean;
   enhancedTrackingProtectionEnabled: boolean;
+  allowUserScriptsInPrivateMode: boolean;
 }
 
 export class SettingsGeneralCoordinator {
@@ -45,7 +46,8 @@ export class SettingsGeneralCoordinator {
       privateModeAuthenticationEnabled: preferences.general.privateModeAuthenticationEnabled,
       alwaysUsePrivateMode: preferences.general.alwaysUsePrivateMode === true,
       privateModePreserveCookiesOnClose: preferences.general.privateModePreserveCookiesOnClose,
-      enhancedTrackingProtectionEnabled: preferences.general.enhancedTrackingProtectionEnabled === true
+      enhancedTrackingProtectionEnabled: preferences.general.enhancedTrackingProtectionEnabled === true,
+      allowUserScriptsInPrivateMode: preferences.general.allowUserScriptsInPrivateMode !== false
     };
   }
 

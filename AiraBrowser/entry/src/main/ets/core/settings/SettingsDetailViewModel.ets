@@ -102,6 +102,7 @@ export type SettingsDetailRowAction =
   'toggle_private_mode_authentication' |
   'toggle_always_use_private_mode' |
   'toggle_private_mode_preserve_cookies_on_close' |
+  'toggle_allow_user_scripts_in_private_mode' |
   'toggle_blur_private_tab_previews' |
   'toggle_desktop_bookmark_bar' |
   'toggle_pause_web_animations_during_scroll' |
@@ -180,6 +181,7 @@ export interface SettingsGeneralDisplayState {
   alwaysUsePrivateMode: boolean;
   privateModePreserveCookiesOnClose: boolean;
   enhancedTrackingProtectionEnabled: boolean;
+  allowUserScriptsInPrivateMode: boolean;
 }
 
 export interface SettingsSitePermissionsDisplayState {
@@ -282,7 +284,8 @@ export class SettingsDetailViewModel {
       privateModeAuthenticationEnabled: false,
       alwaysUsePrivateMode: false,
       privateModePreserveCookiesOnClose: false,
-      enhancedTrackingProtectionEnabled: false
+      enhancedTrackingProtectionEnabled: false,
+      allowUserScriptsInPrivateMode: true
     },
     sitePolicy: SettingsSitePolicyDisplayState = {
       acceptCookies: true,
@@ -839,6 +842,23 @@ export class SettingsDetailViewModel {
           ],
           footerText: canEditDevicePreferences
             ? '关闭全部隐私标签页时按这里的规则处理数据；私密数据不会混入普通浏览资料。'
+            : '当前私密会话不能修改设备级隐私设置。'
+        },
+        {
+          id: 'private_scripts',
+          title: '脚本',
+          rows: [
+            this.switchRow(
+              'allow_user_scripts_in_private_mode',
+              '允许在隐私模式运行用户脚本',
+              '',
+              'toggle_allow_user_scripts_in_private_mode',
+              general.allowUserScriptsInPrivateMode,
+              canEditDevicePreferences
+            )
+          ],
+          footerText: canEditDevicePreferences
+            ? '关闭后私密会话不会注入已安装的用户脚本，效果与之前一致。'
             : '当前私密会话不能修改设备级隐私设置。'
         },
         {

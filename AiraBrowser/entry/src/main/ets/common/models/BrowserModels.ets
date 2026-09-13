@@ -1151,6 +1151,11 @@ export interface BrowserGeneralSettings {
   privateModePreserveCookiesOnClose: boolean;
   privateModeThemeEnabled: boolean;
   enhancedTrackingProtectionEnabled?: boolean;
+  /**
+   * Whether installed user scripts may run in a private session. On by default: the
+   * private boundary hides browsing state, it does not need to disable scripts.
+   */
+  allowUserScriptsInPrivateMode?: boolean;
 }
 
 export interface BrowserCookiePolicySettings {

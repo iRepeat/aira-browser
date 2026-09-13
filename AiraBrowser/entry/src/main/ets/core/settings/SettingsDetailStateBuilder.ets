@@ -95,7 +95,8 @@ export class SettingsDetailStateBuilder {
         privateModeAuthenticationEnabled: generalState.privateModeAuthenticationEnabled,
         alwaysUsePrivateMode: generalState.alwaysUsePrivateMode,
         privateModePreserveCookiesOnClose: generalState.privateModePreserveCookiesOnClose,
-        enhancedTrackingProtectionEnabled: generalState.enhancedTrackingProtectionEnabled
+        enhancedTrackingProtectionEnabled: generalState.enhancedTrackingProtectionEnabled,
+        allowUserScriptsInPrivateMode: generalState.allowUserScriptsInPrivateMode
       },
       {
         acceptCookies: sitePolicyState.acceptCookies,

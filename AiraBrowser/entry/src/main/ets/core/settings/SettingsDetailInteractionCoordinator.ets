@@ -36,6 +36,7 @@ export interface SettingsDetailInteractionHandlers {
   applyPrivateModeAuthenticationEnabled(enabled: boolean): void;
   applyAlwaysUsePrivateModeEnabled(enabled: boolean): void;
   applyPrivateModePreserveCookiesOnClose(enabled: boolean): void;
+  applyAllowUserScriptsInPrivateMode(enabled: boolean): void;
   applyAppearanceSettings(settings: BrowserAppearanceSettings): void;
   applyExperimentSettingsWithRiskPrompt(
     action: SettingsDetailRowAction,
@@ -60,6 +61,7 @@ export class SettingsDetailInteractionCallbackHandlers implements SettingsDetail
   private applyPrivateModeAuthenticationEnabledHandler: (enabled: boolean) => void;
   private applyAlwaysUsePrivateModeEnabledHandler: (enabled: boolean) => void;
   private applyPrivateModePreserveCookiesOnCloseHandler: (enabled: boolean) => void;
+  private applyAllowUserScriptsInPrivateModeHandler: (enabled: boolean) => void;
   private applyAppearanceSettingsHandler: (settings: BrowserAppearanceSettings) => void;
   private applyExperimentSettingsWithRiskPromptHandler: (
     action: SettingsDetailRowAction,
@@ -86,6 +88,7 @@ export class SettingsDetailInteractionCallbackHandlers implements SettingsDetail
     applyPrivateModeAuthenticationEnabledHandler: (enabled: boolean) => void,
     applyAlwaysUsePrivateModeEnabledHandler: (enabled: boolean) => void,
     applyPrivateModePreserveCookiesOnCloseHandler: (enabled: boolean) => void,
+    applyAllowUserScriptsInPrivateModeHandler: (enabled: boolean) => void,
     applyAppearanceSettingsHandler: (settings: BrowserAppearanceSettings) => void,
     applyExperimentSettingsWithRiskPromptHandler: (
       action: SettingsDetailRowAction,
@@ -111,6 +114,7 @@ export class SettingsDetailInteractionCallbackHandlers implements SettingsDetail
     this.applyPrivateModeAuthenticationEnabledHandler = applyPrivateModeAuthenticationEnabledHandler;
     this.applyAlwaysUsePrivateModeEnabledHandler = applyAlwaysUsePrivateModeEnabledHandler;
     this.applyPrivateModePreserveCookiesOnCloseHandler = applyPrivateModePreserveCookiesOnCloseHandler;
+    this.applyAllowUserScriptsInPrivateModeHandler = applyAllowUserScriptsInPrivateModeHandler;
     this.applyAppearanceSettingsHandler = applyAppearanceSettingsHandler;
     this.applyExperimentSettingsWithRiskPromptHandler = applyExperimentSettingsWithRiskPromptHandler;
     this.confirmClearAllSiteDataHandler = confirmClearAllSiteDataHandler;
@@ -158,6 +162,10 @@ export class SettingsDetailInteractionCallbackHandlers implements SettingsDetail
 
   applyPrivateModePreserveCookiesOnClose(enabled: boolean): void {
     this.applyPrivateModePreserveCookiesOnCloseHandler(enabled);
+  }
+
+  applyAllowUserScriptsInPrivateMode(enabled: boolean): void {
+    this.applyAllowUserScriptsInPrivateModeHandler(enabled);
   }
 
   applyAppearanceSettings(settings: BrowserAppearanceSettings): void {
@@ -288,6 +296,10 @@ export class SettingsDetailInteractionCoordinator {
     }
     if (row.action === 'toggle_private_mode_preserve_cookies_on_close') {
       handlers.applyPrivateModePreserveCookiesOnClose(targetChecked);
+      return;
+    }
+    if (row.action === 'toggle_allow_user_scripts_in_private_mode') {
+      handlers.applyAllowUserScriptsInPrivateMode(targetChecked);
       return;
     }
     const nextAppearanceSettings = this.actionResolver.buildAppearanceSettingsForAction(

@@ -545,7 +545,7 @@ export class UserScriptRuntimeCoordinator {
       this.readinessCoordinator.listExecutionReadyScripts(),
       url
     );
-    if (privateMode) {
+    if (privateMode && !this.allowUserScriptsInPrivateMode()) {
       return {
         executionAllowed: false,
         blockReason: 'private_mode',
@@ -559,6 +559,14 @@ export class UserScriptRuntimeCoordinator {
     };
   }
 
+  /**
+   * The private boundary hides browsing state; it does not have to disable user scripts.
+   * The setting defaults on, so scripts run in a private session unless the user opts out.
+   */
+  private allowUserScriptsInPrivateMode(): boolean {
+    return this.preferencesRepository.getPreferences().general.allowUserScriptsInPrivateMode !== false;
+  }
+
   hasAutomaticScriptsForPage(url: string, privateMode: boolean): boolean {
     const eligibility = this.resolveEligibility(url, privateMode);
     return eligibility.executionAllowed && eligibility.matchingScripts.some(
@@ -567,7 +575,7 @@ export class UserScriptRuntimeCoordinator {
   }
 
   scheduleDocumentStartScriptWarmup(privateMode: boolean): void {
-    if (privateMode || this.documentStartWarmupTimer >= 0) {
+    if ((privateMode && !this.allowUserScriptsInPrivateMode()) || this.documentStartWarmupTimer >= 0) {
       return;
     }
     const generation = ++this.documentStartWarmupGeneration;
@@ -597,7 +605,7 @@ export class UserScriptRuntimeCoordinator {
     const startedAt = Date.now();
     this.documentStartCacheHitCount = 0;
     this.documentStartCacheMissCount = 0;
-    if (privateMode) {
+    if (privateMode && !this.allowUserScriptsInPrivateMode()) {
       this.documentStartItemCacheByScriptId = {};
       this.documentEndPreparedSourceCache = {};
       this.documentEndPreparedSourceCacheKey = {};

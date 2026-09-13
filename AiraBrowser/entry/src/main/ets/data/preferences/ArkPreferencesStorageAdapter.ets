@@ -496,7 +496,10 @@ export class ArkPreferencesStorageAdapter implements PreferencesStorageAdapter {
           : defaultValue.privateModeThemeEnabled,
         enhancedTrackingProtectionEnabled: typeof parsed.enhancedTrackingProtectionEnabled === 'boolean'
           ? parsed.enhancedTrackingProtectionEnabled
-          : defaultValue.enhancedTrackingProtectionEnabled
+          : defaultValue.enhancedTrackingProtectionEnabled,
+        allowUserScriptsInPrivateMode: typeof parsed.allowUserScriptsInPrivateMode === 'boolean'
+          ? parsed.allowUserScriptsInPrivateMode
+          : defaultValue.allowUserScriptsInPrivateMode
       };
     } catch (_error) {
       return defaultValue;

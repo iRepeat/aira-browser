@@ -222,7 +222,8 @@ export const DEFAULT_BROWSER_GENERAL_SETTINGS: BrowserGeneralSettings = {
   alwaysUsePrivateMode: false,
   privateModePreserveCookiesOnClose: false,
   privateModeThemeEnabled: true,
-  enhancedTrackingProtectionEnabled: false
+  enhancedTrackingProtectionEnabled: false,
+  allowUserScriptsInPrivateMode: true
 };
 
 export const DEFAULT_BROWSER_COOKIE_POLICY_SETTINGS: BrowserCookiePolicySettings = {
@@ -821,7 +822,9 @@ export class PreferencesRepository {
       privateModePreserveCookiesOnClose: settings.privateModePreserveCookiesOnClose,
       privateModeThemeEnabled: settings.privateModeThemeEnabled,
       enhancedTrackingProtectionEnabled: settings.enhancedTrackingProtectionEnabled ??
-        current.enhancedTrackingProtectionEnabled
+        current.enhancedTrackingProtectionEnabled,
+      allowUserScriptsInPrivateMode: settings.allowUserScriptsInPrivateMode ??
+        current.allowUserScriptsInPrivateMode
     };
     const normalizedGeneralSettings = this.normalizeGeneralSettings(next);
     this.mergeCachedPreferences({ general: normalizedGeneralSettings });
@@ -1081,7 +1084,10 @@ export class PreferencesRepository {
         : DEFAULT_BROWSER_GENERAL_SETTINGS.privateModeThemeEnabled,
       enhancedTrackingProtectionEnabled: typeof settings?.enhancedTrackingProtectionEnabled === 'boolean'
         ? settings.enhancedTrackingProtectionEnabled
-        : DEFAULT_BROWSER_GENERAL_SETTINGS.enhancedTrackingProtectionEnabled
+        : DEFAULT_BROWSER_GENERAL_SETTINGS.enhancedTrackingProtectionEnabled,
+      allowUserScriptsInPrivateMode: typeof settings?.allowUserScriptsInPrivateMode === 'boolean'
+        ? settings.allowUserScriptsInPrivateMode
+        : DEFAULT_BROWSER_GENERAL_SETTINGS.allowUserScriptsInPrivateMode
     };
   }
 
