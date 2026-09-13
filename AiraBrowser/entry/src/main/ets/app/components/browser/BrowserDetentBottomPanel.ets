@@ -2137,17 +2137,8 @@ export struct BrowserDetentBottomPanel {
   }
 
   private resolveFloatingTopSurfaceBackdropBlurRadius(): number {
-    if (!this.floatingTopSurfaceChromeVisible) {
-      return 0;
-    }
-    if (this.isFixedFloatingDarkMode()) {
-      return this.resolveBackdropBlurRadius();
-    }
+    // The suggestion surface is opaque, so a backdrop blur would have nothing to show through.
     return 0;
-  }
-
-  private isFixedFloatingDarkMode(): boolean {
-    return this.storedResolvedThemeMode === 'dark';
   }
 
   private syncFloatingHeaderBackgroundState(allowTransition: boolean): void {
@@ -2239,8 +2230,10 @@ export struct BrowserDetentBottomPanel {
   }
 
   private resolveFloatingTopSurfaceBackgroundColor(): ResourceColor {
+    // The floating suggestion list is an opaque menu — white in light mode, dark in dark mode —
+    // not a glass tint, so page content never shows through the suggestions behind it.
     return this.floatingTopSurfaceChromeVisible ?
-      this.resolveFloatingExpandedPanelBackgroundColor() :
+      this.storedFloatingSurfaceColor :
       $r('sys.color.ohos_id_color_background_transparent');
   }
 

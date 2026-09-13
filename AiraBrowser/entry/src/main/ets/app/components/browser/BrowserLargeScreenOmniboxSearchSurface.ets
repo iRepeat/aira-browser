@@ -21,7 +21,7 @@ import {
 import {
   BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY,
   BROWSER_THEME_STORAGE_DIVIDER_KEY,
-  BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY,
+  BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY,
   BROWSER_THEME_STORAGE_SURFACE_BACKGROUND_KEY,
   BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
@@ -30,24 +30,23 @@ import { sharedExternalAppSearchPreferencesRepository } from '../../bootstrap/Br
 import { SearchEngineIconResources } from '../search/SearchEngineIconResources';
 import { AiraIcon } from '../common/AiraIcon';
 import { FloatingGlassMaterialSurface } from '../common/FloatingGlassMaterialSurface';
-import { resolveFloatingGlassMaterialTintForMode } from '../common/FloatingGlassMaterialTokens';
 import { ExternalAppSearchStrip } from './ExternalAppSearchStrip';
 import { AppWindowModalLayoutService } from '../../../services/layout/AppWindowModalLayoutService';
 
 const LARGE_SCREEN_SEARCH_SURFACE_GAP_VP: number = 8;
-const LARGE_SCREEN_SEARCH_CARD_PADDING_VP: number = 10;
+const LARGE_SCREEN_SEARCH_CARD_PADDING_VP: number = 8;
 const LARGE_SCREEN_SEARCH_CARD_RADIUS_VP: number = 20;
 const LARGE_SCREEN_EXTERNAL_SEARCH_CARD_HEIGHT_VP: number = 86;
 const LARGE_SCREEN_SUGGESTION_MAX_HEIGHT_VP: number = 296;
 const LARGE_SCREEN_SUGGESTION_EMPTY_HEIGHT_VP: number = 64;
-const LARGE_SCREEN_SUGGESTION_ROW_HEIGHT_VP: number = 54;
-const LARGE_SCREEN_SUGGESTION_ROW_GAP_VP: number = 4;
+const LARGE_SCREEN_SUGGESTION_ROW_HEIGHT_VP: number = 34;
+const LARGE_SCREEN_SUGGESTION_ROW_GAP_VP: number = 2;
 const LARGE_SCREEN_SUGGESTION_ROW_RADIUS_VP: number =
   LARGE_SCREEN_SEARCH_CARD_RADIUS_VP - LARGE_SCREEN_SEARCH_CARD_PADDING_VP;
 const LARGE_SCREEN_SUGGESTION_ROW_HORIZONTAL_PADDING_VP: number = 12;
 const LARGE_SCREEN_SUGGESTION_TRAILING_ICON_SIZE_VP: number = 18;
-const LARGE_SCREEN_SUGGESTION_DELETE_BUTTON_SIZE_VP: number = 32;
-const LARGE_SCREEN_SUGGESTION_DELETE_ICON_SIZE_VP: number = 17;
+const LARGE_SCREEN_SUGGESTION_DELETE_BUTTON_SIZE_VP: number = 28;
+const LARGE_SCREEN_SUGGESTION_DELETE_ICON_SIZE_VP: number = 16;
 const LARGE_SCREEN_SEARCH_ENGINE_BUTTON_SIZE_VP: number = 28;
 const LARGE_SCREEN_SEARCH_ENGINE_ICON_SIZE_VP: number = 18;
 const LARGE_SCREEN_SEARCH_ENGINE_POPUP_WIDTH_VP: number = 236;
@@ -325,8 +324,10 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
   @StorageLink(EXTERNAL_APP_SEARCH_PREFERENCES_REVISION_KEY)
   @Watch('refreshExternalAppSearchPreferences')
   private externalAppSearchPreferencesRevision: number = 0;
-  @StorageProp(BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY)
-  private storedResolvedThemeMode: string = 'light';
+  // The dropdown reads as an opaque menu: white in light mode, dark in dark mode. The glass tint
+  // cannot carry that, because a translucent blur leaves the page legible behind the suggestions.
+  @StorageProp(BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY)
+  private storedFloatingSurfaceColor: string = '#FFFFFF';
   @StorageProp(BROWSER_THEME_STORAGE_DIVIDER_KEY)
   private storedDividerColor: string = '#E3E8EF';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY)
@@ -378,7 +379,7 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
         surfaceWidth: '100%',
         surfaceHeight: LARGE_SCREEN_EXTERNAL_SEARCH_CARD_HEIGHT_VP,
         surfaceRadius: LARGE_SCREEN_SEARCH_CARD_RADIUS_VP,
-        tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
+        fallbackColor: this.storedFloatingSurfaceColor,
         materialBorderWidth: 1,
         materialBorderColor: this.storedDividerColor
       }) {
@@ -420,7 +421,7 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
         surfaceWidth: '100%',
         surfaceHeight: this.resolveSuggestionCardHeight(),
         surfaceRadius: LARGE_SCREEN_SEARCH_CARD_RADIUS_VP,
-        tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
+        fallbackColor: this.storedFloatingSurfaceColor,
         materialBorderWidth: 1,
         materialBorderColor: this.storedDividerColor
       }) {
