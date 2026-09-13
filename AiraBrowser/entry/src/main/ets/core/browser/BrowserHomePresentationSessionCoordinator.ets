@@ -20,6 +20,10 @@ export interface BrowserHomePresentationSessionState {
 export interface BrowserHomePresentationSessionFacts {
   showHomePage: boolean;
   thirdPartyHomepageActive: boolean;
+  // True when a validated cold-start cover frame is available for the current
+  // third-party homepage. The cover already shows the homepage, so the startup
+  // entrance must not hide it behind an opacity/scale wait for document commit.
+  thirdPartyHomeCoverAvailable: boolean;
   showTabsSheet: boolean;
   homeSearchFocused: boolean;
   rootBottomPanelDetent: HomeSearchPanelDetent;
@@ -92,6 +96,11 @@ export class BrowserHomePresentationSessionCoordinator {
   }
 
   initializeStartupEntrance(): void {
+    // With a cover frame the homepage is already on screen, so there is nothing
+    // to animate in: the entrance must neither hide it while waiting for document
+    // commit nor zoom it up from 0.9.
+    const startupFacts = this.host.resolveFacts();
+    const coverBacked = startupFacts.thirdPartyHomepageActive && startupFacts.thirdPartyHomeCoverAvailable;
     if (!this.shouldUseStartupEntrance()) {
       this.startupEntrancePendingInitialPlay = false;
       this.startupEntranceWaitingForThirdPartyCommit = false;
@@ -101,7 +110,17 @@ export class BrowserHomePresentationSessionCoordinator {
       });
       return;
     }
-    const facts = this.host.resolveFacts();
+    if (coverBacked) {
+      this.suppressNextContentEntrance();
+      this.startupEntrancePendingInitialPlay = false;
+      this.startupEntranceWaitingForThirdPartyCommit = false;
+      this.startupEntrancePageShown = false;
+      this.updateState({
+        startupEntranceState: this.buildCompletedStartupEntranceState()
+      });
+      return;
+    }
+    const facts = startupFacts;
     const initialScale = this.presentationViewModel.resolveStartupEntranceInitialScale(
       facts.thirdPartyHomepageActive
     );

@@ -37,6 +37,16 @@ import {
 import {
   CustomHomepageHostedWebNodeController
 } from '../../core/customhome/CustomHomepageHostedWebNode';
+import {
+  CustomHomepageLaunchSnapshotCoordinator,
+  CustomHomepageLaunchSnapshotCaptureRequest
+} from '../../core/customhome/CustomHomepageLaunchSnapshotCoordinator';
+import {
+  CustomHomepageLaunchSnapshot
+} from '../../core/customhome/CustomHomepageLaunchSnapshotViewModel';
+import {
+  CustomHomepageLaunchSnapshotCaptureService
+} from '../../services/customhome/CustomHomepageLaunchSnapshotCaptureService';
 import { SearchEngineSelectionCoordinator } from '../../core/search/SearchEngineSelectionCoordinator';
 import {
   SITE_CUSTOMIZATION_REFRESH_REVISION_KEY,
@@ -47,7 +57,7 @@ import {
   SiteCustomizationRuntimeRefreshPlan
 } from '../../core/sitecustomization/SiteCustomizationRuntimeRefreshCoordinator';
 import { HistoryFeature } from '../../features/history/HistoryFeature';
-import { BrowserThemePaletteService } from '../../services/theme/BrowserThemePaletteService';
+import { BrowserThemePaletteService, ResolvedBrowserThemeTokens } from '../../services/theme/BrowserThemePaletteService';
 import {
   BrowserActiveTabRuntimeRestoreCoordinator,
   BrowserActiveTabRuntimeRestoreHost,
@@ -2283,6 +2293,7 @@ struct BrowserShellPage {
     resolveFacts: (): BrowserHomePresentationSessionFacts => ({
       showHomePage: this.showHomePage,
       thirdPartyHomepageActive: this.customHomepageRuntimeState.presentation.kind === 'custom_web',
+      thirdPartyHomeCoverAvailable: this.customHomepageLaunchSnapshot !== undefined,
       showTabsSheet: this.showTabsSheet,
       homeSearchFocused: this.browserSearchSuggestionSnapshot.homeSearchFocused,
       rootBottomPanelDetent: this.rootBottomAddressPanelDetent,
@@ -4349,6 +4360,11 @@ struct BrowserShellPage {
     notifyDocumentCommitted: (): void => {
       this.browserHomePresentationSessionCoordinator.handleThirdPartyHomeDocumentCommitted();
     },
+    notifyContentChanged: (): void => {
+      // The homepage edited its own layout, so the persisted cover no longer
+      // matches what it looks like now.
+      this.customHomepageLaunchSnapshotCoordinator.requestContentChangeCapture();
+    },
     executeEffect: (effect: CustomHomepageRuntimeShellEffect): void => {
       this.executeCustomHomepageShellEffect(effect);
     }
@@ -4364,6 +4380,12 @@ struct BrowserShellPage {
       windowOpenApplicationCoordinator: this.browserWindowOpenApplicationCoordinator,
       webRuntimeBridge: this.webRuntimeBridge
     }, this.customHomepageRuntimeShellHost);
+  private customHomepageLaunchSnapshotCoordinator: CustomHomepageLaunchSnapshotCoordinator =
+    new CustomHomepageLaunchSnapshotCoordinator();
+  private customHomepageLaunchSnapshotCaptureService: CustomHomepageLaunchSnapshotCaptureService =
+    new CustomHomepageLaunchSnapshotCaptureService();
+  private customHomepageLaunchSnapshot?: CustomHomepageLaunchSnapshot = undefined;
+  private customHomepageLaunchSnapshotKey: string = '';
   private themePaletteService: BrowserThemePaletteService = new BrowserThemePaletteService();
   private homeWallpaperCoordinator: HomeWallpaperCoordinator =
     new HomeWallpaperCoordinator(sharedWallpaperRepository);
@@ -5347,6 +5369,8 @@ struct BrowserShellPage {
     this.browserHomePresentationSessionCoordinator.getState();
   @State rootBottomAddressPanelDetent: HomeSearchPanelDetent = 'low';
   @State rootBottomPanelImmediateLowDetentRequestVersion: number = 0;
+  @State rootBottomPanelToolbarSystemSheetRequestVersion: number = 0;
+  private rootBottomPanelToolbarSystemSheetRequested: boolean = false;
   @State
   @Watch('refreshRootBottomPanelLayoutState')
   webBottomAddressFocused: boolean = false;
@@ -5442,15 +5466,25 @@ struct BrowserShellPage {
     createBrowserRecentlyClosedApplicationSnapshot();
   @State showHomeShortcuts: boolean = true;
   @State homeShortcutLayoutDensity: BrowserHomeShortcutLayoutDensity = 'standard';
-  @State themedHomeBackground: string = '#F2F3F5';
-  @State themedHomeSurfaceBackground: string = '#FFFFFF';
-  @State themedHomeControlBackground: string = '#E9EDF2';
-  @State themedHomePressedBackground: string = '#DDE5EF';
-  @State themedHomeOutlineColor: string = '#D8DEE8';
-  @State themedHomeTextPrimaryColor: string = '#111827';
-  @State themedHomeTextSecondaryColor: string = '#667085';
-  @State themedHomeAccentColor: string = '#0A59F7';
-  @State themedHomeOnPrimaryColor: string = '#FFFFFF';
+  // First-frame Home colors. The literal defaults below are light, so a dark-mode
+  // cold start painted a light Home background for the first frame — the "white
+  // flash" — until the appearance refresh landed. Resolving the current theme here
+  // keeps the very first frame correct.
+  private initialHomeThemeTokens: ResolvedBrowserThemeTokens = this.themePaletteService.resolveTokens(
+    sharedPreferencesRepository.getPreferences().appearance.themePaletteId,
+    this.browserThemeModeCoordinator.resolveEffectiveMode(
+      sharedPreferencesRepository.getPreferences().themeMode
+    )
+  );
+  @State themedHomeBackground: string = this.initialHomeThemeTokens.pageBackground;
+  @State themedHomeSurfaceBackground: string = this.initialHomeThemeTokens.floatingSurface;
+  @State themedHomeControlBackground: string = this.initialHomeThemeTokens.controlBackground;
+  @State themedHomePressedBackground: string = this.initialHomeThemeTokens.pressedBackground;
+  @State themedHomeOutlineColor: string = this.initialHomeThemeTokens.outline;
+  @State themedHomeTextPrimaryColor: string = this.initialHomeThemeTokens.textPrimary;
+  @State themedHomeTextSecondaryColor: string = this.initialHomeThemeTokens.textSecondary;
+  @State themedHomeAccentColor: string = this.initialHomeThemeTokens.accent;
+  @State themedHomeOnPrimaryColor: string = this.initialHomeThemeTokens.onPrimary;
   @State tabsSheetBackgroundColor: string = '#F2F3F5';
   @State tabsSheetSurfaceBackground: string = '#FFFFFF';
   @State tabsSheetControlBackground: string = '#E9EDF2';
@@ -5901,6 +5935,7 @@ struct BrowserShellPage {
   }
 
   aboutToDisappear(): void {
+    this.rootBottomPanelToolbarSystemSheetRequested = false;
     this.clientUpdatePolicyUnsubscribe?.();
     this.clientUpdatePolicyUnsubscribe = undefined;
     this.coldStartDeferredContentMountGeneration += 1;
@@ -5924,6 +5959,13 @@ struct BrowserShellPage {
   onPageShow(): void {
     this.browserShellLifecycleCoordinator.handlePageShow();
     void this.checkClientUpdatePolicy();
+  }
+
+  onPageHide(): void {
+    // Last reliable moment to persist the homepage frame before the process may
+    // be suspended or killed; the cover needs it for the next cold start. This
+    // path has no handoff to protect, so it may capture immediately.
+    this.customHomepageLaunchSnapshotCoordinator.requestImmediateCapture();
   }
 
   private checkClientUpdatePolicy(): Promise<void> {
@@ -6720,6 +6762,8 @@ struct BrowserShellPage {
       homeSuggestions: this.browserSearchSuggestionSnapshot.searchSuggestions,
       homeSuggestionsVisible: this.browserSearchSuggestionSnapshot.showSearchSuggestions,
       currentTabSuggestionRefId: this.activeTabId,
+      toolbarSystemSheetRequested: this.rootBottomPanelToolbarSystemSheetRequested,
+      toolbarSystemSheetRequestVersion: this.rootBottomPanelToolbarSystemSheetRequestVersion,
       responsiveState: renderContext.responsiveState,
       onPanelDetentChange: (detent: HomeSearchPanelDetent) => {
         this.applyRootBottomPanelDetent(detent);
@@ -6804,6 +6848,24 @@ struct BrowserShellPage {
         void this.browserSearchSuggestionCoordinator.deleteHistorySuggestion(suggestion);
       },
       onSearchBlankAreaBack: () => { this.browserMainBackCoordinator.onBackPress(this.browserMainBackHost); },
+      onToolbarSystemSheetUnavailable: () => {
+        this.rootBottomPanelToolbarSystemSheetRequested = false;
+        this.rootBottomPanelToolbarSystemSheetRequestVersion += 1;
+        this.browserRootBottomPanelSessionCoordinator.releaseProgrammaticHomeToolbarHostSession('unavailable');
+        this.showNativeToast('当前页面无法展开工具栏。');
+      },
+      onToolbarSystemSheetOpened: (instanceToken: number) => {
+        this.browserRootBottomPanelSessionCoordinator.noteToolbarSystemSheetOpened(instanceToken);
+      },
+      onToolbarSystemSheetDismissed: (instanceToken: number) => {
+        // Only close the Sheet. The host session stays active so the host that
+        // owns the Sheet remains mounted; tearing it down here is what made a
+        // close-then-reopen flash (the host unmount also closed the Sheet).
+        this.browserRootBottomPanelSessionCoordinator.noteToolbarSystemSheetDismissed(instanceToken, () => {
+          this.rootBottomPanelToolbarSystemSheetRequested = false;
+          this.rootBottomPanelToolbarSystemSheetRequestVersion += 1;
+        });
+      },
       onSelectSearchEngine: (engineId: SearchEngineId) => {
         this.browserTabHomeCoordinator.selectSearchEngine(engineId);
       },
@@ -7757,6 +7819,8 @@ struct BrowserShellPage {
       darkModeActive: this.resolveHomeWallpaperDarkModeActive(),
       themeBackgroundColor: this.resolveHomeRootBackgroundColor(),
       privateModeVisible: this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate(),
+      launchSnapshotUri: this.customHomepageLaunchSnapshot?.uri ?? '',
+      documentSettled: this.customHomepageRuntimeState.documentSettled,
       contentPresentation: this.buildHomeSurfaceContentPresentationState(),
       errorBottomInsetVp: this.browserTabHomeCoordinator.resolveCustomHomepageErrorBottomInset(
         this.buildHomeResponsiveLayoutState(),
@@ -8284,11 +8348,102 @@ struct BrowserShellPage {
       );
       this.browserTabHomeCoordinator.refreshBackdropAppearance('custom_homepage');
     }
+    this.syncCustomHomepageLaunchSnapshotState();
     if (state.activityState === 'active') {
       this.setCustomHomepageKeyboardOverlayMode();
       return;
     }
     this.restoreCustomHomepageKeyboardAvoidMode();
+  }
+
+  // Load the persisted cover frame for the current homepage identity. Called
+  // before the first presentation so the cold-start frame already has it, and
+  // again whenever the runtime publishes a new render identity.
+  // Reconcile the cover frame with the current homepage. Loads at most once per
+  // render identity; the store itself rejects a frame whose key or age no longer
+  // matches, so a replaced, re-imported, or theme-changed homepage never shows an
+  // old picture. Capture only runs while the committed homepage is on screen.
+  private syncCustomHomepageLaunchSnapshotState(): void {
+    const state = this.customHomepageRuntimeState;
+    const enabled = state.presentation.kind === 'custom_web' &&
+      !this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate();
+    if (!enabled) {
+      this.customHomepageLaunchSnapshot = undefined;
+      this.customHomepageLaunchSnapshotKey = '';
+      this.customHomepageLaunchSnapshotCoordinator.stopAutoCapture();
+      return;
+    }
+    let loadedFreshIdentity = false;
+    if (this.customHomepageLaunchSnapshotKey !== state.renderKey) {
+      this.customHomepageLaunchSnapshotKey = state.renderKey;
+      this.customHomepageLaunchSnapshot = this.customHomepageLaunchSnapshotCoordinator.load(
+        state.renderKey,
+        this.rootViewportWidth,
+        this.rootViewportHeight
+      );
+      loadedFreshIdentity = true;
+    }
+    // Establish the capture source before requesting a capture — `requestCapture`
+    // is a no-op until `startAutoCapture` has supplied one.
+    this.syncCustomHomepageLaunchSnapshotCapture();
+    // A new identity (theme switch, or a different/updated homepage) has its own
+    // cover slot. If that slot is empty, capture it as soon as the new document has
+    // settled rather than waiting for the periodic pass, so switching themes does
+    // not leave the next cold start in that theme uncovered.
+    if (loadedFreshIdentity && this.customHomepageLaunchSnapshot === undefined) {
+      this.customHomepageLaunchSnapshotCoordinator.requestCapture();
+    }
+  }
+
+  private syncCustomHomepageLaunchSnapshotCapture(): void {
+    if (this.customHomepageLaunchSnapshotCaptureActive()) {
+      this.customHomepageLaunchSnapshotCoordinator.startAutoCapture({
+        resolveRequest: (): CustomHomepageLaunchSnapshotCaptureRequest | undefined =>
+          this.buildCustomHomepageLaunchSnapshotCaptureRequest(),
+        capture: () => this.captureCustomHomepageLaunchSnapshot()
+      });
+      return;
+    }
+    this.customHomepageLaunchSnapshotCoordinator.stopAutoCapture();
+  }
+
+  private customHomepageLaunchSnapshotCaptureActive(): boolean {
+    const state = this.customHomepageRuntimeState;
+    return state.presentation.kind === 'custom_web' &&
+      state.documentCommitted &&
+      state.activityState === 'active' &&
+      this.showHomePage &&
+      !this.showTabsSheet &&
+      !this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate();
+  }
+
+  private buildCustomHomepageLaunchSnapshotCaptureRequest():
+    CustomHomepageLaunchSnapshotCaptureRequest | undefined {
+    const state = this.customHomepageRuntimeState;
+    if (!this.customHomepageLaunchSnapshotCaptureActive() || state.renderKey.trim().length <= 0) {
+      return undefined;
+    }
+    return {
+      renderKey: state.renderKey,
+      themeMode: state.themeMode
+    };
+  }
+
+  private async captureCustomHomepageLaunchSnapshot(): Promise<image.PixelMap | undefined> {
+    const controller = this.customHomepageRuntimeCoordinator.getCommittedWebController();
+    // Must be the Web node's own id, not the wrapper Stack's — `webPageSnapshot`
+    // fails with 17100001 on the container id, which left the cover permanently
+    // stale and flashed at handoff.
+    const snapshotId = this.customHomepageRuntimeCoordinator.getCommittedWebComponentSnapshotId();
+    if (controller === undefined || snapshotId.length <= 0) {
+      return undefined;
+    }
+    return await this.customHomepageLaunchSnapshotCaptureService.capture(
+      controller,
+      snapshotId,
+      this.rootViewportWidth,
+      this.rootViewportHeight
+    );
   }
 
   private executeCustomHomepageShellEffect(effect: CustomHomepageRuntimeShellEffect): void {
@@ -8308,9 +8463,17 @@ struct BrowserShellPage {
         );
         return;
       case 'open_toolbar':
-        this.browserRootBottomPanelSessionCoordinator.requestProgrammaticToolbarExpansion(
+        // While the Sheet is still animating closed, an open request is ignored
+        // rather than queued: replaying it mid-dismissal is what made a fast
+        // tap-again appear then vanish.
+        if (this.browserRootBottomPanelSessionCoordinator.isToolbarSystemSheetClosing()) {
+          return;
+        }
+        this.browserRootBottomPanelSessionCoordinator.beginProgrammaticHomeToolbarHostSession(
           this.buildRootBottomPanelSessionSnapshot()
         );
+        this.rootBottomPanelToolbarSystemSheetRequested = true;
+        this.rootBottomPanelToolbarSystemSheetRequestVersion += 1;
         return;
       case 'open_novel_bookshelf':
         this.browserShellRouteCoordinator.openNovelBookshelfPage();
@@ -9693,6 +9856,8 @@ struct BrowserShellPage {
     this.browserTabHomeCoordinator.refreshAppearance();
     if (!wasShowingHomePage && state.showHomePage) {
       this.browserHomePresentationSessionCoordinator.handleHomeBecameVisible();
+      // Returning home may reveal content the homepage changed while hidden.
+      this.customHomepageLaunchSnapshotCoordinator.requestCapture();
     }
     const shouldForceErrorSurface = this.browserWebLoadFailureSurfaceCoordinator.shouldShow(this.activeTabId);
     this.showPageErrorSurface = state.showPageErrorSurface &&
@@ -9949,6 +10114,10 @@ struct BrowserShellPage {
   ): void {
     this.browserRootBottomPanelSessionCoordinator
       .resetForRouteTransitionPresentation(preservedCustomBottomSurfaceIds);
+    // A route change or shell reset ends any pending toolbar Sheet request, so the
+    // flag cannot survive into an unrelated screen and reopen the Sheet there.
+    this.rootBottomPanelToolbarSystemSheetRequested = false;
+    this.rootBottomPanelToolbarSystemSheetRequestVersion += 1;
     const systemSheetResetEffect = this.browserTransientSurfaceCoordinator.resetSystemSheet();
     this.browserQrScanCoordinator.resetSession();
     this.browserWebPageToolsCoordinator.reset();

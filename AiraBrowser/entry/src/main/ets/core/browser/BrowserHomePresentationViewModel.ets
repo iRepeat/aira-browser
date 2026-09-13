@@ -54,7 +54,10 @@ const HOME_CONTENT_ENTRANCE_DELAY_MS: number = 0;
 const HOME_CONTENT_ENTRANCE_OFFSET_Y: number = 10;
 const HOME_CONTENT_ENTRANCE_INITIAL_OPACITY: number = 0.72;
 const HOME_CONTENT_ENTRANCE_CURVE: string = 'cubic-bezier(0.2, 0, 0, 1)';
-const THIRD_PARTY_HOME_STARTUP_INITIAL_SCALE: number = 0.9;
+// A third-party homepage reloads asynchronously on a cold start, so it enters
+// with an opacity fade only. A scale entrance made the reloaded page zoom up
+// behind the launch-snapshot cover and read as a flash when the cover lifted.
+const THIRD_PARTY_HOME_STARTUP_INITIAL_SCALE: number = 1;
 const THIRD_PARTY_HOME_STARTUP_ENTRANCE_DELAY_MS: number = 0;
 const THIRD_PARTY_HOME_STARTUP_ENTRANCE_DURATION_MS: number = 400;
 const THIRD_PARTY_HOME_STARTUP_ENTRANCE_CURVE: string = 'cubic-bezier(0.2, 0, 0, 1)';

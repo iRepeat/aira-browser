@@ -134,11 +134,35 @@ import {
   createHiddenDownloadToolbarIndicatorState
 } from '../../../core/download/DownloadToolbarIndicatorViewModel';
 import { DownloadV2TaskEntity } from '../../../domain/downloadv2/DownloadV2TaskEntity';
+import { FrameCallback } from '@kit.ArkUI';
 import {
   sharedDownloadRuntimeService,
   sharedExternalAppSearchPreferencesRepository,
   sharedPreferencesRepository
 } from '../../bootstrap/BrowserAppRuntime';
+
+class BrowserBottomAddressPanelDeferredTaskFrameCallback extends FrameCallback {
+  private readonly task: () => void;
+
+  constructor(task: () => void) {
+    super();
+    this.task = task;
+  }
+
+  onFrame(_frameTimeInNano: number): void {
+    this.task();
+  }
+}
+
+let toolbarSystemSheetInstanceTokenSequence: number = 0;
+
+// A layout change while the Sheet is open remounts the panel. Each instance needs
+// an identity so a dismissal reported by a replaced instance can be ignored.
+function allocateToolbarSystemSheetInstanceToken(): number {
+  toolbarSystemSheetInstanceTokenSequence += 1;
+  return toolbarSystemSheetInstanceTokenSequence;
+}
+
 const WEB_BOTTOM_ADDRESS_BAR_HEIGHT: number = 44;
 const USER_AGENT_ACTION_DIAGNOSTIC_LOG_DOMAIN: number = 0x0000;
 const USER_AGENT_ACTION_DIAGNOSTIC_LOG_TAG: string = 'BrowsingIdentity';
@@ -329,6 +353,8 @@ export struct BrowserBottomAddressPanel {
   private activeChromeGestureMiddlePanelHeight: number = 0;
   private pendingToolbarSystemSheetAction: BrowserBottomAddressPanelAction | undefined = undefined;
   private handledImmediateLowDetentRequestVersion: number = 0;
+  private handledToolbarSystemSheetRequestVersion: number = 0;
+  private toolbarSystemSheetInstanceToken: number = allocateToolbarSystemSheetInstanceToken();
   private dragConsumedQuickActionId: BrowserBottomAddressPanelActionId | undefined = undefined;
   private quickActionDragClickGuardTimeout: number = -1;
   private floatingActionContentEntryTimer: number = -1;
@@ -390,6 +416,15 @@ export struct BrowserBottomAddressPanel {
   @Prop responsiveState: BrowserBottomPanelResponsiveState = DEFAULT_BROWSER_BOTTOM_PANEL_RESPONSIVE_STATE;
   @Prop toolbarActionRevision: number = 0;
   @Prop toolbarLayoutRevision: number = 0;
+  @Prop
+  @Watch('syncToolbarSystemSheetRequest')
+  toolbarSystemSheetRequested: boolean = false;
+  // A monotonically increasing request version forces a re-open even while the
+  // requested flag is already true (fast close-then-reopen), which a flag alone
+  // cannot signal to a component whose local Sheet state was reset by dismissal.
+  @Prop
+  @Watch('syncToolbarSystemSheetRequest')
+  toolbarSystemSheetRequestVersion: number = 0;
   @Prop activeDownloadIndicatorEnabled: boolean = true;
   onPanelDetentChange: (detent: HomeSearchPanelDetent) => void = (_detent: HomeSearchPanelDetent) => {};
   onPanelGestureFrame: (frame: BrowserBottomAddressPanelGestureFrame) => void =
@@ -420,6 +455,9 @@ export struct BrowserBottomAddressPanel {
   onOpenSuggestion: (suggestion: SearchSuggestion) => void = (_suggestion: SearchSuggestion) => {};
   onDeleteHistorySuggestion: (suggestion: SearchSuggestion) => void = (_suggestion: SearchSuggestion) => {};
   onSearchBlankAreaBack: () => void = () => {};
+  onToolbarSystemSheetUnavailable: () => void = () => {};
+  onToolbarSystemSheetOpened: (instanceToken: number) => void = (_instanceToken: number) => {};
+  onToolbarSystemSheetDismissed: (instanceToken: number) => void = (_instanceToken: number) => {};
   onSelectSearchEngine: (engineId: SearchEngineId) => void = (_engineId: SearchEngineId) => {};
   onHomeRevealSuggestions: () => void = () => {};
   onHomeDismiss: () => void = () => {};
@@ -454,6 +492,16 @@ export struct BrowserBottomAddressPanel {
     this.syncRequestedAddressFocused();
     this.disconnectPresentationChannel = this.presentationChannel.connect(this.presentationListener);
     this.bindActiveDownloadIndicator();
+    // A custom homepage can ask for the toolbar while the panel host is still
+    // being mounted for it. Defer one frame so the Sheet binds after this
+    // component has laid out, then honor the pending request.
+    try {
+      this.getUIContext().postFrameCallback(new BrowserBottomAddressPanelDeferredTaskFrameCallback((): void => {
+        this.syncToolbarSystemSheetRequest();
+      }));
+    } catch (_error) {
+      this.syncToolbarSystemSheetRequest();
+    }
   }
 
   aboutToDisappear(): void {
@@ -2176,15 +2224,24 @@ export struct BrowserBottomAddressPanel {
     this.toolbarSystemSheetVisible = false;
   }
 
-  private openToolbarSystemSheet(): void {
+  private openToolbarSystemSheet(): boolean {
     if (this.toolbarSystemSheetVisible) {
-      return;
+      return true;
     }
+    if (!this.hasQuickActionSlotsAvailable()) {
+      return false;
+    }
+    // Do not end an active address session here: on Home that path collapses the
+    // persistent panel and tears down the host that owns this Sheet, so the Sheet
+    // would appear and vanish. The native Sheet supplies its own backdrop and the
+    // staged-address state is irrelevant to the action grid.
     this.pendingToolbarSystemSheetAction = undefined;
     this.toolbarSystemSheetDetentSelection = this.resolveToolbarSystemSheetPreviewHeight(
       this.resolveToolbarRenderSnapshot().layoutState
     );
     this.toolbarSystemSheetVisible = true;
+    this.onToolbarSystemSheetOpened(this.toolbarSystemSheetInstanceToken);
+    return true;
   }
 
   private handleToolbarSystemSheetDisappear(): void {
@@ -2192,6 +2249,10 @@ export struct BrowserBottomAddressPanel {
     this.toolbarSystemSheetDetentSelection = 0;
     const pendingAction = this.pendingToolbarSystemSheetAction;
     this.pendingToolbarSystemSheetAction = undefined;
+    // A panel remount also unmounts the bound Sheet, which is indistinguishable
+    // from a user dismissal here. The owner ignores reports from replaced
+    // instances and debounces the rest, so a fast close-then-reopen does not flap.
+    this.onToolbarSystemSheetDismissed(this.toolbarSystemSheetInstanceToken);
     if (pendingAction !== undefined) {
       this.onAction(pendingAction.id);
     }
@@ -2537,6 +2598,37 @@ export struct BrowserBottomAddressPanel {
   private syncPanelMotionState(): void {
     this.syncRequestedPanelDetent();
     this.syncImmediateLowDetentRequest();
+  }
+
+  // Mirrors the shell-owned open request. The shell owns whether the toolbar Sheet
+  // should be open, so a layout-driven panel remount reopens it instead of
+  // dropping it, and a request version re-opens it even when the requested flag was
+  // already true across a fast close-then-reopen.
+  private syncToolbarSystemSheetRequest(): void {
+    const requestVersion = this.toolbarSystemSheetRequestVersion;
+    const isNewRequest = requestVersion > this.handledToolbarSystemSheetRequestVersion;
+    if (isNewRequest) {
+      this.handledToolbarSystemSheetRequestVersion = requestVersion;
+    }
+    if (!this.toolbarSystemSheetRequested) {
+      if (this.toolbarSystemSheetVisible) {
+        this.toolbarSystemSheetVisible = false;
+      }
+      return;
+    }
+    // A fresh request always (re)opens; otherwise only a remount (Sheet not yet
+    // bound) opens, so an already-open Sheet is left alone.
+    if (!isNewRequest && this.toolbarSystemSheetVisible) {
+      return;
+    }
+    // A custom homepage driving `openToolbar()` lands here. The native Sheet is
+    // the only toolbar surface, so an unusable request must be reported back
+    // instead of leaving the caller waiting on a panel that will never expand.
+    if (!this.hasQuickActionSlotsAvailable()) {
+      this.onToolbarSystemSheetUnavailable();
+      return;
+    }
+    this.openToolbarSystemSheet();
   }
 
   private applyLivePanelMotionState(state: BrowserBottomPanelMotionState): void {

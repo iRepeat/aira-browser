@@ -66,6 +66,39 @@ import {
 const CUSTOM_HOMEPAGE_RUNTIME_LOG_DOMAIN: number = 0x0000;
 const CUSTOM_HOMEPAGE_RUNTIME_LOG_TAG: string = 'CustomHomeRuntime';
 const CUSTOM_HOMEPAGE_LOAD_TIMEOUT_MS: number = 8000;
+// Upper bound on how long the cold-start cover may wait for the reloaded document
+// to report that it painted; a slow or hanging subresource must not pin it.
+const CUSTOM_HOMEPAGE_DOCUMENT_SETTLE_FALLBACK_MS: number = 3000;
+// Homepages often paint a light default body background before their own dark
+// theme applies, and often keep loading images after `loadFinished`. The reveal
+// probe re-reads the page at this cadence until the theme matches AND the
+// images already on screen have decoded, bounded so a stubborn page still reveals.
+const CUSTOM_HOMEPAGE_SETTLE_PROBE_INTERVAL_MS: number = 100;
+const CUSTOM_HOMEPAGE_SETTLE_PROBE_MAX_ATTEMPTS: number = 18;
+// Consecutive identical confident reads required before revealing. One read is not
+// enough: the page can be themed and image-complete in the render process a beat
+// before it is composited to the screen.
+const CUSTOM_HOMEPAGE_SETTLE_PROBE_STABLE_READS: number = 2;
+// Returns 'dark' or 'light' once the page is painted, 'pending' while the
+// document or a visible image is still coming in, or 'unknown'. Background tone
+// alone was not enough: it can match the theme while visible images are still
+// blank, which showed as a flash the moment the cold-start cover lifted.
+const CUSTOM_HOMEPAGE_SETTLE_PROBE_SCRIPT: string =
+  '(function(){try{' +
+  'if(document.readyState!=="complete"){return "pending";}' +
+  'function tone(el){if(!el){return null;}var m=getComputedStyle(el).backgroundColor.match(/rgba?\\(([^)]+)\\)/);' +
+  'if(!m){return null;}var p=m[1].split(\',\').map(function(s){return parseFloat(s);});' +
+  'var a=p.length>=4?p[3]:1;if(!(a>0.01)){return null;}return p;}' +
+  'var p=tone(document.body);if(!p){p=tone(document.documentElement);}' +
+  'if(!p){return "pending";}' +
+  'var vw=window.innerWidth||document.documentElement.clientWidth||0;' +
+  'var vh=window.innerHeight||document.documentElement.clientHeight||0;' +
+  'var imgs=document.images||[];' +
+  'for(var i=0;i<imgs.length;i++){var im=imgs[i];var r=im.getBoundingClientRect();' +
+  'if(r.bottom>0&&r.top<vh&&r.right>0&&r.left<vw){' +
+  'if(!im.complete){return "pending";}}}' +
+  'var lum=(0.2126*p[0]+0.7152*p[1]+0.0722*p[2])/255;' +
+  'return lum<0.5?"dark":"light";}catch(e){return "unknown";}})()';
 export const CUSTOM_HOMEPAGE_PREVIEW_TAB_ID: string = 'custom-homepage';
 
 const UNKNOWN_CUSTOM_HOMEPAGE_HOLDING_HAND_STATUS: CustomHomepageHoldingHandStatus = 16;
@@ -139,6 +172,13 @@ export interface CustomHomepageRuntimeShellState {
   activityState: CustomHomepageRuntimeActivityState;
   surfaceVisible: boolean;
   transientBackHandlerActive: boolean;
+  // Identity of the currently presented document plus its resolved theme. The
+  // shell validates the persisted cold-start launch snapshot against these.
+  renderKey: string;
+  themeMode: BrowserResolvedThemeMode;
+  // True once the committed document has finished loading. The launch-snapshot
+  // cover stays up until the real content has actually painted.
+  documentSettled: boolean;
 }
 
 interface CustomHomepageApplySearchEngineSnapshotEffect {
@@ -194,6 +234,9 @@ export interface CustomHomepageRuntimeShellHost {
   resolveFacts: () => CustomHomepageRuntimeShellFacts;
   publishState: (state: CustomHomepageRuntimeShellState) => void;
   notifyDocumentCommitted: () => void;
+  // The homepage edited its own content/layout through the bridge, so the
+  // cold-start cover for this identity is now out of date.
+  notifyContentChanged: () => void;
   executeEffect: (effect: CustomHomepageRuntimeShellEffect) => void;
 }
 
@@ -325,10 +368,17 @@ export class CustomHomepageRuntimeCoordinator {
   private settings: CustomHomepageSettings;
   private presentationState: CustomHomepagePresentationState;
   private presentationRenderKey: string;
+  private presentationThemeMode: BrowserResolvedThemeMode = 'light';
   private presentationRevision: number = 0;
   private hostedNodeRevision: number = 0;
   private settingsListenerKey: string = '';
   private loadTimeoutTimer: number = -1;
+  private documentSettleFallbackTimer: number = -1;
+  private documentSettleProbeTimer: number = -1;
+  private documentSettleProbeAttempts: number = 0;
+  private documentSettleProbeGeneration: number = 0;
+  private documentSettleProbeLastSample: string = '';
+  private documentSettleProbeStableMatches: number = 0;
   private loadErrorPresentationService: WebLoadErrorPresentationService = new WebLoadErrorPresentationService();
   private loadFailureState: CustomHomepageLoadFailureState = HIDDEN_CUSTOM_HOMEPAGE_LOAD_FAILURE_STATE;
   private loadingUrl: string = '';
@@ -340,6 +390,7 @@ export class CustomHomepageRuntimeCoordinator {
   private desiredGeneration: number = 0;
   private activeGeneration: number = 0;
   private committedGeneration: number = 0;
+  private settledGeneration: number = 0;
   private desiredUrl: string = '';
   private desiredRenderKey: string = '';
   private activeRenderKey: string = '';
@@ -399,7 +450,12 @@ export class CustomHomepageRuntimeCoordinator {
       documentCommitted: this.documentCommitted,
       activityState: this.activityState,
       surfaceVisible: this.isSurfaceVisible(),
-      transientBackHandlerActive: this.transientBackHandlerActive
+      transientBackHandlerActive: this.transientBackHandlerActive,
+      renderKey: this.presentationRenderKey,
+      themeMode: this.presentationThemeMode,
+      documentSettled: this.documentCommitted &&
+        this.committedGeneration > 0 &&
+        this.settledGeneration === this.committedGeneration
     };
   }
 
@@ -427,6 +483,7 @@ export class CustomHomepageRuntimeCoordinator {
     });
     this.presentationState = refreshPlan.state;
     this.presentationRenderKey = refreshPlan.renderKey;
+    this.presentationThemeMode = facts.theme.effectiveMode;
     this.presentationRevision += 1;
     this.applyTransition(this.handlePresentationRefresh({
       homeVisible: homeVisibleOverride ?? facts.showHomePage,
@@ -774,7 +831,7 @@ export class CustomHomepageRuntimeCoordinator {
   private handleBridgeRequest(generation: number, action: string, value: string): string {
     const facts = this.shellHost.resolveFacts();
     const bridgeAuthorityActive = this.authorizeBridgeRequest(generation, action);
-    return this.bridgeCoordinator.handleRequest({
+    const response = this.bridgeCoordinator.handleRequest({
       documentGeneration: generation,
       action: action,
       value: value,
@@ -783,6 +840,33 @@ export class CustomHomepageRuntimeCoordinator {
       installedHomepageId: this.settings.mode === 'custom_html' ? this.settings.selectedItemId : '',
       shortcuts: facts.shortcuts
     });
+    if (response.length > 0 && bridgeAuthorityActive && this.isContentMutatingBridgeAction(action)) {
+      this.shellHost.notifyContentChanged();
+    }
+    return response;
+  }
+
+  // A homepage customizes itself by writing storage and reordering/removing its own
+  // shortcuts; these are the actions whose result changes what the homepage looks
+  // like, so the persisted cover must be refreshed after them. Read-only and
+  // native-to-web sync actions are excluded to avoid capturing on every request.
+  private isContentMutatingBridgeAction(rawAction: string): boolean {
+    switch (rawAction.trim().toLowerCase()) {
+      case 'storageset':
+      case 'storageremove':
+      case 'storageclear':
+      case 'reordershortcuts':
+      case 'removeshortcut':
+      case 'deleteshortcut':
+      case 'confirmdeleteshortcut':
+      case 'moveshortcutup':
+      case 'moveshortcutdown':
+      case 'moveshortcuttotop':
+      case 'moveshortcuttobottom':
+        return true;
+      default:
+        return false;
+    }
   }
 
   private handleAiraUrl(url: string): boolean {
@@ -943,6 +1027,37 @@ export class CustomHomepageRuntimeCoordinator {
 
   getHostedWebNodeController(): CustomHomepageHostedWebNodeController | undefined {
     return this.hostedWebGeneration?.getNodeController();
+  }
+
+  /**
+   * The controller of the currently committed document, for callers that need a
+   * Web-level snapshot (`webPageSnapshot`). Component snapshot of a Surface that
+   * only wraps a NodeContainer does not reliably include Web pixels, so the
+   * cold-start cover must be captured through the controller itself. Returns
+   * undefined unless the current document is committed and active.
+   */
+  getCommittedWebController(): webview.WebviewController | undefined {
+    if (!this.documentCommitted || this.committedGeneration <= 0 || this.activityState !== 'active') {
+      return undefined;
+    }
+    return this.resolveHostedWebController(this.committedGeneration);
+  }
+
+  /**
+   * Component id of the committed Web node, for `webPageSnapshot`.
+   *
+   * `webPageSnapshot` targets the id set on the Web component itself. The page
+   * also puts a container id on the wrapping Stack, and passing that container id
+   * made every capture fail with 17100001 — so the cold-start cover never
+   * refreshed and stayed a stale frame, which showed up as a content flash at the
+   * handoff. The id must match `buildHostedWebConfig` exactly, generation suffix
+   * included.
+   */
+  getCommittedWebComponentSnapshotId(): string {
+    if (!this.documentCommitted || this.committedGeneration <= 0) {
+      return '';
+    }
+    return `${buildBrowserTabWebComponentSnapshotId(CUSTOM_HOMEPAGE_PREVIEW_TAB_ID)}-${this.committedGeneration}`;
   }
 
   private executeScript(generation: number, script: string, action: string): void {
@@ -1149,10 +1264,120 @@ export class CustomHomepageRuntimeCoordinator {
     if (!this.isCurrentGeneration(signal.generation, signal.kind)) {
       return this.buildTransition([]);
     }
+    // `onLoadFinished` means the document and its subresources have finished. Do
+    // not release the cold-start cover yet: many homepages ship a light default
+    // body background and only apply their dark theme a moment later, so reveal
+    // is gated on the page background actually matching the current theme.
+    if (!this.loadFailureState.visible && this.failedUrl.length <= 0) {
+      this.beginDocumentSettleProbe(Math.max(0, Math.floor(signal.generation)));
+    }
     return this.buildTransition(this.acceptNativeDocumentReadiness(
       signal.kind,
       signal.generation
     ));
+  }
+
+  // Reads the page's effective canvas background and returns whether it reads as
+  // dark or light, so the reveal gate can wait out a not-yet-themed (white) page.
+  private beginDocumentSettleProbe(generation: number): void {
+    this.cancelDocumentSettleProbe();
+    this.documentSettleProbeGeneration = generation;
+    this.documentSettleProbeAttempts = 0;
+    this.documentSettleProbeLastSample = '';
+    this.documentSettleProbeStableMatches = 0;
+    this.runDocumentSettleProbe();
+  }
+
+  private runDocumentSettleProbe(): void {
+    const generation = this.documentSettleProbeGeneration;
+    if (generation <= 0 || !this.documentCommitted || this.committedGeneration !== generation) {
+      return;
+    }
+    const controller = this.resolveHostedWebController(generation);
+    if (controller === undefined) {
+      this.completeDocumentSettle(generation, 'no-controller');
+      return;
+    }
+    let execution: Promise<string> | undefined = undefined;
+    try {
+      execution = controller.runJavaScript(CUSTOM_HOMEPAGE_SETTLE_PROBE_SCRIPT);
+    } catch (_error) {
+      this.completeDocumentSettle(generation, 'probe-threw');
+      return;
+    }
+    if (execution === undefined) {
+      this.completeDocumentSettle(generation, 'no-execution');
+      return;
+    }
+    void execution.then((value: string): void => {
+      if (this.documentSettleProbeGeneration !== generation) {
+        return;
+      }
+      const sampled = this.normalizeProbeResult(value);
+      // A single confident read is not proof the page has painted: the render
+      // process can report a themed, image-complete document a frame or two before
+      // those pixels reach the screen. Require the same confident answer twice in a
+      // row so the reveal waits out that compositor lag instead of exposing a page
+      // that is themed in JS but still blank on screen.
+      if (sampled === this.documentSettleProbeLastSample &&
+        (sampled === this.presentationThemeMode || sampled === 'unknown')) {
+        this.documentSettleProbeStableMatches += 1;
+      } else {
+        this.documentSettleProbeStableMatches =
+          (sampled === this.presentationThemeMode || sampled === 'unknown') ? 1 : 0;
+      }
+      this.documentSettleProbeLastSample = sampled;
+      if (this.documentSettleProbeStableMatches >= CUSTOM_HOMEPAGE_SETTLE_PROBE_STABLE_READS) {
+        this.completeDocumentSettle(generation, `matched-${sampled}`);
+        return;
+      }
+      this.documentSettleProbeAttempts += 1;
+      if (this.documentSettleProbeAttempts >= CUSTOM_HOMEPAGE_SETTLE_PROBE_MAX_ATTEMPTS) {
+        this.completeDocumentSettle(generation, `timeout-${sampled}`);
+        return;
+      }
+      this.documentSettleProbeTimer = setTimeout((): void => {
+        this.documentSettleProbeTimer = -1;
+        this.runDocumentSettleProbe();
+      }, CUSTOM_HOMEPAGE_SETTLE_PROBE_INTERVAL_MS);
+    }).catch((): void => {
+      if (this.documentSettleProbeGeneration === generation) {
+        this.completeDocumentSettle(generation, 'probe-failed');
+      }
+    });
+  }
+
+  // ArkWeb returns the script result JSON-encoded, so a JS string arrives with
+  // surrounding quotes (`"dark"`). Normalizing here keeps the theme comparison
+  // exact instead of always missing and burning the retry budget.
+  private normalizeProbeResult(value: string): string {
+    const trimmed = String(value).trim();
+    if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      return trimmed.substring(1, trimmed.length - 1);
+    }
+    return trimmed;
+  }
+
+  private completeDocumentSettle(generation: number, reason: string): void {
+    if (!this.documentCommitted || this.committedGeneration !== generation) {
+      return;
+    }
+    this.cancelDocumentSettleProbe();
+    this.settledGeneration = generation;
+    hilog.info(CUSTOM_HOMEPAGE_RUNTIME_LOG_DOMAIN, CUSTOM_HOMEPAGE_RUNTIME_LOG_TAG,
+      'document_settled generation=%{public}d reason=%{public}s', generation, reason);
+    this.publishShellState();
+  }
+
+  private cancelDocumentSettleProbe(): void {
+    if (this.documentSettleProbeTimer >= 0) {
+      clearTimeout(this.documentSettleProbeTimer);
+      this.documentSettleProbeTimer = -1;
+    }
+    this.documentSettleProbeAttempts = 0;
+    this.documentSettleProbeLastSample = '';
+    this.documentSettleProbeStableMatches = 0;
+    this.documentSettleProbeGeneration = 0;
   }
 
   private handleFirstMeaningfulPaint(signal: CustomHomepageHostedWebDocumentSignal): CustomHomepageRuntimeTransition {
@@ -1160,6 +1385,10 @@ export class CustomHomepageRuntimeCoordinator {
       this.loadFailureState.visible || this.failedUrl.length > 0) {
       return this.buildTransition([]);
     }
+    // Deliberately NOT a settle signal. A homepage can paint its first frame
+    // before its theme/JS initialization finishes, so lifting the cold-start cover
+    // on first paint revealed a briefly light page (the dark-mode flash). Only
+    // `loadFinished`, after subresources, releases the cover.
     return this.buildTransition(this.acceptNativeDocumentReadiness(
       signal.kind,
       signal.generation
@@ -1427,6 +1656,7 @@ export class CustomHomepageRuntimeCoordinator {
 
   private cancelLoadTimeout(): void {
     this.loadGeneration += 1;
+    this.cancelDocumentSettleFallback();
   }
 
   private beginRedirectGeneration(url: string): CustomHomepageRuntimeTransition {
@@ -1617,6 +1847,7 @@ export class CustomHomepageRuntimeCoordinator {
   private invalidateCommittedDocument(): void {
     this.documentCommitted = false;
     this.committedGeneration = 0;
+    this.settledGeneration = 0;
     this.bridgeAuthorityActive = false;
     const hostedWebNode = this.hostedWebGeneration?.getNodeController();
     hostedWebNode?.setInteractionAllowed(false);
@@ -1632,6 +1863,8 @@ export class CustomHomepageRuntimeCoordinator {
   }
 
   private releaseHostedWebGeneration(): void {
+    this.cancelDocumentSettleFallback();
+    this.cancelDocumentSettleProbe();
     const runtime = this.hostedWebGeneration;
     if (runtime === undefined) {
       this.controllerAttached = false;
@@ -1724,7 +1957,32 @@ export class CustomHomepageRuntimeCoordinator {
     this.documentCommitted = true;
     this.committedGeneration = generation;
     this.syncHostedActivity();
+    this.scheduleDocumentSettleFallback(generation);
     this.shellHost.notifyDocumentCommitted();
+  }
+
+  // A homepage whose document never reports load completion must still release the
+  // cold-start cover, or the cover would sit over the real page indefinitely.
+  private scheduleDocumentSettleFallback(generation: number): void {
+    this.cancelDocumentSettleFallback();
+    this.documentSettleFallbackTimer = setTimeout((): void => {
+      this.documentSettleFallbackTimer = -1;
+      if (!this.documentCommitted || this.committedGeneration !== generation ||
+        this.settledGeneration === generation) {
+        return;
+      }
+      this.settledGeneration = generation;
+      this.cancelDocumentSettleProbe();
+      this.publishShellState();
+    }, CUSTOM_HOMEPAGE_DOCUMENT_SETTLE_FALLBACK_MS);
+  }
+
+  private cancelDocumentSettleFallback(): void {
+    if (this.documentSettleFallbackTimer < 0) {
+      return;
+    }
+    clearTimeout(this.documentSettleFallbackTimer);
+    this.documentSettleFallbackTimer = -1;
   }
 
   private shouldAttachHostedSurfaceDuringStaging(): boolean {

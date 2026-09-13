@@ -343,6 +343,11 @@ const BROWSER_ROOT_BOTTOM_PANEL_HIDE_SEARCH_MIN_OFFSET_Y: number = 30;
 const BROWSER_ROOT_BOTTOM_PANEL_HIDE_SEARCH_CONTINUE_TEXT: string = '继续下滑隐藏';
 const BROWSER_ROOT_BOTTOM_PANEL_HIDE_SEARCH_RELEASE_TEXT: string = '松手隐藏';
 const BROWSER_BOTTOM_PANEL_HOST_Z_INDEX: number = 198;
+const BROWSER_ROOT_BOTTOM_PANEL_LOG_DOMAIN: number = 0x0000;
+const BROWSER_ROOT_BOTTOM_PANEL_LOG_TAG: string = 'RootBottomPanel';
+// Long enough to outlast the remount that presents the Sheet, short enough that a
+// genuine swipe-down still tears the host session down promptly.
+const BROWSER_ROOT_BOTTOM_PANEL_TOOLBAR_SHEET_DISMISS_DEBOUNCE_MS: number = 600;
 // The panel owns the animation timer, but a remount can cancel that timer before
 // the shell receives onPanelSettled. Keep action completion in the session owner.
 const BROWSER_ROOT_BOTTOM_PANEL_ACTION_SETTLE_FALLBACK_MS: number =
@@ -569,6 +574,9 @@ export class BrowserRootBottomPanelSessionCoordinator {
   private requestedDetentOverride?: HomeSearchPanelDetent = undefined;
   private programmaticHomeToolbarHostActive: boolean = false;
   private programmaticHomeToolbarRestingChromeHidden: boolean = false;
+  private toolbarSystemSheetDismissTimer: number = -1;
+  private toolbarSystemSheetClosing: boolean = false;
+  private toolbarSheetOwnerToken: number = 0;
   private searchPresentationHostReady: boolean = false;
   private searchPresentationHostPreparationActive: boolean = false;
   private searchPresentationHostPreparationGeneration: number = 0;
@@ -1500,8 +1508,11 @@ export class BrowserRootBottomPanelSessionCoordinator {
   ): BrowserRootBottomPanelChromePlan {
     const inputPlan = this.addressInputSessionCoordinator.buildEndPlan(snapshot);
     if (snapshot.isHomeMode && this.programmaticHomeToolbarHostActive) {
+      // Deliberately not ending the programmatic host session here: it now exists
+      // only to keep the native toolbar Sheet's host mounted, and ending it on an
+      // unrelated address-session event would unmount the Sheet mid-presentation.
+      // The Sheet dismiss path owns the session lifetime.
       inputPlan.shouldCollapsePanel = true;
-      this.endProgrammaticHomeToolbarHostSession(true);
     }
     return this.buildAddressInputChromePlan(inputPlan);
   }
@@ -1755,9 +1766,9 @@ export class BrowserRootBottomPanelSessionCoordinator {
   handlePanelSettled(detent: HomeSearchPanelDetent): BrowserRootBottomPanelSettledTransition {
     let shouldCommitRequestedDetent = false;
     let shouldDismissHomeSearch = false;
-    if (this.isCollapsedDetent(detent)) {
-      this.endProgrammaticHomeToolbarHostSession(true);
-    }
+    // A programmatic Home toolbar session rests at `low` with the native Sheet on
+    // top, so a collapsed settle is its normal state, not a dismissal. Ending the
+    // session here unmounted the host and closed the Sheet right after it opened.
     if (this.requestedDetentOverride === detent) {
       this.requestedDetentOverride = undefined;
       shouldCommitRequestedDetent = true;
@@ -1904,29 +1915,87 @@ export class BrowserRootBottomPanelSessionCoordinator {
     return plan;
   }
 
-  buildProgrammaticToolbarExpansionPlan(
-    snapshot: BrowserRootBottomPanelSessionSnapshot
-  ): BrowserRootBottomPanelChromePlan {
-    const plan = this.buildEmptyChromePlan();
-    if (!snapshot.panelExpansionEnabled || snapshot.currentDetent === 'middle') {
-      return plan;
-    }
-    plan.targetDetent = 'middle';
-    plan.detentApplication = 'apply';
-    plan.shouldRestoreScrollPresentation = true;
-    return plan;
-  }
-
-  requestProgrammaticToolbarExpansion(snapshot: BrowserRootBottomPanelSessionSnapshot): void {
+  // A custom homepage drives `openToolbar()` through the native Sheet, which
+  // supplies its own backdrop. Expanding the persistent panel to `middle` here
+  // would raise the opaque root scrim over the homepage with nothing rendered
+  // inside the panel, so this path only mounts the host that owns the Sheet.
+  beginProgrammaticHomeToolbarHostSession(snapshot: BrowserRootBottomPanelSessionSnapshot): void {
     this.clearPendingActionSettleFallback();
     this.pendingActionAfterCollapsedSettle = undefined;
-    const plan = this.buildProgrammaticToolbarExpansionPlan(snapshot);
-    if (snapshot.isHomeMode && (plan.targetDetent === 'middle' || snapshot.currentDetent === 'middle')) {
+    if (snapshot.isHomeMode) {
       this.programmaticHomeToolbarHostActive = true;
     } else {
       this.endProgrammaticHomeToolbarHostSession();
     }
-    this.sink.applyChromePlan(plan);
+    hilog.info(
+      BROWSER_ROOT_BOTTOM_PANEL_LOG_DOMAIN,
+      BROWSER_ROOT_BOTTOM_PANEL_LOG_TAG,
+      'programmatic_home_toolbar_session begin home=%{public}s active=%{public}s',
+      String(snapshot.isHomeMode),
+      String(this.programmaticHomeToolbarHostActive)
+    );
+    this.invalidatePresentation();
+  }
+
+  releaseProgrammaticHomeToolbarHostSession(reason: string = 'unspecified'): void {
+    this.cancelToolbarSystemSheetClosing();
+    if (!this.programmaticHomeToolbarHostActive && !this.programmaticHomeToolbarRestingChromeHidden) {
+      return;
+    }
+    this.endProgrammaticHomeToolbarHostSession();
+    hilog.info(
+      BROWSER_ROOT_BOTTOM_PANEL_LOG_DOMAIN,
+      BROWSER_ROOT_BOTTOM_PANEL_LOG_TAG,
+      'programmatic_home_toolbar_session release reason=%{public}s',
+      reason
+    );
+    this.invalidatePresentation();
+  }
+
+  // Presenting a bottom Sheet can change the window avoid-area and therefore the
+  // panel layout key, which remounts the panel that owns the Sheet. Two things
+  // then go wrong unless the open/close intent is owned here, outside the
+  // remounting component: the outgoing instance reports onDisappear exactly like a
+  // user dismissal, and the incoming instance has no memory of the open state.
+  //
+  // Each panel instance carries a token, so a dismissal reported by a replaced
+  // instance is ignored as a remount artifact. An accepted dismissal puts the
+  // Sheet into a short closing window; requests that arrive while it is closing
+  // are deliberately ignored rather than queued, so a fast close-then-reopen
+  // cannot fight the in-flight dismissal and flap.
+  noteToolbarSystemSheetOpened(token: number): void {
+    this.toolbarSheetOwnerToken = token;
+    this.cancelToolbarSystemSheetClosing();
+  }
+
+  noteToolbarSystemSheetDismissed(token: number, release: () => void): void {
+    if (token !== this.toolbarSheetOwnerToken) {
+      return;
+    }
+    this.toolbarSheetOwnerToken = 0;
+    release();
+    this.beginToolbarSystemSheetClosing();
+  }
+
+  isToolbarSystemSheetClosing(): boolean {
+    return this.toolbarSystemSheetClosing;
+  }
+
+  private beginToolbarSystemSheetClosing(): void {
+    this.cancelToolbarSystemSheetClosing();
+    this.toolbarSystemSheetClosing = true;
+    this.toolbarSystemSheetDismissTimer = setTimeout((): void => {
+      this.toolbarSystemSheetDismissTimer = -1;
+      this.toolbarSystemSheetClosing = false;
+    }, BROWSER_ROOT_BOTTOM_PANEL_TOOLBAR_SHEET_DISMISS_DEBOUNCE_MS);
+  }
+
+  private cancelToolbarSystemSheetClosing(): void {
+    if (this.toolbarSystemSheetDismissTimer >= 0) {
+      clearTimeout(this.toolbarSystemSheetDismissTimer);
+      this.toolbarSystemSheetDismissTimer = -1;
+    }
+    this.toolbarSystemSheetClosing = false;
   }
 
   beginTransientSheetPresentation(
