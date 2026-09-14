@@ -8,6 +8,8 @@ import mediaSessionResolutionRuntimeServiceTest from './MediaSessionResolutionRu
 import mediaPageBehaviorEvidenceAdapterTest from './MediaPageBehaviorEvidenceAdapter.test';
 import browserTabletInterfaceModePolicyTest from './BrowserTabletInterfaceModePolicy.test';
 import browserTabletInterfaceModeTransitionOwnerTest from './BrowserTabletInterfaceModeTransitionOwner.test';
+import centeredDialogWidthViewModelTest from './CenteredDialogWidthViewModel.test';
+import browserShellFontScalePolicyTest from './BrowserShellFontScalePolicy.test';
 import browserPrivacyEffectPolicyTest from './BrowserPrivacyEffectPolicy.test';
 import downloadPrivacyPolicyTest from './DownloadPrivacyPolicy.test';
 import settingsDestinationNavigationOwnerTest from './SettingsDestinationNavigationOwner.test';
@@ -50,6 +52,8 @@ export default function tests(): void {
   mediaPageBehaviorEvidenceAdapterTest();
   browserTabletInterfaceModePolicyTest();
   browserTabletInterfaceModeTransitionOwnerTest();
+  centeredDialogWidthViewModelTest();
+  browserShellFontScalePolicyTest();
   browserPrivacyEffectPolicyTest();
   downloadPrivacyPolicyTest();
   settingsDestinationNavigationOwnerTest();

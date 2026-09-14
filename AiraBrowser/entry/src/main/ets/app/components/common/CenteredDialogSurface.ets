@@ -8,9 +8,14 @@ import {
   createDialogImmersiveMaterial,
   ImmersiveMaterialHandle
 } from './ArkUiMaterialAccess';
+import { display } from '@kit.ArkUI';
+import {
+  CENTERED_DIALOG_MAX_WIDTH_VP,
+  CenteredDialogWidthViewModel
+} from '../../../core/browser/CenteredDialogWidthViewModel';
 
+export { CENTERED_DIALOG_MAX_WIDTH_VP };
 export const CENTERED_DIALOG_HORIZONTAL_MARGIN_VP: number = 12;
-export const CENTERED_DIALOG_MAX_WIDTH_VP: number = 420;
 export const CENTERED_DIALOG_CORNER_RADIUS_VP: number = 28;
 export const CENTERED_DIALOG_CONTENT_GAP_VP: number = 16;
 export const CENTERED_DIALOG_HORIZONTAL_PADDING_VP: number = 20;
@@ -22,10 +27,17 @@ export const CENTERED_DIALOG_ACTION_HEIGHT_VP: number = 44;
 export const CENTERED_DIALOG_ACTION_FONT_SIZE_FP: number = 15;
 const CENTERED_DIALOG_WIDTH: string =
   `calc(100% - ${CENTERED_DIALOG_HORIZONTAL_MARGIN_VP * 2}vp)`;
-// AlertDialog.width accepts Dimension (not calc expressions); 90% preserves the centered 12vp contract on phones.
-const CENTERED_DIALOG_ALERT_WIDTH: Dimension = '90%';
 const CENTERED_DIALOG_TALL_HEIGHT: string = 'calc(100% - 48vp)';
 const CENTERED_DIALOG_TALL_MAX_HEIGHT_VP: number = 720;
+// AlertDialog.width accepts Dimension (not calc expressions) and has no
+// constraintSize, so a percentage is the only value that preserves the centered
+// 12vp contract on a phone. A percentage is relative to the window, though, so
+// the same 90% becomes an absurdly wide alert on a PC/large-screen window. The
+// shared width owner keeps the percentage only while it still fits the
+// centered-dialog maximum and pins to that maximum otherwise.
+const CENTERED_DIALOG_ALERT_WIDTH_PERCENT: Dimension = '90%';
+
+const centeredDialogWidthViewModel: CenteredDialogWidthViewModel = new CenteredDialogWidthViewModel();
 
 export function createCenteredDialogMaterial(): ImmersiveMaterialHandle | undefined {
   if (!isFloatingGlassMaterialAvailable()) {
@@ -37,9 +49,35 @@ export function createCenteredDialogMaterial(): ImmersiveMaterialHandle | undefi
 export type CenteredAlertDialogParams =
   AlertDialogParamWithConfirm | AlertDialogParamWithButtons | AlertDialogParamWithOptions;
 
+/**
+ * Resolves the AlertDialog width for the current window so a wide PC/large-screen
+ * window does not stretch the alert to the whole viewport.
+ */
+function resolveCenteredAlertDialogWidth(): Dimension {
+  const resolved = centeredDialogWidthViewModel.resolve(readDisplayWidthVp());
+  if (resolved.percentBased) {
+    return CENTERED_DIALOG_ALERT_WIDTH_PERCENT;
+  }
+  return resolved.widthVp;
+}
+
+function readDisplayWidthVp(): number {
+  try {
+    const defaultDisplay = display.getDefaultDisplaySync();
+    const widthPx = defaultDisplay.width;
+    const densityPixels = defaultDisplay.densityPixels;
+    if (!Number.isFinite(widthPx) || widthPx <= 0 ||
+      !Number.isFinite(densityPixels) || densityPixels <= 0) {
+      return 0;
+    }
+    return widthPx / densityPixels;
+  } catch (_error) {
+    return 0;
+  }
+}
 /** Adds the shared API 26 presentation parameters without choosing the execution owner. */
 export function configureCenteredAlertDialog(params: CenteredAlertDialogParams): CenteredAlertDialogParams {
-  params.width = CENTERED_DIALOG_ALERT_WIDTH;
+  params.width = resolveCenteredAlertDialogWidth();
   params.cornerRadius = CENTERED_DIALOG_CORNER_RADIUS_VP;
   assignDialogSystemMaterial(params, createCenteredDialogMaterial());
   return params;

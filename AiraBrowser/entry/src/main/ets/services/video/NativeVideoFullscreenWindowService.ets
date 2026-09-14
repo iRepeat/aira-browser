@@ -68,8 +68,15 @@ export class NativeVideoFullscreenWindowService {
     try {
       const mainWindow = await window.getLastWindow(context);
       await mainWindow.setWindowLayoutFullScreen(true);
-      await mainWindow.setSpecificSystemBarEnabled('navigation', false, true);
-      await mainWindow.setPreferredOrientation(orientation);
+      // The navigation bar and the orientation lock are best-effort: a 2-in-1/PC
+      // window has no navigation bar and rejects an orientation lock, and that
+      // must not abort the full-screen transition (nor stop the large-screen
+      // chrome from collapsing) on that form factor.
+      try {
+        await mainWindow.setSpecificSystemBarEnabled('navigation', false, true);
+      } catch (_navigationError) {
+      }
+      await this.applyPreferredOrientation(mainWindow, orientation);
       return true;
     } catch (_error) {
       await this.restoreFullscreenWindow(context, restoreOrientation);
@@ -96,6 +103,16 @@ export class NativeVideoFullscreenWindowService {
       } catch (_layoutError) {
       }
     } catch (_windowError) {
+    }
+  }
+
+  private async applyPreferredOrientation(
+    mainWindow: window.Window,
+    orientation: window.Orientation
+  ): Promise<void> {
+    try {
+      await mainWindow.setPreferredOrientation(orientation);
+    } catch (_orientationError) {
     }
   }
 

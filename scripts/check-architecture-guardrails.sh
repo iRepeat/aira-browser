@@ -39,6 +39,16 @@ LARGE_SCREEN_TAB_SNAPSHOT_ADAPTER_REL="AiraBrowser/entry/src/main/ets/core/brows
 LARGE_SCREEN_TAB_SNAPSHOT_ADAPTER="${REPO_ROOT}/${LARGE_SCREEN_TAB_SNAPSHOT_ADAPTER_REL}"
 LARGE_SCREEN_NAV_TOOLBAR_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserLargeScreenNavigationToolbarSurface.ets"
 LARGE_SCREEN_NAV_TOOLBAR="${REPO_ROOT}/${LARGE_SCREEN_NAV_TOOLBAR_REL}"
+LARGE_SCREEN_PRIMARY_SURFACE_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserLargeScreenPrimarySurface.ets"
+LARGE_SCREEN_PRIMARY_SURFACE="${REPO_ROOT}/${LARGE_SCREEN_PRIMARY_SURFACE_REL}"
+SHELL_PRIMARY_SURFACE_HOST_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserShellPrimarySurfaceHost.ets"
+SHELL_PRIMARY_SURFACE_HOST="${REPO_ROOT}/${SHELL_PRIMARY_SURFACE_HOST_REL}"
+NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/video/NativeVideoFullscreenWindowService.ets"
+NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE="${REPO_ROOT}/${NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE_REL}"
+SHELL_FONT_SCALE_POLICY_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserShellFontScalePolicy.ets"
+SHELL_FONT_SCALE_POLICY="${REPO_ROOT}/${SHELL_FONT_SCALE_POLICY_REL}"
+SYSTEM_FONT_SCALE_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSystemFontScaleCoordinator.ets"
+SYSTEM_FONT_SCALE_COORDINATOR="${REPO_ROOT}/${SYSTEM_FONT_SCALE_COORDINATOR_REL}"
 WEB_VIEWPORT_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserWebViewportCoordinator.ets"
 WEB_VIEWPORT_COORDINATOR="${REPO_ROOT}/${WEB_VIEWPORT_COORDINATOR_REL}"
 WEB_TOP_CHROME_OVERLAY_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserWebTopChromeOverlay.ets"
@@ -5052,6 +5062,46 @@ check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLB
 check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
   "BrowserLargeScreenAccountPopover\(\{" \
   "must still render the account popover for Official alongside its distribution gate."
+check_file_contains_rule "${SHELL_PRIMARY_SURFACE_HOST}" "${SHELL_PRIMARY_SURFACE_HOST_REL}" \
+  'webFullscreenActive: this\.largeScreenWebFullscreenActive' \
+  "must forward the Web fullscreen flag into the Large-Screen surface so its chrome can collapse."
+check_file_contains_rule "${LARGE_SCREEN_PRIMARY_SURFACE}" "${LARGE_SCREEN_PRIMARY_SURFACE_REL}" \
+  'webFullscreenActive: boolean = false' \
+  "Large-Screen surface must accept the Web fullscreen flag that hides its own chrome."
+check_file_contains_rule "${LARGE_SCREEN_PRIMARY_SURFACE}" "${LARGE_SCREEN_PRIMARY_SURFACE_REL}" \
+  'if \(!this\.nativeVideoTakeoverActive && !this\.webFullscreenActive\) \{' \
+  "Large-Screen top chrome must collapse for Web/video fullscreen, matching the phone shell's immersion path."
+check_file_contains_rule "${LARGE_SCREEN_PRIMARY_SURFACE}" "${LARGE_SCREEN_PRIMARY_SURFACE_REL}" \
+  'if \(this\.nativeVideoTakeoverActive \|\| this\.webFullscreenActive\) \{' \
+  "Large-Screen side panel and bottom status must stay hidden during Web/video fullscreen."
+check_file_contains_rule "${NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE}" "${NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE_REL}" \
+  'await this\.applyPreferredOrientation\(mainWindow, orientation\);' \
+  "Full-screen entry must treat the navigation-bar and orientation steps as best-effort so a PC/2-in-1 window still enters fullscreen."
+check_file_contains_rule "${SHELL_FONT_SCALE_POLICY}" "${SHELL_FONT_SCALE_POLICY_REL}" \
+  "return shellFamily !== 'large_screen';" \
+  "PC/large-screen shell must be excluded from following the system font scale."
+check_file_contains_rule "${SHELL_FONT_SCALE_POLICY}" "${SHELL_FONT_SCALE_POLICY_REL}" \
+  'return this\.followsSystemFontScale\(shellFamily\) \? this\.normalize\(systemScale\) : BROWSER_FONT_SCALE_PINNED;' \
+  "PC/large-screen UI and content text must both pin to the app default font scale."
+check_file_contains_rule "${SYSTEM_FONT_SCALE_COORDINATOR}" "${SYSTEM_FONT_SCALE_COORDINATOR_REL}" \
+  "BROWSER_CONTENT_FONT_SIZE_SCALE_STORAGE_KEY" \
+  "content consumers must read the shell-aware content scale, not the raw system scale."
+check_file_contains_rule "${SYSTEM_FONT_SCALE_COORDINATOR}" "${SYSTEM_FONT_SCALE_COORDINATOR_REL}" \
+  'this\.fontScalePolicy\.resolveContentScale\(this\.currentScale, this\.currentShellFamily\)' \
+  "content font scale must stay owned by the shell-family policy."
+# Consumers must read the shell-aware content scale; reading the raw system scale
+# directly is what let the PC shell inflate web and reader text.
+system_font_scale_offenders="$(
+  grep -rl "BROWSER_SYSTEM_FONT_SIZE_SCALE_STORAGE_KEY" \
+    "${REPO_ROOT}/AiraBrowser/entry/src/main/ets" -r --include='*.ets' |
+    grep -v "${SYSTEM_FONT_SCALE_COORDINATOR}" || true
+)"
+if [ -n "${system_font_scale_offenders}" ]; then
+  report_failure "only ${SYSTEM_FONT_SCALE_COORDINATOR_REL} may read the raw system font scale; other consumers must use BROWSER_CONTENT_FONT_SIZE_SCALE_STORAGE_KEY: ${system_font_scale_offenders}"
+fi
+if grep -Eq "setFontSizeScale\(this\.currentScale\)" "${SYSTEM_FONT_SCALE_COORDINATOR}"; then
+  report_failure "${SYSTEM_FONT_SCALE_COORDINATOR_REL} must not apply the raw system scale to the native UI; the PC shell has to keep the app default."
+fi
 
 if [ "${ARCH_GUARD_ALLOW_PAGE_GROWTH:-0}" = "1" ]; then
   echo "Architecture page-growth diff guard bypassed by ARCH_GUARD_ALLOW_PAGE_GROWTH=1."

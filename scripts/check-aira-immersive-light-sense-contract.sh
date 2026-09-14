@@ -17,6 +17,7 @@ SETTINGS_HDS_FILE="${COMPONENT_DIR}/settings/SettingsHdsScaffold.ets"
 MANAGEMENT_HDS_FILE="${COMPONENT_DIR}/common/ManagementHdsScaffold.ets"
 SEGMENTED_TABS_FILE="${COMPONENT_DIR}/common/SegmentedTabs.ets"
 CENTERED_DIALOG_FILE="${COMPONENT_DIR}/common/CenteredDialogSurface.ets"
+CENTERED_DIALOG_WIDTH_VIEW_MODEL="${REPO_ROOT}/AiraBrowser/entry/src/main/ets/core/browser/CenteredDialogWidthViewModel.ets"
 SYNC_PROGRESS_DIALOG_FILE="${COMPONENT_DIR}/sync/SyncOperationProgressDialog.ets"
 SYNC_PROGRESS_HOST_FILES=(
   "${COMPONENT_DIR}/customhome/CustomHomepageSettingsScreen.ets"
@@ -126,9 +127,26 @@ require_text "$MANAGEMENT_HDS_FILE" 'materialEnabled: true' \
   'Management HDS title actions must explicitly opt into the API-gated material.'
 require_text "$CENTERED_DIALOG_FILE" 'applyCommonSystemMaterial(instance, createCenteredDialogMaterial());' \
   'custom dialog surfaces must apply systemMaterial through the API-gated helper.'
-if rg -q 'CenteredDialogSurface|systemMaterial\(|ImmersiveMaterial' "$SYNC_PROGRESS_DIALOG_FILE"; then
+# AlertDialog.width is window-relative with no constraintSize, so a bare percentage
+# stretches the alert to the whole PC/large-screen window. The width must stay
+# clamped to the shared centered-dialog maximum.
+require_text "$CENTERED_DIALOG_FILE" 'centeredDialogWidthViewModel.resolve(readDisplayWidthVp())' \
+  'centered alerts must resolve their width from the shared clamp instead of a flat percentage.'
+require_text "$CENTERED_DIALOG_WIDTH_VIEW_MODEL" 'CENTERED_DIALOG_MAX_WIDTH_VP' \
+  'centered alert width owner must keep the shared maximum width clamp.'
+if rg -q --fixed-strings "params.width = '90%';" "$CENTERED_DIALOG_FILE"; then
+  fail 'centered alerts must not apply a flat window-relative percentage width on large screens.'
+fi
+# Sync progress must keep the CustomDialog system surface: no immersive material.
+# The SYSTEM_* modifiers are material-free (materialEnabled: false) and only supply
+# the centered width contract, so they are allowed — the material mechanisms and
+# the material-applying modifiers are not.
+if rg -q 'createCenteredDialogMaterial|applyCommonSystemMaterial|ImmersiveMaterial|systemMaterial|CENTERED_DIALOG_(SURFACE|COMPACT_SURFACE|TALL_SURFACE|TALL_PADDED_SURFACE|SCROLL_SURFACE)_MODIFIER' \
+  "$SYNC_PROGRESS_DIALOG_FILE"; then
   fail 'sync progress must use the CustomDialog system default surface instead of API 26 immersive material.'
 fi
+require_text "$SYNC_PROGRESS_DIALOG_FILE" 'CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER' \
+  'sync progress must take the shared centered width cap from the material-free system modifier.'
 if rg -q --fixed-strings 'new CustomDialogController(withDialogSystemMaterial' \
   "$COMPONENT_DIR" "${REPO_ROOT}/AiraBrowser/entry/src/main/ets/app/pages" -g '*.ets'; then
   fail 'CustomDialogController must receive the options object literal directly so @CustomDialog builders keep new.'
