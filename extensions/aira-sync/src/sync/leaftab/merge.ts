@@ -94,6 +94,10 @@ const resolveEntity = <T extends BookmarkEntity>(
     fields: Array<keyof T>;
     conflictResolution?: LeafTabSyncConflictResolution;
     mergeIntent?: LeafTabSyncMergeIntent;
+    // A first join has no shared ancestor, so `!baseEntity` cannot prove either side edited
+    // anything. A surviving tombstone is then a deletion instruction, not a delete-vs-edit
+    // conflict (docs/aira-bookmark-canonical-identity-design.md 6.1b, matched by the App).
+    baselineAbsent?: boolean;
   },
 ): {
   entity: T | null;
@@ -112,6 +116,7 @@ const resolveEntity = <T extends BookmarkEntity>(
     fields,
     conflictResolution,
     mergeIntent,
+    baselineAbsent,
   } = params;
 
   if (!localEntity && !remoteEntity) {
@@ -135,17 +140,19 @@ const resolveEntity = <T extends BookmarkEntity>(
         if (conflictResolution === 'prefer-remote') {
           return { entity: null, tombstone: cloneTombstone(remoteTombstone), source: 'tombstone', conflict: null };
         }
-        return {
-          entity: cloneEntity(localEntity),
-          tombstone: null,
-          source: 'local',
-          conflict: {
-            id,
-            type,
-            localRevision: localEntity.revision || null,
-            remoteRevision: remoteTombstone.lastKnownRevision || null,
-          },
-        };
+        if (!baselineAbsent) {
+          return {
+            entity: cloneEntity(localEntity),
+            tombstone: null,
+            source: 'local',
+            conflict: {
+              id,
+              type,
+              localRevision: localEntity.revision || null,
+              remoteRevision: remoteTombstone.lastKnownRevision || null,
+            },
+          };
+        }
       }
       return { entity: null, tombstone: cloneTombstone(remoteTombstone), source: 'tombstone', conflict: null };
     }
@@ -168,17 +175,19 @@ const resolveEntity = <T extends BookmarkEntity>(
         if (conflictResolution === 'prefer-remote') {
           return { entity: cloneEntity(remoteEntity), tombstone: null, source: 'remote', conflict: null };
         }
-        return {
-          entity: cloneEntity(remoteEntity),
-          tombstone: null,
-          source: 'remote',
-          conflict: {
-            id,
-            type,
-            localRevision: localTombstone.lastKnownRevision || null,
-            remoteRevision: remoteEntity.revision || null,
-          },
-        };
+        if (!baselineAbsent) {
+          return {
+            entity: cloneEntity(remoteEntity),
+            tombstone: null,
+            source: 'remote',
+            conflict: {
+              id,
+              type,
+              localRevision: localTombstone.lastKnownRevision || null,
+              remoteRevision: remoteEntity.revision || null,
+            },
+          };
+        }
       }
       return { entity: null, tombstone: cloneTombstone(localTombstone), source: 'tombstone', conflict: null };
     }
@@ -692,6 +701,8 @@ export const mergeLeafTabSyncSnapshot = (
     generatedAt?: string;
     conflictResolution?: LeafTabSyncConflictResolution;
     mergeIntent?: LeafTabSyncMergeIntent;
+    // Set only by the missing-baseline entry point below.
+    baselineAbsent?: boolean;
   },
 ): LeafTabSyncMergeResult => {
   [baseSnapshot, localSnapshot, remoteSnapshot] = normalizeKnownMigrationDuplicates(
@@ -722,6 +733,7 @@ export const mergeLeafTabSyncSnapshot = (
       fields: bookmarkFolderFields,
       conflictResolution: options.conflictResolution,
       mergeIntent: options.mergeIntent,
+      baselineAbsent: options.baselineAbsent,
     });
     entitySources[createLeafTabSyncTombstoneKey('bookmark-folder', id)] = result.source;
     if (result.entity) nextBookmarkFolders[id] = result.entity;
@@ -746,6 +758,7 @@ export const mergeLeafTabSyncSnapshot = (
       fields: bookmarkItemFields,
       conflictResolution: options.conflictResolution,
       mergeIntent: options.mergeIntent,
+      baselineAbsent: options.baselineAbsent,
     });
     entitySources[createLeafTabSyncTombstoneKey('bookmark-item', id)] = result.source;
     if (result.entity) nextBookmarkItems[id] = result.entity;
@@ -883,6 +896,8 @@ export const mergeLeafTabSyncSnapshotWithoutBaseline = (
   options: {
     deviceId: string;
     generatedAt?: string;
+    conflictResolution?: LeafTabSyncConflictResolution;
+    mergeIntent?: LeafTabSyncMergeIntent;
   },
 ): LeafTabSyncMergeResult => {
   const [normalizedLocalSnapshot, normalizedRemoteSnapshot] = normalizeKnownMigrationDuplicates(
@@ -902,5 +917,10 @@ export const mergeLeafTabSyncSnapshotWithoutBaseline = (
     bookmarkOrders: {},
     tombstones: {},
   };
-  return mergeLeafTabSyncSnapshot(emptyBase, prepared.local, prepared.remote, options);
+  return mergeLeafTabSyncSnapshot(emptyBase, prepared.local, prepared.remote, {
+    ...options,
+    // No shared ancestor exists, so an unmatched tombstone is a deletion instruction rather
+    // than evidence that the surviving side edited the entity. See resolveEntity.
+    baselineAbsent: true,
+  });
 };

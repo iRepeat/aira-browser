@@ -505,3 +505,21 @@ beyond the window does not replay a retired tombstone, it takes the existing pre
 may duplicate stale live content but never silently deletes. This changes only the frontier constant and its physical
 epoch alignment; it adds no oplog, outbox, or second authority, and the descriptor, merge, apply, confirmation, and
 baseline contracts are unchanged. Browsing-history retention (ADR-0072) remains a separate 90-day domain.
+
+Amended 2026-09-14 after a user-reported phantom conflict reproduced on an Aira-sync device whose bookmark snapshot
+was byte-identical to its own confirmed baseline: the missing-baseline merge reported a delete-vs-edit conflict for
+every remote tombstone whose `lastKnownRevision` was lower than the surviving local entity's `revision`. On a first
+join there is no shared ancestor, so `localChanged` and `remoteChanged` are both structurally true and cannot prove
+that either side edited anything; asking the user to arbitrate that is not a real two-sided edit. The shared rule from
+the canonical identity design (missing-baseline tombstones are deletion instructions, applied identically on both
+clients) now also governs Aira-sync: an unmatched tombstone deletes the opposing live entity and is carried, and it
+does not raise a conflict, while the App's `mergeMissingBaselineSnapshots` already behaved this way. This removes no
+ordinary conflict: deletion versus a concurrent incompatible field edit in an established three-way merge stays a
+conflict. The reported prompt is sticky — a persisted pending conflict suspends background auto-sync and is re-shown
+on every popup open — and because the old no-baseline rerun re-derived the same conflict, choosing a side could appear
+not to clear it; a run against the same state now completes without re-raising it. Reducing the frontier from 90 days
+to 7 days made this reachable in practice, because any single deletion older than seven days now advances the frontier,
+and a frontier change excludes the device's own baseline for one run and routes that run through this path. Aira-sync
+and the App also propose the same `retainedFrom`, so a shipped Aira-sync build still carrying the previous 90-day
+constant while the App used 7 must be republished; the constant itself lives in one place per client and requires no
+merge, snapshot, apply, confirmation, baseline, or transport change.
