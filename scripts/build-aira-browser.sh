@@ -261,8 +261,10 @@ case "${ALLOW_UNSIGNED_BUILD}" in
     ;;
   1)
     if [ "${DISTRIBUTION}" != "community" ] ||
+       [ "${BUILD_VARIANT}" != "default" ] ||
+       [ "${BUILD_PACKAGE_FORMAT}" != "hap" ] ||
        [ "${SKIP_INSTALL:-0}" != "1" ]; then
-      fail "AIRA_ALLOW_UNSIGNED_BUILD=1 is limited to Community builds with SKIP_INSTALL=1."
+      fail "AIRA_ALLOW_UNSIGNED_BUILD=1 is limited to default Community HAP builds with SKIP_INSTALL=1."
     fi
     ;;
   *)

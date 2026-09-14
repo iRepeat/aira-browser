@@ -121,7 +121,7 @@ AIRA_DISTRIBUTION=official SKIP_INSTALL=1 ./scripts/build-aira-browser.sh
 ## Signing
 
 Community device installs need a local signing profile for `org.aira.browser`. Public CI can build an unsigned,
-non-installable Community HAP or APP with `AIRA_ALLOW_UNSIGNED_BUILD=1`. Do not commit `.p12`, `.p7b`, `.cer`, encrypted
+non-installable Community HAP with `AIRA_ALLOW_UNSIGNED_BUILD=1`. Do not commit `.p12`, `.p7b`, `.cer`, encrypted
 passwords, or `build-profile.local.json5`.
 
 Official signing, AppGallery profiles, worktrees, and device-install wrappers live in the private packaging scripts.

@@ -57,7 +57,7 @@ Official 商店包另外接入华为账号、华为云空间、Aira 云和 IAP�
 
 ## 下载
 
-Community 未签名 APP 发在 [GitHub Releases](https://github.com/mason173/aira-browser/releases)。包名是 `org.aira.browser`，需要你自己用对应签名材料签名后再侧载。这不是华为应用市场里的 Official 商店包。
+Community 未签名 HAP 发在 [GitHub Releases](https://github.com/mason173/aira-browser/releases)。包名是 `org.aira.browser`，需要你自己用对应签名材料签名后再侧载。这不是华为应用市场里的 Official 商店包。
 
 ## 仓库约定
 
@@ -153,18 +153,7 @@ cd ..
 AIRA_DISTRIBUTION=community AIRA_ALLOW_UNSIGNED_BUILD=1 SKIP_INSTALL=1 ./scripts/build-aira-browser.sh
 ```
 
-这会打出供 CI 和源码核验用的未签名 Community HAP。GitHub Release 发的是更小的未签名 Community APP：
-
-```bash
-AIRA_DISTRIBUTION=community \
-AIRA_ALLOW_UNSIGNED_BUILD=1 \
-AIRA_BUILD_VARIANT=release \
-AIRA_BUILD_PACKAGE_FORMAT=app \
-SKIP_INSTALL=1 \
-./scripts/build-aira-browser.sh
-```
-
-装到设备需要 `org.aira.browser` 的本地签名。Official 构建另外需要私有 AGConnect、生产路由，以及 `com.aira.browser` 的签名：
+这会打出供 CI 和源码核验用的未签名 Community HAP。装到设备需要 `org.aira.browser` 的本地签名。Official 构建另外需要私有 AGConnect、生产路由，以及 `com.aira.browser` 的签名：
 
 ```bash
 AIRA_DISTRIBUTION=official SKIP_INSTALL=1 ./scripts/build-aira-browser.sh
