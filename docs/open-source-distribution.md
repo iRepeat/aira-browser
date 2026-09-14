@@ -45,8 +45,9 @@ Public CI can compile and audit an unsigned, non-installable Community HAP witho
 AIRA_DISTRIBUTION=community AIRA_ALLOW_UNSIGNED_BUILD=1 SKIP_INSTALL=1 ./scripts/build-aira-browser.sh
 ```
 
-Unsigned mode is intentionally restricted to the default Community HAP and requires `SKIP_INSTALL=1`. Installation and
-distribution still require a signing profile owned by the builder.
+Unsigned mode is intentionally restricted to Community HAP or APP builds and requires `SKIP_INSTALL=1`. Installation and
+distribution still require a signing profile owned by the builder. GitHub Community releases ship the smaller unsigned
+APP package rather than the debug HAP.
 
 The GitHub workflow always runs public static guards. Native HarmonyOS jobs require a self-hosted runner with the
 `self-hosted`, `macOS`, and `harmonyos` labels and repository variable `AIRA_ENABLE_HARMONYOS_CLIENT_CI=true`. The signed
