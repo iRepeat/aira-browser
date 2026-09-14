@@ -4784,6 +4784,7 @@ struct BrowserShellPage {
         this.largeScreenWebZoomDialogSnapshot = snapshot;
       },
       dismissWebZoom: (): void => this.largeScreenWebZoomDialogController.close(),
+      showMessage: (message: string): void => this.showNativeToast(message),
       readFacts: () => {
         return {
           windowId: this.getWindowScopeId(),

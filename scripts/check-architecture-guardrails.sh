@@ -121,6 +121,12 @@ BOTTOM_ADDRESS_PANEL_METRICS_REL="AiraBrowser/entry/src/main/ets/core/browser/Br
 BOTTOM_ADDRESS_PANEL_METRICS="${REPO_ROOT}/${BOTTOM_ADDRESS_PANEL_METRICS_REL}"
 SEARCH_SUGGESTIONS_PANEL_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserSearchSuggestionsPanel.ets"
 SEARCH_SUGGESTIONS_PANEL="${REPO_ROOT}/${SEARCH_SUGGESTIONS_PANEL_REL}"
+LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserLargeScreenOmniboxSearchSurface.ets"
+LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE="${REPO_ROOT}/${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL}"
+LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserLargeScreenOmniboxSearchViewModel.ets"
+LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL="${REPO_ROOT}/${LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL_REL}"
+LARGE_SCREEN_SHELL_INTENT_APPLICATION_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserLargeScreenShellIntentApplication.ets"
+LARGE_SCREEN_SHELL_INTENT_APPLICATION="${REPO_ROOT}/${LARGE_SCREEN_SHELL_INTENT_APPLICATION_REL}"
 SEARCH_LIST_SURFACE_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserSearchListSurface.ets"
 SEARCH_LIST_SURFACE="${REPO_ROOT}/${SEARCH_LIST_SURFACE_REL}"
 SEARCH_LIST_LAYOUT_VIEW_MODEL_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSearchListSurfaceLayoutViewModel.ets"
@@ -5102,6 +5108,32 @@ fi
 if grep -Eq "setFontSizeScale\(this\.currentScale\)" "${SYSTEM_FONT_SCALE_COORDINATOR}"; then
   report_failure "${SYSTEM_FONT_SCALE_COORDINATOR_REL} must not apply the raw system scale to the native UI; the PC shell has to keep the app default."
 fi
+check_file_contains_rule "${LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL}" "${LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL_REL}" \
+  'hasHistorySuggestions' \
+  "the PC suggestion list must project whether history is present so the header only appears with real history."
+check_file_contains_rule "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE}" "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL}" \
+  'if \(this\.resolvePresentation\(\)\.hasHistorySuggestions\) \{' \
+  "the PC suggestion header must be gated on projected history, not rendered unconditionally."
+check_file_contains_rule "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE}" "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL}" \
+  'onClearHistorySuggestions\(\);' \
+  "the PC suggestion header clear action must dispatch the clear-history intent."
+check_file_contains_rule "${SEARCH_SUGGESTION_COORDINATOR}" "${SEARCH_SUGGESTION_COORDINATOR_REL}" \
+  'clearHistorySuggestions\(\): Promise<boolean>' \
+  "clearing search history must stay owned by the suggestion coordinator, not the UI shell."
+check_file_contains_rule "${SEARCH_SUGGESTION_COORDINATOR}" "${SEARCH_SUGGESTION_COORDINATOR_REL}" \
+  'clearRegularProfileSearchHistory\(boundaryInput\)' \
+  "clearing search history must run through the privacy-gated service, scoped to the current boundary."
+check_file_contains_rule "${LARGE_SCREEN_SHELL_INTENT_APPLICATION}" "${LARGE_SCREEN_SHELL_INTENT_APPLICATION_REL}" \
+  "'clear_history_suggestions'" \
+  "the clear-history action must stay a typed Large-Screen navigation intent."
+# The surface's clear callback defaults to a no-op, so a missing wire-up here
+# compiles cleanly and leaves the button silently inert. Pin the connection.
+check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
+  "onClearHistorySuggestions: \(\): void => \{" \
+  "the navigation toolbar must forward the suggestion clear action into the typed intent."
+check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
+  "'clear_history_suggestions'" \
+  "the navigation toolbar must emit the clear-history intent rather than clearing anything itself."
 
 if [ "${ARCH_GUARD_ALLOW_PAGE_GROWTH:-0}" = "1" ]; then
   echo "Architecture page-growth diff guard bypassed by ARCH_GUARD_ALLOW_PAGE_GROWTH=1."

@@ -191,6 +191,34 @@ export class BrowserSearchSuggestionCoordinator {
       .catch((_error: Error) => false);
   }
 
+  /**
+   * Clears every search-history record for the current boundary.
+   *
+   * Runs against the same session boundary the suggestions were built from, so
+   * clearing from the dropdown cannot reach another profile's history. The
+   * privacy effect policy still gates the mutation inside the service.
+   */
+  clearHistorySuggestions(): Promise<boolean> {
+    const facts = this.resolveRuntimeFacts();
+    const boundaryInput: BrowserDataBoundaryInput = {
+      profileId: facts.profileId,
+      privacyMode: facts.privacyMode,
+      dataScope: facts.dataScope
+    };
+    return this.searchQueryHistoryService.clearRegularProfileSearchHistory(boundaryInput)
+      .then((result) => {
+        if (result.removedCount <= 0) {
+          return false;
+        }
+        this.emptyCache = undefined;
+        if (this.searchSessionActive) {
+          this.refresh();
+        }
+        return true;
+      })
+      .catch((_error: Error) => false);
+  }
+
   openSuggestion(suggestion: SearchSuggestion): void {
     this.reset();
     if (suggestion.source === 'tabs' && suggestion.refId !== undefined && suggestion.refId.length > 0) {

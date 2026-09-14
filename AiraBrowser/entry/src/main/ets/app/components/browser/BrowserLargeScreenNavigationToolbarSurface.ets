@@ -298,6 +298,9 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
               onDeleteHistorySuggestion: (suggestion: SearchSuggestion): void => {
                 this.onIntent({ kind: 'delete_history_suggestion', text: '', suggestion: suggestion });
               },
+              onClearHistorySuggestions: (): void => {
+                this.onIntent({ kind: 'clear_history_suggestions', text: '' });
+              },
               onExternalAppSearch: (targetId: ExternalAppSearchTargetId, query: string): void => {
                 this.onIntent({
                   kind: 'external_app_search',

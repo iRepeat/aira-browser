@@ -44,6 +44,10 @@ const LARGE_SCREEN_SUGGESTION_ROW_GAP_VP: number = 2;
 const LARGE_SCREEN_SUGGESTION_ROW_RADIUS_VP: number =
   LARGE_SCREEN_SEARCH_CARD_RADIUS_VP - LARGE_SCREEN_SEARCH_CARD_PADDING_VP;
 const LARGE_SCREEN_SUGGESTION_ROW_HORIZONTAL_PADDING_VP: number = 12;
+const LARGE_SCREEN_SUGGESTION_HEADER_HEIGHT_VP: number = 30;
+const LARGE_SCREEN_SUGGESTION_HEADER_TITLE_SIZE: number = 12;
+const LARGE_SCREEN_SUGGESTION_HEADER_ACTION_SIZE: number = 12;
+const LARGE_SCREEN_SUGGESTION_HEADER_ACTION_HEIGHT_VP: number = 24;
 const LARGE_SCREEN_SUGGESTION_LEADING_ICON_SIZE_VP: number = 18;
 const LARGE_SCREEN_SUGGESTION_LEADING_ICON_GAP_VP: number = 8;
 const LARGE_SCREEN_SUGGESTION_DELETE_BUTTON_SIZE_VP: number = 28;
@@ -333,6 +337,8 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
   private storedFloatingSurfaceColor: string = '#FFFFFF';
   @StorageProp(BROWSER_THEME_STORAGE_DIVIDER_KEY)
   private storedDividerColor: string = '#E3E8EF';
+  @StorageProp(BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY)
+  private storedControlBackgroundColor: string = '#EEF2F6';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY)
   private storedPrimaryTextColor: string = '#111318';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY)
@@ -347,10 +353,12 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
   onOpenSuggestion: (suggestion: SearchSuggestion) => void = (_suggestion: SearchSuggestion): void => {};
   onDeleteHistorySuggestion: (suggestion: SearchSuggestion) => void =
     (_suggestion: SearchSuggestion): void => {};
+  onClearHistorySuggestions: () => void = (): void => {};
   onExternalAppSearch: (targetId: ExternalAppSearchTargetId, query: string) => void =
     (_targetId: ExternalAppSearchTargetId, _query: string): void => {};
 
   @State private surfaceWidthVp: number = 0;
+  @State private clearHovered: boolean = false;
   @State private externalAppSearchPreferences: ExternalAppSearchPreferences =
     sharedExternalAppSearchPreferencesRepository.getSettings();
   private readonly viewModel: BrowserLargeScreenOmniboxSearchViewModel =
@@ -430,6 +438,9 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
       }) {
         Column() {
           if (this.resolvePresentation().searchSuggestions.length > 0) {
+            if (this.resolvePresentation().hasHistorySuggestions) {
+              this.buildHistoryHeaderRow()
+            }
             this.buildSuggestionList()
           } else {
             Row({ space: 10 }) {
@@ -466,6 +477,45 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
   }
 
   @Builder
+  private buildHistoryHeaderRow() {
+    Row() {
+      Text('搜索历史')
+        .fontSize(LARGE_SCREEN_SUGGESTION_HEADER_TITLE_SIZE)
+        .fontColor(this.storedSecondaryTextColor)
+        .maxLines(1)
+
+      Blank()
+
+      Button() {
+        Text('清空')
+          .fontSize(LARGE_SCREEN_SUGGESTION_HEADER_ACTION_SIZE)
+          .fontColor(this.storedSecondaryTextColor)
+          .maxLines(1)
+      }
+      .height(LARGE_SCREEN_SUGGESTION_HEADER_ACTION_HEIGHT_VP)
+      .padding({ left: 8, right: 8 })
+      .type(ButtonType.Normal)
+      .borderRadius(LARGE_SCREEN_SUGGESTION_HEADER_ACTION_HEIGHT_VP / 2)
+      .backgroundColor(this.clearHovered ? this.storedControlBackgroundColor : Color.Transparent)
+      .stateEffect(false)
+      .hoverEffect(HoverEffect.None)
+      .focusable(false)
+      .focusOnTouch(false)
+      .accessibilityText('清空搜索历史')
+      .onHover((hovered: boolean): void => {
+        this.clearHovered = hovered;
+      })
+      .onClick((): void => {
+        this.onClearHistorySuggestions();
+      })
+    }
+    .width('100%')
+    .height(LARGE_SCREEN_SUGGESTION_HEADER_HEIGHT_VP)
+    .padding({ left: LARGE_SCREEN_SUGGESTION_ROW_HORIZONTAL_PADDING_VP, right: 8 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
   private buildSuggestionList() {
     Scroll() {
       Column({ space: LARGE_SCREEN_SUGGESTION_ROW_GAP_VP }) {
@@ -486,7 +536,7 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
       .width('100%')
     }
     .width('100%')
-    .height(this.resolveSuggestionContentHeight())
+    .height(this.resolveSuggestionListHeight())
     .scrollBar(BarState.Auto)
     .edgeEffect(EdgeEffect.None)
   }
@@ -512,12 +562,23 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
   }
 
   private resolveSuggestionCardHeight(): number {
-    return this.resolveSuggestionContentHeight() + LARGE_SCREEN_SEARCH_CARD_PADDING_VP * 2;
+    return this.resolveSuggestionListHeight() + this.resolveSuggestionHeaderHeight() +
+      LARGE_SCREEN_SEARCH_CARD_PADDING_VP * 2;
   }
 
-  private resolveSuggestionContentHeight(): number {
+  private resolveSuggestionHeaderHeight(): number {
+    const count = this.resolvePresentation().searchSuggestions.length;
+    return count > 0 && this.resolvePresentation().hasHistorySuggestions ?
+      LARGE_SCREEN_SUGGESTION_HEADER_HEIGHT_VP : 0;
+  }
+
+  /**
+   * Height of the scrolling list only. The header is a sibling above it, so the
+   * list gets the card's budget minus the header band rather than the total.
+   */
+  private resolveSuggestionListHeight(): number {
     const availableHeight = Math.max(1, this.resolveSuggestionCardAvailableHeight() -
-      LARGE_SCREEN_SEARCH_CARD_PADDING_VP * 2);
+      LARGE_SCREEN_SEARCH_CARD_PADDING_VP * 2 - this.resolveSuggestionHeaderHeight());
     const count = this.resolvePresentation().searchSuggestions.length;
     if (count <= 0) {
       return Math.min(
@@ -525,9 +586,13 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
         LARGE_SCREEN_SUGGESTION_EMPTY_HEIGHT_VP - LARGE_SCREEN_SEARCH_CARD_PADDING_VP * 2
       );
     }
+    const listBudget = Math.max(
+      LARGE_SCREEN_SUGGESTION_ROW_HEIGHT_VP,
+      Math.min(availableHeight, LARGE_SCREEN_SUGGESTION_MAX_HEIGHT_VP)
+    );
     const contentHeight = count * LARGE_SCREEN_SUGGESTION_ROW_HEIGHT_VP +
       Math.max(0, count - 1) * LARGE_SCREEN_SUGGESTION_ROW_GAP_VP;
-    return Math.min(availableHeight, LARGE_SCREEN_SUGGESTION_MAX_HEIGHT_VP, contentHeight);
+    return Math.min(listBudget, contentHeight);
   }
 
   private resolveSuggestionCardAvailableHeight(): number {
