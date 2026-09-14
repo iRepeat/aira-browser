@@ -133,6 +133,14 @@ SEARCH_LIST_LAYOUT_VIEW_MODEL_REL="AiraBrowser/entry/src/main/ets/core/browser/B
 SEARCH_LIST_LAYOUT_VIEW_MODEL="${REPO_ROOT}/${SEARCH_LIST_LAYOUT_VIEW_MODEL_REL}"
 SEARCH_SUGGESTION_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSearchSuggestionCoordinator.ets"
 SEARCH_SUGGESTION_COORDINATOR="${REPO_ROOT}/${SEARCH_SUGGESTION_COORDINATOR_REL}"
+TABLET_INTERFACE_MODE_POLICY_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserTabletInterfaceModePolicy.ets"
+TABLET_INTERFACE_MODE_POLICY="${REPO_ROOT}/${TABLET_INTERFACE_MODE_POLICY_REL}"
+WINDOW_PRESENTATION_PROFILE_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserWindowPresentationProfile.ets"
+WINDOW_PRESENTATION_PROFILE="${REPO_ROOT}/${WINDOW_PRESENTATION_PROFILE_REL}"
+TABLET_INTERFACE_MODE_SETTINGS_REL="AiraBrowser/entry/src/main/ets/core/settings/BrowserTabletInterfaceModeSettingsCoordinator.ets"
+TABLET_INTERFACE_MODE_SETTINGS="${REPO_ROOT}/${TABLET_INTERFACE_MODE_SETTINGS_REL}"
+PRESENTATION_PROFILE_INPUT_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/browser/BrowserWindowPresentationProfileInputService.ets"
+PRESENTATION_PROFILE_INPUT_SERVICE="${REPO_ROOT}/${PRESENTATION_PROFILE_INPUT_SERVICE_REL}"
 SEARCH_INVOCATION_SURFACE_ADAPTER_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserShellSearchInvocationAdapter.ets"
 SEARCH_INVOCATION_SURFACE_ADAPTER="${REPO_ROOT}/${SEARCH_INVOCATION_SURFACE_ADAPTER_REL}"
 OLD_SEARCH_OVERLAY_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSearchOverlayCoordinator.ets"
@@ -5163,6 +5171,58 @@ fi
 check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
   "'clear_history_suggestions'" \
   "the navigation toolbar must emit the clear-history intent rather than clearing anything itself."
+# A pocket foldable is a phone-class device that merely folds. Unfolding one
+# must not promote it to the PC shell, or its fixed chrome fights a phone-width
+# surface. Identity, not geometry, is what separates it: Pura X (pocket, 1.61)
+# sits below Pura X Max (book, 1.41) and the Mate XT tri-fold (1.43), so any
+# ratio that admits the first admits the last two. Pin the blocklist and the
+# exact-match rule that keeps a longer name from matching a shorter one.
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  "SMALL_FOLDABLE_MARKET_NAMES: string\[\]" \
+  "the pocket-foldable blocklist must stay a named, documented catalog."
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  "SMALL_FOLDABLE_MODEL_PREFIXES: string\[\] = \['BAL', 'LEM', 'PSD', 'VDE'\]" \
+  "the pocket-foldable SKU series tokens are the fallback identity when the marketing name is unset."
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  "'small-fold-expanded-auto-touch'" \
+  "automatic expansion of a pocket foldable must stay on the touch shell."
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  'isKnownSmallFoldable' \
+  "the pocket-foldable decision must stay owned by the policy, not inlined in a shell."
+# "HUAWEI PURA X" is a prefix of the large "HUAWEI PURA X MAX"; a substring or
+# startsWith match on the marketing name would demote that book foldable.
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  'this\.normalizeMarketName\(candidate\) === normalized' \
+  "the pocket-foldable marketing-name match must be exact after brand normalisation on both sides."
+if grep -Eq 'startsWith\(.*(MARKET_NAME|marketName)' "${TABLET_INTERFACE_MODE_POLICY}"; then
+  report_failure "${TABLET_INTERFACE_MODE_POLICY_REL} must not prefix-match a marketing name; it would demote Pura X Max."
+fi
+# The exemption only works if the policy actually receives the device identity.
+check_file_contains_rule "${WINDOW_PRESENTATION_PROFILE}" "${WINDOW_PRESENTATION_PROFILE_REL}" \
+  'deviceMarketName: input\.deviceMarketName' \
+  "the live profile must pass the reported marketing name into the foldable policy."
+check_file_contains_rule "${WINDOW_PRESENTATION_PROFILE}" "${WINDOW_PRESENTATION_PROFILE_REL}" \
+  'deviceProductModel: input\.deviceProductModel' \
+  "the live profile must pass the reported SKU into the foldable policy."
+# The device-preference setting describes the same device the runtime switches,
+# so it has to classify a pocket foldable the same way or its footer lies.
+check_file_contains_rule "${TABLET_INTERFACE_MODE_SETTINGS}" "${TABLET_INTERFACE_MODE_SETTINGS_REL}" \
+  'this\.interfaceModePolicy\.isKnownSmallFoldable\(' \
+  "the interface-mode setting must reuse the policy's pocket-foldable classification."
+check_file_contains_rule "${TABLET_INTERFACE_MODE_SETTINGS}" "${TABLET_INTERFACE_MODE_SETTINGS_REL}" \
+  '小折叠屏展开后仍使用触屏界面' \
+  "the foldable footer must state the pocket-foldable rule the shell actually applies."
+# The policy can only classify a pocket foldable if the platform adapter hands
+# it the platform-reported identity.
+check_file_contains_rule "${PRESENTATION_PROFILE_INPUT_SERVICE}" "${PRESENTATION_PROFILE_INPUT_SERVICE_REL}" \
+  'resolveDeviceMarketName\(\): string' \
+  "the platform adapter must expose the reported marketing name for fold-size classification."
+check_file_contains_rule "${PRESENTATION_PROFILE_INPUT_SERVICE}" "${PRESENTATION_PROFILE_INPUT_SERVICE_REL}" \
+  'resolveDeviceProductModel\(\): string' \
+  "the platform adapter must expose the reported SKU as the identity fallback."
+check_file_contains_rule "${PRESENTATION_PROFILE_INPUT_SERVICE}" "${PRESENTATION_PROFILE_INPUT_SERVICE_REL}" \
+  'deviceMarketName: this\.resolveDeviceMarketName\(\)' \
+  "the live profile input must carry the device marketing name."
 
 if [ "${ARCH_GUARD_ALLOW_PAGE_GROWTH:-0}" = "1" ]; then
   echo "Architecture page-growth diff guard bypassed by ARCH_GUARD_ALLOW_PAGE_GROWTH=1."

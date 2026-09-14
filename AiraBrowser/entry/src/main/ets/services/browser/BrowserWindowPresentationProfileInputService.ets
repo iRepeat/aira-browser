@@ -7,7 +7,10 @@ import {
   BrowserLargeScreenWindowMode
 } from '../../core/browser/BrowserLargeScreenWindowFactsViewModel';
 import { BrowserWindowAvoidAreaInsets } from '../../core/browser/BrowserWindowAvoidAreaCoordinator';
-import { BrowserFoldPresentationStateReader } from '../../core/browser/BrowserFoldPresentationStateReader';
+import {
+  BrowserFoldPresentationFacts,
+  BrowserFoldPresentationStateReader
+} from '../../core/browser/BrowserFoldPresentationStateReader';
 
 interface BrowserWindowFactsResolution {
   availableWidthVp: number;
@@ -50,13 +53,17 @@ export class BrowserWindowPresentationProfileInputService {
         ),
         windowHeightVp: this.normalizeDimension(
           drawableRect.height > 0 ? drawableRect.height : rect.height
-        )
+        ),
+        deviceMarketName: this.resolveDeviceMarketName(),
+        deviceProductModel: this.resolveDeviceProductModel()
       };
     } catch (_error) {
       return {
         platformDeviceType: this.resolvePlatformDeviceType(),
         windowWidthVp: 0,
-        windowHeightVp: 0
+        windowHeightVp: 0,
+        deviceMarketName: this.resolveDeviceMarketName(),
+        deviceProductModel: this.resolveDeviceProductModel()
       };
     }
   }
@@ -195,11 +202,15 @@ export class BrowserWindowPresentationProfileInputService {
     }
   }
 
-  resolveFoldableDevice(): boolean {
+  /**
+   * The fold capability plus the last stable state, so callers can weigh the
+   * device's physical size against the fold state they actually observed.
+   */
+  resolveFoldPresentationFacts(): BrowserFoldPresentationFacts {
     try {
-      return this.foldStateReader.read().capabilityConfirmed;
+      return this.foldStateReader.read();
     } catch (_error) {
-      return false;
+      return { capabilityConfirmed: false, state: 'unknown' };
     }
   }
 
@@ -213,6 +224,32 @@ export class BrowserWindowPresentationProfileInputService {
       return this.normalizeDimension(display.getDefaultDisplaySync().width);
     } catch (_error) {
       return 0;
+    }
+  }
+
+  /**
+   * Marketing name the platform reports, e.g. "HUAWEI Mate X5". Empty when the
+   * vendor left the underlying parameter unset, so callers must treat an empty
+   * string as "unknown" rather than as a non-matching name.
+   */
+  resolveDeviceMarketName(): string {
+    try {
+      return `${deviceInfo.marketName ?? ''}`.trim();
+    } catch (_error) {
+      return '';
+    }
+  }
+
+  /**
+   * Per-SKU product code, e.g. "ALT-AL10". Its leading series token is stable
+   * across a model's regional SKUs, which is why the foldable policy matches it
+   * as a fallback when the marketing name is missing.
+   */
+  resolveDeviceProductModel(): string {
+    try {
+      return `${deviceInfo.productModel ?? ''}`.trim();
+    } catch (_error) {
+      return '';
     }
   }
 
