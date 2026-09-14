@@ -20,6 +20,8 @@ import { ComicBookOverviewAcquisitionEngine } from './ComicBookOverviewAcquisiti
 import { NovelChapterAcquisitionEngine } from './NovelChapterAcquisitionEngine';
 import { NovelCatalogPageAcquisitionEngine } from './NovelCatalogPageAcquisitionEngine';
 import { NovelRuleCatalog, sharedNovelRuleCatalog } from './NovelRuleCatalog';
+import { NovelFontDeobfuscationService } from './NovelFontDeobfuscationService';
+import { NovelFontSubstitutionPolicy } from '../../features/novel/NovelFontSubstitutionPolicy';
 
 /**
  * 小说章节抽取服务(通用算法版)。
@@ -97,6 +99,7 @@ const NOVEL_POLL_INTERVAL_MS: number = 200;
 const NOVEL_POLL_MAX_TIMES: number = 90;
 const NOVEL_CATALOG_POLL_MAX_TIMES: number = 525;
 const NOVEL_DETECTION_GLOBAL: string = '__airaNovelDetection';
+const NOVEL_FONT_RECOVERY_GLOBAL: string = '__airaNovelFontRecovery';
 const NOVEL_REQUEST_MISSING: string = '__aira_novel_request_missing__';
 /** 目录分块传回:runJavaScript 返回值有大小上限,长书一次性传会被截断(现成阅读模式同样按块传)。 */
 const NOVEL_CATALOG_CHUNK: number = 40;
@@ -1376,6 +1379,9 @@ export class NovelExtractionService {
   private ruleCatalog: NovelRuleCatalog;
   private chapterRequestSequence: number = 0;
   private catalogRequestSequence: number = 0;
+  private readonly fontDeobfuscationService: NovelFontDeobfuscationService =
+    new NovelFontDeobfuscationService();
+  private readonly fontSubstitutionPolicy: NovelFontSubstitutionPolicy = new NovelFontSubstitutionPolicy();
 
   constructor(ruleCatalog: NovelRuleCatalog = sharedNovelRuleCatalog) {
     this.ruleCatalog = ruleCatalog;
@@ -1505,6 +1511,7 @@ export class NovelExtractionService {
       }
       await this.delay(retryDelaysMs[attempt]);
     }
+    current = await this.recoverCurrentDocumentText(controller, current, pageUrl);
     const rule: NovelSiteRule | undefined = this.ruleCatalog.resolveRule(pageUrl);
     if (rule?.comicChapterSource !== undefined && !this.comicChapterAcquisitionEngine.isComicArtifact(current.images)) {
       const acquired: NovelChapterExtract | undefined = await this.comicChapterAcquisitionEngine.acquire(
@@ -1721,13 +1728,15 @@ export class NovelExtractionService {
       }
     }
     const chapterGlobalName: string = this.nextChapterGlobalName();
-    const trigger: string = this.ruleHeader(url) + this.runtimeHelpers() + `
+    const trigger: string = this.ruleHeader(url) + this.runtimeHelpers() +
+      this.fontDeobfuscationService.buildFixupRuntime() + `
 (function(){
   var requestState = { status: 'pending', cancelled: false };
   window.${chapterGlobalName} = requestState;
   var target = ${JSON.stringify(url)};
   var first = null;
   var all = [];
+  var lastDoc = null;
   var guard = 0;
   function publish(payload){
     if (requestState.cancelled || window.${chapterGlobalName} !== requestState){ return false; }
@@ -1745,6 +1754,7 @@ export class NovelExtractionService {
         return;
       }
       var ch = airaNovelExtractChapter(result.doc, pageUrl);
+      lastDoc = result.doc;
       if (!first){ first = ch; }
       for (var i = 0; i < ch.paragraphs.length; i++){ all.push(ch.paragraphs[i]); }
       if (ch.nextUrl){ first.nextUrl = ch.nextUrl; }   // 以最后一页的"下一章"为准
@@ -1757,7 +1767,12 @@ export class NovelExtractionService {
   function finish(){
     if (!first){ publish({ status: 'error', message: 'empty' }); return; }
     first.paragraphs = all;
-    publish({ status: 'done', data: first });
+    // The document whose font was used is the one the last page resolved to, so
+    // the recovery reads the font from there rather than from a cached mapping.
+    airaNovelFontFixup(all, lastDoc, function(paragraphs){
+      first.paragraphs = paragraphs;
+      publish({ status: 'done', data: first });
+    });
   }
   step(target);
   return 'ok';
@@ -1765,7 +1780,8 @@ export class NovelExtractionService {
     await controller.runJavaScript(trigger);
     try {
       const raw: string = await this.pollGlobal(controller, chapterGlobalName);
-      const chapter: NovelChapterExtract = this.parseFetchEnvelope(raw);
+      const chapter: NovelChapterExtract =
+        await this.retrySubstitutedChapter(controller, this.parseFetchEnvelope(raw), chapterGlobalName, trigger);
       if (!this.chapterAcquisitionEngine.shouldRetryWithDirectHtml(chapter)) {
         return chapter;
       }
@@ -1779,6 +1795,88 @@ export class NovelExtractionService {
       return directHtmlChapter ?? chapter;
     } finally {
       await this.clearPageGlobal(controller, chapterGlobalName);
+    }
+  }
+
+  /**
+   * Re-runs the chapter fetch once with the font-recovery runtime installed when
+   * the extracted text came back drawn through a substitution font.
+   *
+   * The first attempt runs without the runtime so that ordinary pages pay
+   * nothing; only a page that actually returns substituted text is fetched
+   * again. The runtime cannot pre-exist this decision, because whether a site
+   * obfuscates is only observable from the text. Failure at any step returns the
+   * original chapter rather than an empty one.
+   */
+  private async retrySubstitutedChapter(
+    controller: webview.WebviewController,
+    chapter: NovelChapterExtract,
+    globalName: string,
+    trigger: string
+  ): Promise<NovelChapterExtract> {
+    if (!this.fontSubstitutionPolicy.isSubstitutedParagraphs(chapter.paragraphs)) {
+      return chapter;
+    }
+    if (!this.fontDeobfuscationService.canRecover()) {
+      return chapter;
+    }
+    if (!await this.fontDeobfuscationService.ensureRuntimeInstalled(controller)) {
+      hilog.warn(NOVEL_LOG_DOMAIN, NOVEL_LOG_TAG,
+        'font deobfuscation runtime unavailable; leaving substituted chapter as extracted');
+      return chapter;
+    }
+    try {
+      await this.clearPageGlobal(controller, globalName);
+      await controller.runJavaScript(trigger);
+      const raw: string = await this.pollGlobal(controller, globalName);
+      const recovered: NovelChapterExtract = this.parseFetchEnvelope(raw);
+      if (recovered.paragraphs.length <= 0) {
+        return chapter;
+      }
+      return recovered;
+    } catch (error) {
+      hilog.warn(NOVEL_LOG_DOMAIN, NOVEL_LOG_TAG,
+        'font deobfuscation retry failed: %{public}s', JSON.stringify(error));
+      return chapter;
+    }
+  }
+
+  /**
+   * Applies font recovery to a chapter extracted from the live document.
+   *
+   * The live page's own font is the only source of the mapping and it is
+   * per-response, so the extraction is repeated in the page with the recovery
+   * runtime available rather than mapping the text natively.
+   */
+  private async recoverCurrentDocumentText(
+    controller: webview.WebviewController,
+    chapter: NovelChapterExtract,
+    pageUrl: string
+  ): Promise<NovelChapterExtract> {
+    if (!this.fontSubstitutionPolicy.isSubstitutedParagraphs(chapter.paragraphs)) {
+      return chapter;
+    }
+    const globalName: string = `${NOVEL_FONT_RECOVERY_GLOBAL}_${Date.now().toString()}`;
+    const trigger: string = this.ruleHeader(pageUrl) + this.runtimeHelpers() +
+      this.fontDeobfuscationService.buildFixupRuntime() + `
+(function(){
+  var name = ${JSON.stringify(globalName)};
+  window[name] = { status: 'pending' };
+  try {
+    var extracted = airaNovelExtractChapter(document, location.href);
+    airaNovelFontFixup(extracted.paragraphs || [], document, function(paragraphs){
+      extracted.paragraphs = paragraphs;
+      window[name] = { status: 'done', data: extracted };
+    });
+  } catch (error){
+    window[name] = { status: 'error', message: String(error) };
+  }
+  return 'ok';
+})();`;
+    try {
+      return await this.retrySubstitutedChapter(controller, chapter, globalName, trigger);
+    } finally {
+      await this.clearPageGlobal(controller, globalName);
     }
   }
 

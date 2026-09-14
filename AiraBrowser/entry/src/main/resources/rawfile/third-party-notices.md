@@ -9,6 +9,7 @@ Aira 使用的第三方组件保留其原作者的版权和许可证。本页是
 - **Mozilla Readability 0.6.0**：Apache-2.0。随包文件为 `mozilla-readability-LICENSE.txt` 和 `mozilla-readability-NOTICE.txt`。
 - **adblock-rust 0.13.2**：MPL-2.0。随包文件为 `adblock-rust-LICENSE.txt`、`adblock-rust-NOTICE.txt` 和 `adblock-rust-THIRD-PARTY-LICENSES.txt`。
 - **markdown-it**：MIT。随包文件为 `markdown-it-LICENSE.txt`。
+- **brotli.js 1.3.3** 与 **base64-js 1.5.1**：MIT；brotli.js 的静态字典数据部分为 Apache-2.0（Google Inc.）。用于小说模式的字体反混淆运行时 `novel-font-deobfuscation.js`，由 `scripts/build-novel-font-deobfuscator.js` 生成。随包文件为 `novel-font-deobfuscation-LICENSE.txt`。
 - **原生下载依赖**：许可证清单见 `native-download-THIRD-PARTY-LICENSES.txt`。
 
 ## Aira-sync

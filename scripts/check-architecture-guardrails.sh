@@ -141,6 +141,19 @@ TABLET_INTERFACE_MODE_SETTINGS_REL="AiraBrowser/entry/src/main/ets/core/settings
 TABLET_INTERFACE_MODE_SETTINGS="${REPO_ROOT}/${TABLET_INTERFACE_MODE_SETTINGS_REL}"
 PRESENTATION_PROFILE_INPUT_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/browser/BrowserWindowPresentationProfileInputService.ets"
 PRESENTATION_PROFILE_INPUT_SERVICE="${REPO_ROOT}/${PRESENTATION_PROFILE_INPUT_SERVICE_REL}"
+NOVEL_FONT_POLICY_REL="AiraBrowser/entry/src/main/ets/features/novel/NovelFontSubstitutionPolicy.ets"
+NOVEL_FONT_POLICY="${REPO_ROOT}/${NOVEL_FONT_POLICY_REL}"
+NOVEL_FONT_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/novel/NovelFontDeobfuscationService.ets"
+NOVEL_FONT_SERVICE="${REPO_ROOT}/${NOVEL_FONT_SERVICE_REL}"
+NOVEL_EXTRACTION_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/novel/NovelExtractionService.ets"
+NOVEL_EXTRACTION_SERVICE="${REPO_ROOT}/${NOVEL_EXTRACTION_SERVICE_REL}"
+NOVEL_CHAPTER_ARTIFACT_CACHE_REL="AiraBrowser/entry/src/main/ets/data/novel/NovelChapterArtifactCacheRepository.ets"
+NOVEL_CHAPTER_ARTIFACT_CACHE="${REPO_ROOT}/${NOVEL_CHAPTER_ARTIFACT_CACHE_REL}"
+NOVEL_FONT_RUNTIME_REL="AiraBrowser/entry/src/main/resources/rawfile/novel-font-deobfuscation.js"
+NOVEL_FONT_RUNTIME="${REPO_ROOT}/${NOVEL_FONT_RUNTIME_REL}"
+NOVEL_FONT_BUILDER_REL="scripts/build-novel-font-deobfuscator.js"
+NOVEL_FONT_BUILDER="${REPO_ROOT}/${NOVEL_FONT_BUILDER_REL}"
+NOVEL_FONT_LICENSE_REL="AiraBrowser/entry/src/main/resources/rawfile/novel-font-deobfuscation-LICENSE.txt"
 SEARCH_INVOCATION_SURFACE_ADAPTER_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserShellSearchInvocationAdapter.ets"
 SEARCH_INVOCATION_SURFACE_ADAPTER="${REPO_ROOT}/${SEARCH_INVOCATION_SURFACE_ADAPTER_REL}"
 OLD_SEARCH_OVERLAY_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSearchOverlayCoordinator.ets"
@@ -5223,6 +5236,63 @@ check_file_contains_rule "${PRESENTATION_PROFILE_INPUT_SERVICE}" "${PRESENTATION
 check_file_contains_rule "${PRESENTATION_PROFILE_INPUT_SERVICE}" "${PRESENTATION_PROFILE_INPUT_SERVICE_REL}" \
   'deviceMarketName: this\.resolveDeviceMarketName\(\)' \
   "the live profile input must carry the device marketing name."
+# Novel sites that draw text through a per-response substitution font must keep
+# recovering it, and must keep doing so without blocking the ordinary path.
+# Pin the detection gate, the substitution-plane bound, and the runtime.
+check_file_contains_rule "${NOVEL_FONT_POLICY}" "${NOVEL_FONT_POLICY_REL}" \
+  'SUBSTITUTION_PLANE_START: number = 0x20000' \
+  "font-substitution detection must key on the CJK Extension B plane, not on the PUA range that older sites used."
+check_file_contains_rule "${NOVEL_FONT_POLICY}" "${NOVEL_FONT_POLICY_REL}" \
+  'NOVEL_FONT_MIN_SUBSTITUTED_COUNT: number = 8' \
+  "the substituted-character count gate must stay a named constant."
+check_file_contains_rule "${NOVEL_FONT_POLICY}" "${NOVEL_FONT_POLICY_REL}" \
+  'NOVEL_FONT_MIN_SUBSTITUTED_RATIO: number = 0.05' \
+  "the substituted-ratio gate must stay a named constant."
+# The mapping is randomised per response, so it must never be cached or reused
+# across documents; the recovery has to happen in the page that owns the font.
+check_file_contains_rule "${NOVEL_FONT_SERVICE}" "${NOVEL_FONT_SERVICE_REL}" \
+  "'aira-novel-font-1'" \
+  "the page-side runtime version must stay pinned so a stale injection is detected."
+check_file_contains_rule "${NOVEL_FONT_SERVICE}" "${NOVEL_FONT_SERVICE_REL}" \
+  'novel-font-deobfuscation\.js' \
+  "the recovery runtime must remain the committed, generated rawfile bundle."
+check_file_contains_rule "${NOVEL_FONT_SERVICE}" "${NOVEL_FONT_SERVICE_REL}" \
+  'runtime\.resolveForDocument\(doc\)' \
+  "recovery must resolve the font from the document that owns it, never from a cached mapping."
+# The mapping is randomised per response, so no field may hold one. Check for a
+# declared field rather than the word, which appears in the explanatory comment.
+if grep -Eq 'private +(readonly )?[A-Za-z]*(mapping|Mapping)[A-Za-z]* *: *(Map|Record)' "${NOVEL_FONT_SERVICE}"; then
+  report_failure "${NOVEL_FONT_SERVICE_REL} must not hold a font mapping field; the mapping is randomised per response."
+fi
+check_file_contains_rule "${NOVEL_EXTRACTION_SERVICE}" "${NOVEL_EXTRACTION_SERVICE_REL}" \
+  'this\.fontSubstitutionPolicy\.isSubstitutedParagraphs\(' \
+  "the extraction path must gate recovery on substitution detection."
+check_file_contains_rule "${NOVEL_EXTRACTION_SERVICE}" "${NOVEL_EXTRACTION_SERVICE_REL}" \
+  'retrySubstitutedChapter' \
+  "recovery must stay a single opt-in retry so ordinary pages keep the existing fetch path."
+check_file_contains_rule "${NOVEL_EXTRACTION_SERVICE}" "${NOVEL_EXTRACTION_SERVICE_REL}" \
+  'airaNovelFontFixup' \
+  "extraction must deobfuscate in the page, where the per-response font is available."
+# The bundle is generated, not hand-edited. Its builder and its licence must ship.
+check_file_contains_rule "${NOVEL_FONT_BUILDER}" "${NOVEL_FONT_BUILDER_REL}" \
+  "BROTLI_VERSION = '1.3.3'" \
+  "the recovery runtime must pin the vendored Brotli decoder version."
+check_file_contains_rule "${NOVEL_FONT_RUNTIME}" "${NOVEL_FONT_RUNTIME_REL}" \
+  'Generated by scripts/build-novel-font-deobfuscator.js' \
+  "the recovery runtime must stay generated by its builder, not edited in place."
+# A chapter cached before this fix holds the substituted codepoints, and its
+# per-response font is gone, so serving it can never be correct. The rejection
+# belongs in the cache reader: every consumer (automatic open, bookshelf
+# navigation, chapter transition, prefetch) reads through readChapterNow.
+check_file_contains_rule "${NOVEL_CHAPTER_ARTIFACT_CACHE}" "${NOVEL_CHAPTER_ARTIFACT_CACHE_REL}" \
+  'this\.isSubstitutedArtifact\(normalized\)' \
+  "the chapter cache must reject a record whose text came from a substitution font."
+check_file_contains_rule "${NOVEL_CHAPTER_ARTIFACT_CACHE}" "${NOVEL_CHAPTER_ARTIFACT_CACHE_REL}" \
+  'isSubstitutedParagraphs\(artifact\.paragraphs\)' \
+  "cache rejection must key on the shared substitution policy, not a local heuristic."
+check_file_contains_rule "${REPO_ROOT}/${NOVEL_FONT_LICENSE_REL}" "${NOVEL_FONT_LICENSE_REL}" \
+  'brotli.js 1.3.3' \
+  "the bundled Brotli decoder must carry its MIT license text."
 
 if [ "${ARCH_GUARD_ALLOW_PAGE_GROWTH:-0}" = "1" ]; then
   echo "Architecture page-growth diff guard bypassed by ARCH_GUARD_ALLOW_PAGE_GROWTH=1."

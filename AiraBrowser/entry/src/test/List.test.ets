@@ -10,6 +10,7 @@ import browserTabletInterfaceModePolicyTest from './BrowserTabletInterfaceModePo
 import browserTabletInterfaceModeTransitionOwnerTest from './BrowserTabletInterfaceModeTransitionOwner.test';
 import centeredDialogWidthViewModelTest from './CenteredDialogWidthViewModel.test';
 import browserShellFontScalePolicyTest from './BrowserShellFontScalePolicy.test';
+import novelFontSubstitutionPolicyTest from './NovelFontSubstitutionPolicy.test';
 import browserLargeScreenOmniboxSearchViewModelTest from './BrowserLargeScreenOmniboxSearchViewModel.test';
 import browserPrivacyEffectPolicyTest from './BrowserPrivacyEffectPolicy.test';
 import downloadPrivacyPolicyTest from './DownloadPrivacyPolicy.test';
@@ -55,6 +56,7 @@ export default function tests(): void {
   browserTabletInterfaceModeTransitionOwnerTest();
   centeredDialogWidthViewModelTest();
   browserShellFontScalePolicyTest();
+  novelFontSubstitutionPolicyTest();
   browserLargeScreenOmniboxSearchViewModelTest();
   browserPrivacyEffectPolicyTest();
   downloadPrivacyPolicyTest();
