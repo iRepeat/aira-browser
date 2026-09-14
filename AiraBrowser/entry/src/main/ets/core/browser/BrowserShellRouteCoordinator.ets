@@ -1,4 +1,5 @@
 import router from '@ohos.router';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { FrameCallback, UIContext } from '@kit.ArkUI';
 import {
   BrowserDataScope,
@@ -56,6 +57,11 @@ import { BrowserTabCloseCoordinator } from './BrowserTabCloseCoordinator';
 import { sharedBrowserTabletInterfaceModeTransitionOwner } from '../settings/BrowserTabletInterfaceModeTransitionOwner';
 import { AIRA_DISTRIBUTION_CAPABILITY_OWNER } from '../../common/config/AiraDistributionCapabilityOwner';
 
+// Temporary Phase-D timing evidence for routed toolbar actions. Remove with the diagnostic.
+const BROWSER_ROUTE_ACTION_DIAGNOSTIC_DOMAIN: number = 0x0000;
+const BROWSER_ROUTE_ACTION_DIAGNOSTIC_TAG: string = 'RouteActionDiag';
+const BROWSER_ROUTE_ACTION_DIAGNOSTIC_PREFIX: string = '[DIAG-route-action-20260914]';
+
 export interface BrowserShellSettingsDetailRouteParams {
   sectionId: string;
   dataScope?: BrowserDataScope | string;
@@ -101,8 +107,7 @@ export interface BrowserShellRouteContext {
   activeTabId: string;
 }
 
-export interface BrowserShellRouteCoordinatorHost {
-  presentRouteFailure: (errorMessage: string, toastMessage?: string) => void;
+export interface BrowserShellRouteCoordinatorHost {  presentRouteFailure: (errorMessage: string, toastMessage?: string) => void;
   resetTransientOverlayStateForRouteTransition: () => void;
   openTabsOverview: () => void;
   isLargeScreenShellActive: () => boolean;
@@ -123,7 +128,14 @@ interface BrowserShellRouteCoordinatorDependencies {
   resolveUIContext: () => UIContext;
 }
 
-class BrowserShellRouteIdleCallback extends FrameCallback {
+/**
+ * Defers the route commit past the reset UI turn and past the frame that paints the
+ * reset, without waiting for an idle frame. `onIdle` only fires when a frame has more
+ * than 1ms left before the next VSync, so while the bottom panel is collapsing every
+ * frame is busy and the callback is deferred until the animation ends — that is what
+ * made a routed toolbar action appear to wait for the toolbar to retract.
+ */
+class BrowserShellRouteFrameCallback extends FrameCallback {
   private readonly task: () => void;
 
   constructor(task: () => void) {
@@ -132,10 +144,10 @@ class BrowserShellRouteIdleCallback extends FrameCallback {
   }
 
   onFrame(_frameTimeInNano: number): void {
+    this.task();
   }
 
   onIdle(_timeLeftInNano: number): void {
-    this.task();
   }
 }
 
@@ -149,6 +161,9 @@ export class BrowserShellRouteCoordinator {
     new BrowserPrivateProfileLifecycleCoordinator();
   private routeTransitionRunId: number = 0;
   private phoneNativeTabHandoffKey: string = '';
+  // Timing-only state for the routed-toolbar-action diagnostic. Not part of route policy.
+  private routeRequestStartedAt: number = 0;
+  private routeRequestUrl: string = '';
 
   constructor(
     host: BrowserShellRouteCoordinatorHost,
@@ -572,15 +587,17 @@ export class BrowserShellRouteCoordinator {
     onFailed?: () => void
   ): void {
     const runId = ++this.routeTransitionRunId;
+    this.routeRequestStartedAt = Date.now();
+    this.routeRequestUrl = url;
     this.host.resetTransientOverlayStateForRouteTransition();
     try {
-      this.dependencies.resolveUIContext().postFrameCallback(new BrowserShellRouteIdleCallback((): void => {
+      this.dependencies.resolveUIContext().postFrameCallback(new BrowserShellRouteFrameCallback((): void => {
         if (runId !== this.routeTransitionRunId) {
           onFailed?.();
           return;
         }
         try {
-          this.dependencies.resolveUIContext().postFrameCallback(new BrowserShellRouteIdleCallback((): void => {
+          this.dependencies.resolveUIContext().postFrameCallback(new BrowserShellRouteFrameCallback((): void => {
             this.commitRoute(runId, url, params, failurePrefix, onCommitted, onFailed);
           }));
         } catch (_error) {
@@ -608,10 +625,28 @@ export class BrowserShellRouteCoordinator {
       onFailed?.();
       return;
     }
+    hilog.info(
+      BROWSER_ROUTE_ACTION_DIAGNOSTIC_DOMAIN,
+      BROWSER_ROUTE_ACTION_DIAGNOSTIC_TAG,
+      '%{public}s router_push url=%{public}s runId=%{public}d deferredMs=%{public}d',
+      BROWSER_ROUTE_ACTION_DIAGNOSTIC_PREFIX,
+      url,
+      runId,
+      Date.now() - this.routeRequestStartedAt
+    );
     router.pushUrl({
       url: url,
       params: params
     }).then((): void => {
+      hilog.info(
+        BROWSER_ROUTE_ACTION_DIAGNOSTIC_DOMAIN,
+        BROWSER_ROUTE_ACTION_DIAGNOSTIC_TAG,
+        '%{public}s router_committed url=%{public}s runId=%{public}d totalMs=%{public}d',
+        BROWSER_ROUTE_ACTION_DIAGNOSTIC_PREFIX,
+        this.routeRequestUrl,
+        runId,
+        Date.now() - this.routeRequestStartedAt
+      );
       onCommitted?.();
     }).catch((error: Error) => {
       onFailed?.();

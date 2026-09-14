@@ -6884,6 +6884,11 @@ struct BrowserShellPage {
       onAction: (actionId: BrowserBottomAddressPanelActionId) => {
         this.dispatchRootBottomPanelAction('panel', actionId);
       },
+      onShouldDispatchSheetActionImmediately: (actionId: BrowserBottomAddressPanelActionId): boolean =>
+        this.browserRootBottomPanelActionApplication.isShellDepartingSheetAction(
+          this.isRootBottomPanelEffectiveHomeMode(),
+          actionId
+        ),
       onContinueReading: (): void => this.novelReaderSession.handleAction({ type: 'continue_reading' }),
       onKeyboardResizeSessionBegin: () => {
         this.requestRootBottomAddressInputKeyboardAvoidMode();

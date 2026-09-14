@@ -295,6 +295,47 @@ export class BrowserRootBottomPanelFixedActionApplication implements BrowserRoot
     void this.pasteAndGo();
   }
 
+  /**
+   * These ids are the panel actions that replace the whole shell with another page, so the
+   * session owner may start their route push in the tap frame instead of waiting for the
+   * expanded toolbar to finish collapsing. Header actions and every other panel action keep
+   * the settle-gated timing: the sheet, overlay, or in-page mode they open would otherwise
+   * animate against the collapsing panel.
+   */
+  isShellDepartingAction(dispatch: BrowserRootBottomPanelActionDispatch): boolean {
+    if (dispatch.lane === 'header') {
+      return false;
+    }
+    return this.isShellDepartingPanelAction(dispatch.lane === 'home', dispatch.actionId);
+  }
+
+  /**
+   * Same classification as {@link isShellDepartingAction}, for the native toolbar Sheet. The
+   * Sheet dispatches its action only after its dismiss animation completes; a page-replacing
+   * action does not need that gate because the route transition covers the shell, so the
+   * Sheet can answer this with the scene lane and start the route in the tap frame.
+   */
+  isShellDepartingSheetAction(isHomeLane: boolean, actionId: string): boolean {
+    return this.isShellDepartingPanelAction(isHomeLane, actionId);
+  }
+
+  private isShellDepartingPanelAction(isHomeLane: boolean, actionId: string): boolean {
+    switch (actionId) {
+      case 'settings':
+      case 'history':
+      case 'openBookmarks':
+      case 'downloads':
+      case 'savedPages':
+      case 'novel':
+        return true;
+      case 'scripts':
+        // Home routes to the standalone user-scripts page; web opens an in-page actions sheet.
+        return isHomeLane;
+      default:
+        return false;
+    }
+  }
+
   apply(
     dispatch: BrowserRootBottomPanelActionDispatch,
     showHomePage: boolean

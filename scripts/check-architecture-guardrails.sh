@@ -4836,11 +4836,32 @@ check_file_contains_rule "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION}" "${ROOT_BOTTO
   'mediaResourceSessionCoordinator\.openResources\(\)' \
   "Root Bottom Panel resource action must execute through the fixed Media Resource owner."
 check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
-  'const dispatchAfterLowSettle = this\.isExpandedDetent\(snapshot\.currentDetent\);' \
+  'const panelExpanded = this\.isExpandedDetent\(snapshot\.currentDetent\);' \
   "Root Bottom Panel ordinary actions must inherit safe expanded-panel dispatch timing from the Session owner."
 check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
+  'const dispatchAfterLowSettle = panelExpanded &&' \
+  "Root Bottom Panel ordinary actions must inherit safe expanded-panel dispatch timing from the Session owner."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
+  '!this\.resolveActionApplication\(\)\.isShellDepartingAction\(dispatch\)' \
+  "Root Bottom Panel page-replacing actions must be the only expanded-panel actions allowed to start before the low settle."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION}" "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION_REL}" \
+  'isShellDepartingAction\(dispatch: BrowserRootBottomPanelActionDispatch\): boolean' \
+  "Root Bottom Panel page-replacing action ids must stay declared in the fixed action application."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION}" "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION_REL}" \
+  'isShellDepartingSheetAction\(isHomeLane: boolean, actionId: string\): boolean' \
+  "Root Bottom Panel page-replacing Sheet actions must share the fixed action application's classification."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
+  'isShellDepartingSheetAction\(isHomeLane: boolean, actionId: string\): boolean;' \
+  "Root Bottom Panel Sheet dispatch timing must be answerable through the Session action-application boundary."
+check_file_contains_rule "${BOTTOM_ADDRESS_PANEL}" "${BOTTOM_ADDRESS_PANEL_REL}" \
+  'onShouldDispatchSheetActionImmediately' \
+  "The toolbar Sheet must ask the Shell's fixed action application before dispatching a page-replacing action immediately."
+check_file_contains_rule "${SHELL_PAGE}" "${SHELL_PAGE_REL}" \
+  'isShellDepartingSheetAction\(' \
+  "BrowserShellPage must answer the Sheet's immediate-dispatch question from the fixed action application, not decide it itself."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
   "dispatchTiming: dispatchAfterLowSettle \? 'after_low_settle' : 'immediate'" \
-  "Root Bottom Panel expanded actions must execute only after the low-detent settle effects complete."
+  "Root Bottom Panel ordinary expanded actions must execute only after the low-detent settle effects complete."
 check_file_contains_rule "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION}" "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION_REL}" \
   'bookmarkActionCoordinator\.toggle\(this\.shell\.resolveBookmarkTarget\(\)\)' \
   "Root Bottom Panel Bookmark action must execute through the fixed Bookmark owner."
