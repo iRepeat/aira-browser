@@ -44,7 +44,8 @@ const LARGE_SCREEN_SUGGESTION_ROW_GAP_VP: number = 2;
 const LARGE_SCREEN_SUGGESTION_ROW_RADIUS_VP: number =
   LARGE_SCREEN_SEARCH_CARD_RADIUS_VP - LARGE_SCREEN_SEARCH_CARD_PADDING_VP;
 const LARGE_SCREEN_SUGGESTION_ROW_HORIZONTAL_PADDING_VP: number = 12;
-const LARGE_SCREEN_SUGGESTION_TRAILING_ICON_SIZE_VP: number = 18;
+const LARGE_SCREEN_SUGGESTION_LEADING_ICON_SIZE_VP: number = 18;
+const LARGE_SCREEN_SUGGESTION_LEADING_ICON_GAP_VP: number = 8;
 const LARGE_SCREEN_SUGGESTION_DELETE_BUTTON_SIZE_VP: number = 28;
 const LARGE_SCREEN_SUGGESTION_DELETE_ICON_SIZE_VP: number = 16;
 const LARGE_SCREEN_SEARCH_ENGINE_BUTTON_SIZE_VP: number = 28;
@@ -82,7 +83,16 @@ struct BrowserLargeScreenSuggestionRow {
   build() {
     Row({ space: 8 }) {
       Button() {
-        Row({ space: 12 }) {
+        Row({ space: LARGE_SCREEN_SUGGESTION_LEADING_ICON_GAP_VP }) {
+          // The source icon leads the row so it reads as part of the entry, with
+          // the label immediately after it; the delete action keeps the far edge.
+          AiraIcon({
+            airaIconId: this.isHistorySuggestion() ? 'membership.inviteRecordClock' : 'browser.toolbar.search',
+            iconSize: LARGE_SCREEN_SUGGESTION_LEADING_ICON_SIZE_VP,
+            iconColor: this.storedSecondaryTextColor
+          })
+            .hitTestBehavior(HitTestMode.None)
+
           Text(this.suggestion.title)
             .layoutWeight(1)
             .constraintSize({ minWidth: 0 })
@@ -92,13 +102,6 @@ struct BrowserLargeScreenSuggestionRow {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .textAlign(TextAlign.Start)
-
-          AiraIcon({
-            airaIconId: this.isHistorySuggestion() ? 'membership.inviteRecordClock' : 'browser.toolbar.search',
-            iconSize: LARGE_SCREEN_SUGGESTION_TRAILING_ICON_SIZE_VP,
-            iconColor: this.storedSecondaryTextColor
-          })
-            .hitTestBehavior(HitTestMode.None)
         }
         .width('100%')
         .height('100%')
