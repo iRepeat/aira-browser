@@ -5131,6 +5131,14 @@ check_file_contains_rule "${LARGE_SCREEN_SHELL_INTENT_APPLICATION}" "${LARGE_SCR
 check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
   "onClearHistorySuggestions: \(\): void => \{" \
   "the navigation toolbar must forward the suggestion clear action into the typed intent."
+# The empty-list state means "no history"; a history glyph there advertises
+# records the user may have just cleared.
+check_file_contains_rule "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE}" "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL}" \
+  "if \(this\.query\.trim\(\)\.length > 0\) \{" \
+  "the empty suggestion row must gate its trailing glyph on an active query, not render one beside 暂无搜索历史."
+if grep -q 'browser\.shortcut\.history' "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE}"; then
+  report_failure "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL} must not pair the empty history state with a history icon."
+fi
 check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
   "'clear_history_suggestions'" \
   "the navigation toolbar must emit the clear-history intent rather than clearing anything itself."

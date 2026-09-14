@@ -449,11 +449,16 @@ export struct BrowserLargeScreenOmniboxSearchSurface {
                 .fontSize(14)
                 .fontColor(this.storedSecondaryTextColor)
 
-              AiraIcon({
-                airaIconId: this.query.trim().length > 0 ? 'browser.toolbar.search' : 'browser.shortcut.history',
-                iconSize: 18,
-                iconColor: this.storedSecondaryTextColor
-              })
+              // Only the query state keeps a trailing glyph. The empty list with
+              // no query is the "history is empty" state, where a clock icon
+              // would claim history the user may have just cleared.
+              if (this.query.trim().length > 0) {
+                AiraIcon({
+                  airaIconId: 'browser.toolbar.search',
+                  iconSize: 18,
+                  iconColor: this.storedSecondaryTextColor
+                })
+              }
             }
             .width('100%')
             .height(LARGE_SCREEN_SUGGESTION_EMPTY_HEIGHT_VP - LARGE_SCREEN_SEARCH_CARD_PADDING_VP * 2)
