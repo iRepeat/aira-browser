@@ -143,7 +143,7 @@ if [ "${failures}" -eq 0 ]; then
     'task\.setTransferList\(\[regularBuffer, privateBuffer, previousBuffer\]\)' \
     "Bookmark snapshot capture must transfer packed nodes without cloning the live objects"
   require_pattern "${COMPUTE_REL}" \
-    'bookmark_merge_fallback_budget[\s\S]*mergeService\.mergeCooperatively' \
+    'fitsTaskpoolTransferBudget\(transferBytes\)[\s\S]*mergeService\.mergeCooperatively' \
     "oversized Bookmark merges must keep the cooperative correctness path"
   require_pattern "${TRANSFER_REL}" \
     'static encodeSnapshot\(snapshot: AiraSyncSnapshot\): ArrayBuffer[\s\S]*static decodeSnapshot\(snapshotBuffer: ArrayBuffer\): AiraSyncSnapshot' \

@@ -395,26 +395,6 @@ export class AiraBookmarkSnapshotService {
   ): Promise<AiraSyncSnapshot> {
     const regularNodes = this.bookmarkRepository.listSyncNodes(resolveBookmarkScope(AIRA_BOOKMARK_SYNC_SCOPE));
     const privateNodes = this.bookmarkRepository.listSyncNodes(resolveBookmarkScope(AIRA_PRIVATE_BOOKMARK_SYNC_SCOPE));
-    let regularLiveCount = 0;
-    for (let index = 0; index < regularNodes.length; index += 1) {
-      if (regularNodes[index].sync.deletedAt === undefined) {
-        regularLiveCount += 1;
-      }
-    }
-    let privateLiveCount = 0;
-    for (let index = 0; index < privateNodes.length; index += 1) {
-      if (privateNodes[index].sync.deletedAt === undefined) {
-        privateLiveCount += 1;
-      }
-    }
-    AiraSyncJankProbe.markExtra(
-      'bookmark_local_nodes',
-      `scope=${AIRA_BOOKMARK_SYNC_SCOPE} total=${regularNodes.length} live=${regularLiveCount} deleted=${regularNodes.length - regularLiveCount}`
-    );
-    AiraSyncJankProbe.markExtra(
-      'bookmark_local_nodes',
-      `scope=${AIRA_PRIVATE_BOOKMARK_SYNC_SCOPE} total=${privateNodes.length} live=${privateLiveCount} deleted=${privateNodes.length - privateLiveCount}`
-    );
     const packed = await this.computeExecutor.buildFreshSnapshot(
       regularNodes,
       privateNodes,

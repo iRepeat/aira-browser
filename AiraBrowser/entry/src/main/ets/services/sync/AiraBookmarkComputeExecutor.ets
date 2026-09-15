@@ -4,7 +4,6 @@ import {
   AiraBookmarkConflictResolution,
   AiraSyncSnapshot
 } from '../../common/models/AiraSyncModels';
-import { AiraSyncJankProbe } from '../../common/debug/AiraSyncJankProbe';
 import {
   AiraBookmarkMergeDeletionPolicy,
   AiraBookmarkMergeResult,
@@ -129,7 +128,6 @@ export class AiraBookmarkComputeExecutor {
       estimateBookmarkSnapshotTransferBytes(local) +
       estimateBookmarkSnapshotTransferBytes(remote);
     if (!fitsTaskpoolPackPreflightBudget(estimatedBytes) && estimatedBytes > 0) {
-      AiraSyncJankProbe.mark('bookmark_merge_fallback_budget');
       return this.mergeService.mergeCooperatively(
         baseline,
         local,
@@ -140,19 +138,12 @@ export class AiraBookmarkComputeExecutor {
         deletionPolicy
       );
     }
-    const packStartedAt = Date.now();
     const baselineBuffer = AiraBookmarkTaskpoolTransferCodec.encodeOptionalSnapshot(baseline);
     const localBuffer = AiraBookmarkTaskpoolTransferCodec.encodeSnapshot(local);
     const remoteBuffer = AiraBookmarkTaskpoolTransferCodec.encodeOptionalSnapshot(remote);
     const transferBytes = baselineBuffer.byteLength + localBuffer.byteLength + remoteBuffer.byteLength;
-    AiraSyncJankProbe.endExtra(
-      'bookmark_merge_pack',
-      packStartedAt,
-      `bytes=${transferBytes} folders=${local.bookmarkFolders.length} items=${local.bookmarkItems.length}`
-    );
     await throttle.afterStage();
     if (!fitsTaskpoolTransferBudget(transferBytes)) {
-      AiraSyncJankProbe.mark('bookmark_merge_fallback_budget');
       return this.mergeService.mergeCooperatively(
         baseline,
         local,
@@ -174,12 +165,10 @@ export class AiraBookmarkComputeExecutor {
       deletionPolicy
     );
     task.setTransferList([baselineBuffer, localBuffer, remoteBuffer]);
-    const taskStartedAt = Date.now();
     let outcome: AiraBookmarkMergePackedOutcome;
     try {
       outcome = await taskpool.execute(task, taskpool.Priority.LOW) as AiraBookmarkMergePackedOutcome;
     } catch (_error) {
-      AiraSyncJankProbe.endExtra('bookmark_merge_taskpool', taskStartedAt, 'error=throw');
       return this.mergeService.mergeCooperatively(
         baseline,
         local,
@@ -190,13 +179,7 @@ export class AiraBookmarkComputeExecutor {
         deletionPolicy
       );
     }
-    AiraSyncJankProbe.endExtra(
-      'bookmark_merge_taskpool',
-      taskStartedAt,
-      `error=${outcome.errorMessage.length > 0 ? 1 : 0}`
-    );
     if (outcome.errorMessage.length > 0) {
-      AiraSyncJankProbe.markExtra('bookmark_merge_fallback_cooperative', outcome.errorMessage);
       return this.mergeService.mergeCooperatively(
         baseline,
         local,
@@ -207,13 +190,7 @@ export class AiraBookmarkComputeExecutor {
         deletionPolicy
       );
     }
-    const unpackStartedAt = Date.now();
     const result = AiraBookmarkTaskpoolTransferCodec.decodeMergeResult(outcome.resultBuffer);
-    AiraSyncJankProbe.endExtra(
-      'bookmark_merge_unpack',
-      unpackStartedAt,
-      `apply=${result.localApplyRequired ? 1 : 0} write=${result.remoteWriteRequired ? 1 : 0} conflicts=${result.conflictCount}`
-    );
     await throttle.afterStage();
     return result;
   }
@@ -229,22 +206,14 @@ export class AiraBookmarkComputeExecutor {
       estimateBookmarkNodesTransferBytes(privateNodes) +
       estimateBookmarkSnapshotTransferBytes(previousSnapshot ?? null);
     if (!fitsTaskpoolPackPreflightBudget(estimatedBytes) && estimatedBytes > 0) {
-      AiraSyncJankProbe.mark('bookmark_snapshot_fallback_budget');
       return undefined;
     }
-    const packStartedAt = Date.now();
     const regularBuffer = AiraBookmarkTaskpoolTransferCodec.encodeNodes(regularNodes);
     const privateBuffer = AiraBookmarkTaskpoolTransferCodec.encodeNodes(privateNodes);
     const previousBuffer = AiraBookmarkTaskpoolTransferCodec.encodeOptionalSnapshot(previousSnapshot ?? null);
     const transferBytes = regularBuffer.byteLength + privateBuffer.byteLength + previousBuffer.byteLength;
-    AiraSyncJankProbe.endExtra(
-      'bookmark_snapshot_pack',
-      packStartedAt,
-      `bytes=${transferBytes} regular=${regularNodes.length} private=${privateNodes.length}`
-    );
     await this.cooperativeThrottle.afterStage();
     if (!fitsTaskpoolTransferBudget(transferBytes)) {
-      AiraSyncJankProbe.mark('bookmark_snapshot_fallback_budget');
       return undefined;
     }
     const task = new taskpool.Task(
@@ -257,31 +226,17 @@ export class AiraBookmarkComputeExecutor {
       generatedAt
     );
     task.setTransferList([regularBuffer, privateBuffer, previousBuffer]);
-    const taskStartedAt = Date.now();
     let outcome: AiraBookmarkSnapshotPackedOutcome;
     try {
       outcome = await taskpool.execute(task, taskpool.Priority.LOW) as AiraBookmarkSnapshotPackedOutcome;
     } catch (_error) {
-      AiraSyncJankProbe.endExtra('bookmark_snapshot_taskpool', taskStartedAt, 'error=throw');
       return undefined;
     }
-    AiraSyncJankProbe.endExtra(
-      'bookmark_snapshot_taskpool',
-      taskStartedAt,
-      `error=${outcome.errorMessage.length > 0 ? 1 : 0}`
-    );
     if (outcome.errorMessage.length > 0) {
-      AiraSyncJankProbe.markExtra('bookmark_snapshot_fallback_cooperative', outcome.errorMessage);
       return undefined;
     }
-    const unpackStartedAt = Date.now();
     const snapshot = AiraBookmarkTaskpoolTransferCodec.decodeSnapshot(outcome.snapshotBuffer);
     const originRepairs = AiraBookmarkTaskpoolTransferCodec.decodeOriginRepairs(outcome.originRepairBuffer);
-    AiraSyncJankProbe.endExtra(
-      'bookmark_snapshot_unpack',
-      unpackStartedAt,
-      `folders=${snapshot.bookmarkFolders.length} items=${snapshot.bookmarkItems.length} repairs=${originRepairs.length}`
-    );
     await this.cooperativeThrottle.afterStage();
     return {
       snapshot: snapshot,
