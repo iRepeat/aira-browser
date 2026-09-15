@@ -342,6 +342,10 @@ const HISTORY_SYNC_OUTBOX_TABLE = 'history_sync_outbox_v1';
 const HISTORY_SYNC_APPLY_YIELD_BUDGET_MS: number = 24;
 const HISTORY_SYNC_APPLY_YIELD_MS: number = 8;
 const HISTORY_SYNC_SETTLE_MAX_WAIT_MS: number = 1500;
+// Outbox mutations are removed with one IN-delete per batch rather than one delete per mutation.
+// Kept at the conservative end of the range already used elsewhere for IN predicates so the
+// statement stays well inside the engine's bind-parameter limit.
+const HISTORY_SYNC_DELETE_ID_BATCH_SIZE: number = 200;
 const HISTORY_SYNC_STATE_TABLE = 'history_sync_state_v1';
 const HISTORY_SYNC_DELETE_RANGES_TABLE = 'history_sync_delete_ranges_v1';
 const HISTORY_SYNC_FRONTIERS_TABLE = 'history_sync_frontiers_v1';
@@ -2182,12 +2186,11 @@ export class BrowserDatabase {
       transactionStarted = true;
       const applied = await this.applyHistorySyncChangesInStore(store, accountUid, response.changes);
       if (removeAcknowledgedMutations) {
-        for (const acknowledgement of response.acknowledgements) {
-          const predicates = new relationalStore.RdbPredicates(HISTORY_SYNC_OUTBOX_TABLE);
-          predicates.equalTo('account_uid', accountUid);
-          predicates.equalTo('mutation_id', acknowledgement.mutationId);
-          await store.delete(predicates);
-        }
+        const acknowledgedMutationIds: string[] = [];
+        response.acknowledgements.forEach((acknowledgement): void => {
+          acknowledgedMutationIds.push(acknowledgement.mutationId);
+        });
+        await this.deleteHistorySyncOutboxMutationsInStore(store, accountUid, acknowledgedMutationIds);
       }
       await this.upsertHistorySyncState(store, {
         accountUid: accountUid,
@@ -2362,12 +2365,7 @@ export class BrowserDatabase {
         } finally {
           outboxResult.close();
         }
-        for (const mutationId of mutationIds) {
-          const mutationPredicates = new relationalStore.RdbPredicates(HISTORY_SYNC_OUTBOX_TABLE);
-          mutationPredicates.equalTo('account_uid', normalizedUid);
-          mutationPredicates.equalTo('mutation_id', mutationId);
-          await store.delete(mutationPredicates);
-        }
+        await this.deleteHistorySyncOutboxMutationsInStore(store, normalizedUid, mutationIds);
       }
       const removed = await this.deleteHydratedHistoryVisitEvents(store, victims);
       await this.advanceHistorySyncRetentionForVictims(
@@ -5646,6 +5644,34 @@ export class BrowserDatabase {
     predicates.equalTo('sync_origin', 'remote');
     const resultSet = await store.query(predicates, HISTORY_VISIT_COLUMNS);
     return this.deleteHydratedHistoryVisitEvents(store, this.mapHistoryVisitEventRows(resultSet));
+  }
+
+  /**
+   * Removes acknowledged outbox mutations in bounded IN-deletes. An exchange round can acknowledge
+   * up to HISTORY_SYNC_EXCHANGE_BATCH_SIZE mutations, and the previous one-delete-per-mutation loop
+   * issued that many statements inside the open transaction.
+   */
+  private async deleteHistorySyncOutboxMutationsInStore(
+    store: relationalStore.RdbStore,
+    accountUid: string,
+    mutationIds: string[]
+  ): Promise<void> {
+    const uniqueIds: string[] = [];
+    const seen: Set<string> = new Set<string>();
+    mutationIds.forEach((mutationId: string): void => {
+      const normalizedId = mutationId.trim();
+      if (normalizedId.length <= 0 || seen.has(normalizedId)) {
+        return;
+      }
+      seen.add(normalizedId);
+      uniqueIds.push(normalizedId);
+    });
+    for (let offset = 0; offset < uniqueIds.length; offset += HISTORY_SYNC_DELETE_ID_BATCH_SIZE) {
+      const predicates = new relationalStore.RdbPredicates(HISTORY_SYNC_OUTBOX_TABLE);
+      predicates.equalTo('account_uid', accountUid);
+      predicates.in('mutation_id', uniqueIds.slice(offset, offset + HISTORY_SYNC_DELETE_ID_BATCH_SIZE));
+      await store.delete(predicates);
+    }
   }
 
   private parseHistorySyncMutation(value: string): HistorySyncMutation | undefined {

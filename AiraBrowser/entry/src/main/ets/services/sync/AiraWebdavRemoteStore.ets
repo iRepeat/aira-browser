@@ -92,6 +92,10 @@ export class AiraWebdavRemoteStore implements AiraSyncRemoteStore {
     new AiraBookmarkSnapshotValidationService();
   private historyService: AiraBookmarkTombstoneLifecycleService =
     new AiraBookmarkTombstoneLifecycleService();
+  // Last parsed remote file and its validator, for conditional reads. `undefined` means "not read
+  // yet"; a `null` file with an empty etag is a cached 404. Cleared whenever we write.
+  private cachedSnapshotFile?: AiraWebdavBookmarkSnapshotFile | null = undefined;
+  private cachedSnapshotEtag: string = '';
 
   constructor(config: AiraSyncWebdavConfig, rootPath: string, requestTimeoutMs: number = REQUEST_TIMEOUT_MS) {
     this.config = config;
@@ -103,7 +107,8 @@ export class AiraWebdavRemoteStore implements AiraSyncRemoteStore {
     let lastError: Error | undefined = undefined;
     for (let attempt = 0; attempt < REMOTE_READ_MAX_ATTEMPTS; attempt += 1) {
       try {
-        const read = await this.readSnapshotFile();
+        // Prefer the cached file: a reader only needs the content, and a 304 proves it unchanged.
+        const read = await this.readSnapshotFile(true);
         return {
           snapshot: read.file?.snapshot ?? null,
           commitId: read.file?.commitId ?? null,
@@ -120,7 +125,7 @@ export class AiraWebdavRemoteStore implements AiraSyncRemoteStore {
   }
 
   async readHead(): Promise<AiraSyncRemoteHead> {
-    const read = await this.readSnapshotFile();
+    const read = await this.readSnapshotFile(true);
     if (read.file === null) {
       return {
         commitId: null,
@@ -204,6 +209,9 @@ export class AiraWebdavRemoteStore implements AiraSyncRemoteStore {
       throw new Error('WebDAV 远端已被其他设备更新，请重新同步。');
     }
     this.assertSuccess(response, this.snapshotPath());
+    // The remote file has changed, so anything the read cache was validating is stale. This is what
+    // makes the caller's post-write confirmation read a real read rather than a cache hit.
+    this.invalidateSnapshotReadCache();
     return {
       commitId: nextFile.commitId,
       writtenAt: createdAt
@@ -390,22 +398,63 @@ export class AiraWebdavRemoteStore implements AiraSyncRemoteStore {
     }
   }
 
-  private async readSnapshotFile(): Promise<AiraWebdavSnapshotRead> {
+  /**
+   * Reads the remote snapshot file.
+   *
+   * `preferCached` sends the ETag from the last read as `If-None-Match`. A provider that answers 304
+   * has told us the content is byte-identical to what we already parsed, so the cached file is
+   * returned and the download plus JSON parse are skipped. This is the case on every run where no
+   * other device wrote: previously each run re-downloaded and re-parsed the whole snapshot even when
+   * nothing had changed.
+   *
+   * It is only used by readers. A write needs the live ETag to build its precondition, so it reads
+   * unconditionally -- and it also invalidates the cache, which is what keeps the write path's
+   * post-write confirmation read honest.
+   */
+  private async readSnapshotFile(preferCached: boolean = false): Promise<AiraWebdavSnapshotRead> {
     this.assertConfigured();
     const path = this.snapshotPath();
-    let response = await this.request('GET', path);
+    let response = await this.request(
+      'GET',
+      path,
+      undefined,
+      preferCached && this.cachedSnapshotEtag.length > 0
+        ? { ifNoneMatch: this.cachedSnapshotEtag }
+        : undefined
+    );
     if (response.status === 409) {
       await this.ensureRemoteLayout();
       response = await this.request('GET', path);
     }
     if (response.status === 404) {
+      this.rememberSnapshotRead(null, '');
       return { file: null, etag: '' };
     }
+    // A provider may ignore the validator and send the body anyway; then parse it as usual.
+    if (response.status === 304) {
+      if (this.cachedSnapshotFile !== undefined) {
+        return { file: this.cachedSnapshotFile, etag: this.cachedSnapshotEtag };
+      }
+      response = await this.request('GET', path);
+    }
     this.assertSuccess(response, path);
-    return {
+    const read: AiraWebdavSnapshotRead = {
       file: this.parseSnapshotFile(response.body),
       etag: this.readHeaderValue(response.headers, 'etag')
     };
+    this.rememberSnapshotRead(read.file, read.etag);
+    return read;
+  }
+
+  private rememberSnapshotRead(file: AiraWebdavBookmarkSnapshotFile | null, etag: string): void {
+    this.cachedSnapshotFile = file;
+    this.cachedSnapshotEtag = etag;
+  }
+
+  /** Drops the cached remote file; any write invalidates what the cache was validating. */
+  private invalidateSnapshotReadCache(): void {
+    this.cachedSnapshotFile = undefined;
+    this.cachedSnapshotEtag = '';
   }
 
   private parseSnapshotFile(payload: string): AiraWebdavBookmarkSnapshotFile {

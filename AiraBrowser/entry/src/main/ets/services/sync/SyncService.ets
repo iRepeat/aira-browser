@@ -1086,7 +1086,7 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
     AiraSyncJankProbe.endExtra(
       'bookmark_remote_read',
       remoteReadStartedAt,
-      `provider=${remoteKind} snapshotBytes=${this.measureSnapshotPayloadBytes(loadedRemoteState.snapshot)}`
+      `provider=${remoteKind}`
     );
     await this.workThrottle.afterStage();
     const recoveredHuaweiRemoteFromBaseline = remoteKind === 'huawei_space' && baseline !== undefined &&
@@ -1259,7 +1259,7 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
     AiraSyncJankProbe.endExtra(
       'bookmark_remote_commit',
       remoteCommitStartedAt,
-      `provider=${remoteKind} payloadBytes=${this.measureSnapshotPayloadBytes(mergeResult.snapshot)}`
+      `provider=${remoteKind}`
     );
     const remoteConfirmStartedAt = Date.now();
     await this.runBookmarkStage(
@@ -1493,6 +1493,15 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
       AiraSyncJankProbe.markExtra('bookmark_confirm', 'mode=write-already-confirmed');
       return;
     }
+    if (remoteKind === 'self_hosted') {
+      // The Personal Server stores the snapshot verbatim (snapshot-store.writeBookmark) and answers
+      // with the commit id it just persisted, under a parent-commit compare-and-swap. Re-reading the
+      // whole snapshot only downloads back what we sent, so it is skipped here. The hosted Aira Cloud
+      // is deliberately excluded: its server is not part of this repository, so the same guarantee is
+      // unverified there and the read-back confirmation stays.
+      AiraSyncJankProbe.markExtra('bookmark_confirm', 'mode=server-stores-verbatim');
+      return;
+    }
     const confirmed = this.projectRemoteStateForBookmarkSync(await store.readState());
     if (confirmed.snapshot === null || confirmed.commitId !== expectedCommitId || confirmed.history === null ||
       !this.bookmarkHistoryService.sameHistory(confirmed.history, expectedHistory) ||
@@ -1724,20 +1733,6 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
       folders: reachableIds.folders.size,
       items: reachableIds.items.size
     };
-  }
-
-  // Temporary sync-jank diagnostic: the byte size of a snapshot, so a stage's duration can be
-  // correlated with the payload it had to parse. Grep [DEBUG-sync-jank-9f3c] to remove with the
-  // rest of the AiraSyncJankProbe probes.
-  private measureSnapshotPayloadBytes(snapshot: AiraSyncSnapshot | null): number {
-    if (snapshot === null) {
-      return 0;
-    }
-    try {
-      return JSON.stringify(snapshot).length;
-    } catch (_error) {
-      return -1;
-    }
   }
 
   private projectRemoteStateForBookmarkSync(state: AiraSyncRemoteState): AiraSyncRemoteState {
