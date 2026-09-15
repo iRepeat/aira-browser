@@ -24,6 +24,9 @@ export interface BrowserLargeScreenOmniboxSearchPresentationInput {
 export interface BrowserLargeScreenOmniboxSearchPresentation {
   visible: boolean;
   searchSuggestions: SearchSuggestion[];
+  // The history header (title + clear-all action) is only meaningful when the
+  // list actually carries search history; remote-only suggestions never show it.
+  hasHistorySuggestions: boolean;
   externalAppSearchTargets: ExternalAppSearchTarget[];
   externalAppSearchPageSize: number;
 }
@@ -44,10 +47,14 @@ export class BrowserLargeScreenOmniboxSearchViewModel {
       inputFocused: input.inputFocused,
       preferences: input.externalAppSearchPreferences
     });
+    const searchSuggestions = input.suggestions.filter((suggestion: SearchSuggestion): boolean => {
+      return suggestion.source === 'search_history' || suggestion.source === 'suggestions';
+    });
     return {
       visible: input.editing && input.inputFocused,
-      searchSuggestions: input.suggestions.filter((suggestion: SearchSuggestion): boolean => {
-        return suggestion.source === 'search_history' || suggestion.source === 'suggestions';
+      searchSuggestions: searchSuggestions,
+      hasHistorySuggestions: searchSuggestions.some((suggestion: SearchSuggestion): boolean => {
+        return suggestion.source === 'search_history';
       }),
       externalAppSearchTargets: externalAppSearchTargets,
       externalAppSearchPageSize: this.resolveExternalAppSearchPageSize(

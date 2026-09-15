@@ -667,6 +667,90 @@ describe('Airatab realistic bookmark sync flows', () => {
     });
   });
 
+  test('an untouched desktop does not get a conflict when the remote tombstone frontier moved', async () => {
+    // Reported symptom: the popup asked to resolve "双向修改冲突" although nothing had been
+    // edited on the desktop. Cause: the shared tombstone frontier advanced elsewhere, which
+    // excludes this device's baseline for one run; the missing-baseline merge then treated a
+    // remote deletion as a delete-vs-edit conflict. A first join has no shared ancestor, so it
+    // cannot prove any edit and must treat a surviving tombstone as a deletion (design doc 6.1b).
+    const confirmed = createSnapshot('desktop-a', [{ id: 'item-a', title: 'A', revision: 2 }]);
+    const remote = new MemoryRemoteStore({
+      snapshot: createSnapshot('phone-a', [], [{
+        id: 'item-a',
+        type: 'bookmark-item',
+        deletedAt: T1,
+        deletedBy: 'phone-a',
+        lastKnownRevision: 1,
+      }]),
+      commitId: 'commit-seed',
+      // The phone advanced the shared frontier; this device's baseline still carries the origin.
+      history: {
+        version: 1,
+        epochId: 'bookmark-history-v1-advanced-phone',
+        retainedFrom: '2026-07-26T00:00:00.000Z',
+      },
+    });
+    const flow = await runSync({
+      local: confirmed,
+      remote,
+      baseline: createBaseline(confirmed, 'commit-seed'),
+    });
+
+    expect({
+      kind: flow.result.kind,
+      conflicts: flow.result.mergeResult?.conflicts.length ?? 0,
+      localItems: expectLiveItemIds(flow.local),
+      localTombstones: Object.keys(flow.local.tombstones),
+    }).toEqual({
+      // The remote deletion applies silently; the run also carries the advanced frontier,
+      // so it is a merge rather than a pure pull. What matters is that no conflict is asked.
+      kind: 'merge',
+      conflicts: 0,
+      localItems: [],
+      localTombstones: ['bookmark-item|item-a'],
+    });
+  });
+
+  test('a resolved conflict does not re-appear on the next run of the same state', async () => {
+    // Regression guard for the sticky dialog: once the user picks a side, the very next run
+    // against the same state must not re-derive the same conflict.
+    const confirmed = createSnapshot('desktop-a', [{ id: 'item-a', title: 'A', revision: 2 }]);
+    const remote = new MemoryRemoteStore({
+      snapshot: createSnapshot('phone-a', [], [{
+        id: 'item-a',
+        type: 'bookmark-item',
+        deletedAt: T1,
+        deletedBy: 'phone-a',
+        lastKnownRevision: 1,
+      }]),
+      commitId: 'commit-seed',
+      history: {
+        version: 1,
+        epochId: 'bookmark-history-v1-advanced-phone',
+        retainedFrom: '2026-07-26T00:00:00.000Z',
+      },
+    });
+
+    const first = await runSync({
+      local: confirmed,
+      remote,
+      baseline: createBaseline(confirmed, 'commit-seed'),
+      conflictResolution: 'prefer-local',
+    });
+    const second = await runSync({
+      local: first.local,
+      remote,
+      baseline: first.baselineStore.value,
+      conflictResolution: 'prefer-local',
+    });
+
+    expect({
+      firstKind: first.result.kind,
+      secondKind: second.result.kind,
+      secondConflicts: second.result.mergeResult?.conflicts.length ?? 0,
+    }).toEqual({ firstKind: 'push', secondKind: 'noop', secondConflicts: 0 });
+  });
+
   test('concurrent incompatible edits stop at a conflict without advancing the baseline', async () => {
     const base = createSnapshot('desktop-a', [{ id: 'item-a', title: 'Before' }]);
     const local = createSnapshot('desktop-a', [{ id: 'item-a', title: 'Desktop', revision: 2, updatedAt: T1 }]);

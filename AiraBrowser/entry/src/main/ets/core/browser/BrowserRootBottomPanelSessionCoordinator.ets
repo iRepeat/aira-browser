@@ -496,6 +496,8 @@ export interface BrowserRootBottomPanelActionApplication {
     dispatch: BrowserRootBottomPanelActionDispatch,
     showHomePage: boolean
   ): BrowserRootBottomPanelShellAction | undefined;
+  isShellDepartingAction(dispatch: BrowserRootBottomPanelActionDispatch): boolean;
+  isShellDepartingSheetAction(isHomeLane: boolean, actionId: string): boolean;
   buildSemanticProjection(
     semanticState: BrowserRootBottomPanelSemanticState
   ): BrowserRootBottomPanelSemanticProjection;
@@ -1688,17 +1690,33 @@ export class BrowserRootBottomPanelSessionCoordinator {
         };
       }
     }
-    const plan = this.buildPanelActionTapPlan(actionId, snapshot);
     const dispatch: BrowserRootBottomPanelActionDispatch = isHeaderAction ?
       { lane: 'header', actionId } :
       { lane: isHomeAction ? 'home' : 'web', actionId: actionId as BrowserBottomPanelActionId };
+    const plan = this.buildPanelActionTapPlan(dispatch, snapshot);
     if (plan.dispatchTiming === 'after_low_settle') {
+      hilog.info(
+        BROWSER_ROOT_BOTTOM_PANEL_LOG_DOMAIN,
+        BROWSER_ROOT_BOTTOM_PANEL_LOG_TAG,
+        '[DIAG-route-action-20260914] session_deferred action=%{public}s lane=%{public}s detent=%{public}s',
+        dispatch.actionId,
+        dispatch.lane,
+        snapshot.currentDetent
+      );
       this.pendingActionAfterCollapsedSettle = dispatch;
       this.schedulePendingActionSettleFallback();
       this.settleSearchBackdropToDetent('low');
       this.sink.applyChromePlan(plan.chromePlan);
       return {};
     }
+    hilog.info(
+      BROWSER_ROOT_BOTTOM_PANEL_LOG_DOMAIN,
+      BROWSER_ROOT_BOTTOM_PANEL_LOG_TAG,
+      '[DIAG-route-action-20260914] session_immediate action=%{public}s lane=%{public}s detent=%{public}s',
+      dispatch.actionId,
+      dispatch.lane,
+      snapshot.currentDetent
+    );
     this.clearPendingActionSettleFallback();
     this.pendingActionAfterCollapsedSettle = undefined;
     this.sink.applyChromePlan(plan.chromePlan);
@@ -1869,9 +1887,10 @@ export class BrowserRootBottomPanelSessionCoordinator {
   }
 
   private buildPanelActionTapPlan(
-    actionId: string,
+    dispatch: BrowserRootBottomPanelActionDispatch,
     snapshot: BrowserRootBottomPanelSessionSnapshot
   ): BrowserRootBottomPanelActionTapPlan {
+    const actionId = dispatch.actionId;
     if (actionId === 'webBack' || actionId === 'webForward') {
       return {
         chromePlan: this.buildEmptyChromePlan(),
@@ -1884,9 +1903,15 @@ export class BrowserRootBottomPanelSessionCoordinator {
         dispatchTiming: 'immediate'
       };
     }
-    const dispatchAfterLowSettle = this.isExpandedDetent(snapshot.currentDetent);
+    const panelExpanded = this.isExpandedDetent(snapshot.currentDetent);
+    // An action that leaves the shell for another page is covered by that page's own
+    // transition, so its push starts in the tap frame and overlaps the panel collapse.
+    // Every other expanded-panel action still waits for the settle: its own surface
+    // (sheet, overlay, in-page mode) would animate against the collapsing panel.
+    const dispatchAfterLowSettle = panelExpanded &&
+      !this.resolveActionApplication().isShellDepartingAction(dispatch);
     return {
-      chromePlan: this.buildCollapseToLowPlan(snapshot, !dispatchAfterLowSettle),
+      chromePlan: this.buildCollapseToLowPlan(snapshot, !panelExpanded),
       dispatchTiming: dispatchAfterLowSettle ? 'after_low_settle' : 'immediate'
     };
   }

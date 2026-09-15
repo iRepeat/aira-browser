@@ -603,7 +603,7 @@ import {
   BrowserHostedWebHiddenSlot,
   BrowserHostedWebOwnershipCoordinator
 } from '../../core/browser/BrowserHostedWebOwnershipCoordinator';
-import { BROWSER_SYSTEM_FONT_SIZE_SCALE_STORAGE_KEY } from '../../core/browser/BrowserSystemFontScaleCoordinator';
+import { BROWSER_CONTENT_FONT_SIZE_SCALE_STORAGE_KEY } from '../../core/browser/BrowserSystemFontScaleCoordinator';
 import { BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY } from '../../core/theme/BrowserThemeStorageKeys';
 import {
   BrowserWebTextZoomAction,
@@ -4784,6 +4784,7 @@ struct BrowserShellPage {
         this.largeScreenWebZoomDialogSnapshot = snapshot;
       },
       dismissWebZoom: (): void => this.largeScreenWebZoomDialogController.close(),
+      showMessage: (message: string): void => this.showNativeToast(message),
       readFacts: () => {
         return {
           windowId: this.getWindowScopeId(),
@@ -5078,7 +5079,10 @@ struct BrowserShellPage {
       target: 'confirm_enter_private'
     }, 0);
   @State privateModeClearDataSelected: boolean = false;
-  @StorageProp(BROWSER_SYSTEM_FONT_SIZE_SCALE_STORAGE_KEY) @Watch('handleSystemFontSizeScaleChange')
+  // Web page text zoom follows the shell-aware content scale, not the raw system
+  // scale: the PC shell pins it to the app default so page text does not inflate
+  // with the system accessibility setting. A user's own zoom still applies.
+  @StorageProp(BROWSER_CONTENT_FONT_SIZE_SCALE_STORAGE_KEY) @Watch('handleSystemFontSizeScaleChange')
   private systemFontSizeScale: number = 1;
   // The injected video action toolbar paints its own floating chips, so a resolved-mode change
   // must refresh it explicitly; the toolbar is not part of the native theme invalidation path.
@@ -6337,6 +6341,7 @@ struct BrowserShellPage {
         ),
         userScriptApplicationSnapshot: this.browserUserScriptApplicationSnapshot,
         largeScreenNativeVideoTakeoverActive: this.isAssistantVideoTakeoverActive(),
+        largeScreenWebFullscreenActive: this.browserFullscreenSessionPresentation.fullScreenModeEnabled,
         largeScreenQuickSearchPresentation: this.quickSearchSwitchingPresentation,
         recentlyClosedApplicationSnapshot: this.recentlyClosedApplicationSnapshot,
         onLargeScreenSelectQuickSearchEngine: (engineId: string): void => {
@@ -6879,6 +6884,11 @@ struct BrowserShellPage {
       onAction: (actionId: BrowserBottomAddressPanelActionId) => {
         this.dispatchRootBottomPanelAction('panel', actionId);
       },
+      onShouldDispatchSheetActionImmediately: (actionId: BrowserBottomAddressPanelActionId): boolean =>
+        this.browserRootBottomPanelActionApplication.isShellDepartingSheetAction(
+          this.isRootBottomPanelEffectiveHomeMode(),
+          actionId
+        ),
       onContinueReading: (): void => this.novelReaderSession.handleAction({ type: 'continue_reading' }),
       onKeyboardResizeSessionBegin: () => {
         this.requestRootBottomAddressInputKeyboardAvoidMode();

@@ -102,6 +102,7 @@ export type BrowserLargeScreenNavigationIntentKind =
   'dismiss_omnibox' |
   'open_suggestion' |
   'delete_history_suggestion' |
+  'clear_history_suggestions' |
   'select_search_engine' |
   'external_app_search' |
   'open_bookmark_popup' |
@@ -182,6 +183,7 @@ export interface BrowserLargeScreenShellIntentDependencies {
   presentWebZoom: (snapshot: BrowserLargeScreenWebZoomSnapshot) => void;
   updateWebZoom: (snapshot: BrowserLargeScreenWebZoomSnapshot) => void;
   dismissWebZoom: () => void;
+  showMessage: (message: string) => void;
   readFacts: () => BrowserLargeScreenShellIntentFacts;
 }
 
@@ -778,6 +780,13 @@ export class BrowserLargeScreenShellIntentApplication {
     }
     if (intent.kind === 'delete_history_suggestion' && intent.suggestion !== undefined) {
       void this.dependencies.searchSuggestionCoordinator.deleteHistorySuggestion(intent.suggestion);
+      return;
+    }
+    if (intent.kind === 'clear_history_suggestions') {
+      void this.dependencies.searchSuggestionCoordinator.clearHistorySuggestions()
+        .then((cleared: boolean): void => {
+          this.dependencies.showMessage(cleared ? '已清空搜索历史。' : '当前没有搜索历史。');
+        });
       return;
     }
     if (intent.kind === 'select_search_engine' && intent.searchEngineId !== undefined) {

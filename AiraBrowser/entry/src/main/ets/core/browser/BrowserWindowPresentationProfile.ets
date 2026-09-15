@@ -18,6 +18,13 @@ export interface BrowserWindowPresentationProfileInput {
   platformDeviceType?: string;
   windowWidthVp?: number;
   windowHeightVp?: number;
+  /**
+   * Device identity as HarmonyOS reports it. Fold-size classification reads
+   * these because pixel geometry cannot separate a pocket foldable from a wide
+   * book foldable; see BrowserTabletInterfaceModePolicy.
+   */
+  deviceMarketName?: string;
+  deviceProductModel?: string;
   pointerAvailable?: boolean;
   tabletInterfaceMode?: BrowserTabletInterfaceMode;
   foldState?: BrowserFoldPresentationState;
@@ -78,7 +85,9 @@ export class BrowserWindowPresentationProfileCoordinator {
       detectedFormFactor: eligibility.detectedFormFactor,
       selectedMode: input.tabletInterfaceMode ?? 'auto',
       pointerAvailable: input.pointerAvailable === true,
-      foldState: input.foldState ?? 'unknown'
+      foldState: input.foldState ?? 'unknown',
+      deviceMarketName: input.deviceMarketName,
+      deviceProductModel: input.deviceProductModel
     });
     const family = this.resolveFamily(tabletModeDecision, normalizedAvailability);
     const familyLocked = eligibility.detectedFormFactor === 'pc' || eligibility.detectedFormFactor === 'two_in_one';

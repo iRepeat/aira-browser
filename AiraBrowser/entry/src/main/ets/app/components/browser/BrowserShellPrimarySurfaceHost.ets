@@ -104,6 +104,7 @@ export struct BrowserShellPrimarySurfaceHost {
   @Prop userScriptApplicationSnapshot: BrowserUserScriptApplicationSnapshot =
     createBrowserUserScriptApplicationSnapshot();
   @Prop largeScreenNativeVideoTakeoverActive: boolean = false;
+  @Prop largeScreenWebFullscreenActive: boolean = false;
   @Prop largeScreenQuickSearchPresentation: BrowserQuickSearchSwitchingPresentation =
     createHiddenBrowserQuickSearchSwitchingPresentation();
   @Prop recentlyClosedApplicationSnapshot: BrowserRecentlyClosedApplicationSnapshot =
@@ -144,6 +145,7 @@ export struct BrowserShellPrimarySurfaceHost {
         webZoomSnapshot: this.largeScreenWebZoomSnapshot,
         userScriptApplicationSnapshot: this.userScriptApplicationSnapshot,
         nativeVideoTakeoverActive: this.largeScreenNativeVideoTakeoverActive,
+        webFullscreenActive: this.largeScreenWebFullscreenActive,
         quickSearchPresentation: this.largeScreenQuickSearchPresentation,
         recentlyClosed: this.recentlyClosedApplicationSnapshot,
         onSelectQuickSearchEngine: (engineId: string): void => {

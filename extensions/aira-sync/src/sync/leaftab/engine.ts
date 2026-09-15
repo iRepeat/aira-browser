@@ -423,7 +423,11 @@ export class LeafTabSyncEngine {
       : mergeLeafTabSyncSnapshotWithoutBaseline(
           localSnapshot,
           remoteSnapshot,
-          { deviceId: this.config.deviceId },
+          {
+            deviceId: this.config.deviceId,
+            conflictResolution: runOptions?.conflictResolution,
+            mergeIntent: runOptions?.mergeIntent,
+          },
         );
     const finalSnapshot = canonicalizeSnapshotBookmarkUrls(mergeResult.snapshot);
     const summary = summarizeLeafTabSyncMerge(baseSnapshot, mergeResult);

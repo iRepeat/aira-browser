@@ -28,6 +28,12 @@ export interface BrowserTabletInterfaceModeSettingsState {
   footerText: string;
 }
 
+interface BrowserTabletInterfaceModeDeviceFacts {
+  detectedFormFactor: BrowserDeviceFormFactor;
+  foldableDevice: boolean;
+  smallFoldableDevice: boolean;
+}
+
 export class BrowserTabletInterfaceModeSettingsCoordinator {
   private readonly repository: BrowserTabletInterfaceModeRepository;
   private readonly privacyEffectPolicy: BrowserPrivacyEffectPolicyService;
@@ -54,16 +60,15 @@ export class BrowserTabletInterfaceModeSettingsCoordinator {
   }
 
   buildStateForMode(mode: BrowserTabletInterfaceMode): BrowserTabletInterfaceModeSettingsState {
-    const detectedFormFactor = this.resolveDetectedFormFactor();
-    const foldableDevice = this.presentationInputService.resolveFoldableDevice();
-    const selectedMode = this.resolveSelectedModeForDevice(mode, detectedFormFactor, foldableDevice);
+    const device = this.resolveDeviceFacts();
+    const selectedMode = this.resolveSelectedModeForDevice(mode, device);
     return {
-      visible: this.isSettingVisible(detectedFormFactor, mode),
-      detectedFormFactor: detectedFormFactor,
+      visible: this.isSettingVisible(device.detectedFormFactor, mode),
+      detectedFormFactor: device.detectedFormFactor,
       selectedMode: selectedMode,
       selectedLabel: this.resolveLabel(selectedMode),
-      options: this.resolveOptions(detectedFormFactor, foldableDevice),
-      footerText: this.resolveFooterText(detectedFormFactor, foldableDevice)
+      options: this.resolveOptions(device),
+      footerText: this.resolveFooterText(device)
     };
   }
 
@@ -90,8 +95,26 @@ export class BrowserTabletInterfaceModeSettingsCoordinator {
   }
 
   requiresDesktopModeConfirmation(mode: BrowserTabletInterfaceMode): boolean {
-    return mode === 'desktop' && this.resolveDetectedFormFactor() === 'phone' &&
-      !this.presentationInputService.resolveFoldableDevice();
+    const device = this.resolveDeviceFacts();
+    return mode === 'desktop' && device.detectedFormFactor === 'phone' && !device.foldableDevice;
+  }
+
+  private resolveDeviceFacts(): BrowserTabletInterfaceModeDeviceFacts {
+    const detectedFormFactor = this.resolveDetectedFormFactor();
+    const foldFacts = this.presentationInputService.resolveFoldPresentationFacts();
+    const foldableDevice = foldFacts.capabilityConfirmed;
+    // The setting describes the same device the runtime switches, so it reuses
+    // the policy's identity match rather than re-deriving the foldable size.
+    const smallFoldableDevice = detectedFormFactor === 'phone' && foldableDevice &&
+      this.interfaceModePolicy.isKnownSmallFoldable(
+        this.presentationInputService.resolveDeviceMarketName(),
+        this.presentationInputService.resolveDeviceProductModel()
+      );
+    return {
+      detectedFormFactor: detectedFormFactor,
+      foldableDevice: foldableDevice,
+      smallFoldableDevice: smallFoldableDevice
+    };
   }
 
   private resolveDetectedFormFactor(): BrowserDeviceFormFactor {
@@ -130,20 +153,18 @@ export class BrowserTabletInterfaceModeSettingsCoordinator {
 
   private resolveSelectedModeForDevice(
     mode: BrowserTabletInterfaceMode,
-    detectedFormFactor: BrowserDeviceFormFactor,
-    foldableDevice: boolean
+    device: BrowserTabletInterfaceModeDeviceFacts
   ): BrowserTabletInterfaceMode {
-    if (detectedFormFactor === 'phone' && !foldableDevice && mode === 'auto') {
+    if (device.detectedFormFactor === 'phone' && !device.foldableDevice && mode === 'auto') {
       return 'touch';
     }
     return mode;
   }
 
   private resolveOptions(
-    detectedFormFactor: BrowserDeviceFormFactor,
-    foldableDevice: boolean
+    device: BrowserTabletInterfaceModeDeviceFacts
   ): BrowserTabletInterfaceModeOptionState[] {
-    if (detectedFormFactor === 'phone' && !foldableDevice) {
+    if (device.detectedFormFactor === 'phone' && !device.foldableDevice) {
       return [
         { mode: 'touch', title: '触屏界面' },
         { mode: 'desktop', title: '桌面界面' }
@@ -157,13 +178,15 @@ export class BrowserTabletInterfaceModeSettingsCoordinator {
   }
 
   private resolveFooterText(
-    detectedFormFactor: BrowserDeviceFormFactor,
-    foldableDevice: boolean
+    device: BrowserTabletInterfaceModeDeviceFacts
   ): string {
-    if (detectedFormFactor === 'phone' && !foldableDevice) {
+    if (device.detectedFormFactor === 'phone' && !device.foldableDevice) {
       return '手机使用桌面界面可能出现内容过密、按钮过小或部分布局不适配。切换到桌面界面前需要再次确认。';
     }
-    if (foldableDevice) {
+    if (device.smallFoldableDevice) {
+      return '小折叠屏展开后仍使用触屏界面，因为展开后的屏幕较窄；手动选择桌面界面时除外。';
+    }
+    if (device.foldableDevice) {
       return '自动模式会在设备展开时使用桌面界面，收起时恢复触屏界面；半折叠或状态未知时保持当前界面。';
     }
     return '自动模式会在连接鼠标或触控板时使用桌面界面，断开后恢复触屏界面。物理键盘仍可在触屏界面中使用快捷键。';

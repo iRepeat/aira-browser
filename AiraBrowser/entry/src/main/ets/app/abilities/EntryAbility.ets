@@ -41,6 +41,7 @@ import {
   BrowserWindowDisplayViewportCoordinator
 } from '../../core/browser/BrowserWindowDisplayViewportCoordinator';
 import { BrowserShellAdapterCatalog } from '../../core/browser/BrowserShellAdapterCatalog';
+import { BrowserShellFamily } from '../../core/browser/BrowserWindowPresentationProfile';
 import { BrowserWindowPresentationProfileInputService } from '../../services/browser/BrowserWindowPresentationProfileInputService';
 import {
   sharedBrowserLargeScreenWindowChromeService
@@ -904,6 +905,7 @@ export default class EntryAbility extends UIAbility {
     if (reconciliation.presentationChanged) {
       BrowserShellPresentationRefreshSignal.publish();
     }
+    this.applyShellFamilyUiFontScale(profile.shellFamily, source);
     hilog.info(
       DOMAIN,
       TAG,
@@ -916,6 +918,34 @@ export default class EntryAbility extends UIAbility {
       profile.decisionReason,
       profile.revision
     );
+  }
+
+  /**
+   * Applies the shell-family font scale policy. The PC shell pins both its own UI
+   * text and its content text to the app default so the system accessibility
+   * setting cannot overflow the dense large-screen chrome or inflate page text;
+   * the phone shell keeps following the system setting.
+   */
+  private applyShellFamilyUiFontScale(shellFamily: BrowserShellFamily, source: string): void {
+    try {
+      const applied = this.browserSystemFontScaleCoordinator.applyForShellFamily(
+        this.context.getApplicationContext(),
+        shellFamily
+      );
+      if (applied) {
+        hilog.info(
+          DOMAIN,
+          TAG,
+          'Browser font scale applied source=%{public}s family=%{public}s uiScale=%{public}s contentScale=%{public}s',
+          source,
+          shellFamily,
+          String(this.browserSystemFontScaleCoordinator.resolveAppUiScale()),
+          String(this.browserSystemFontScaleCoordinator.resolveContentScale())
+        );
+      }
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, 'Failed to apply shell font scale: %{public}s', JSON.stringify(error));
+    }
   }
 
   private reconcileBrowserLargeScreenWindowFacts(

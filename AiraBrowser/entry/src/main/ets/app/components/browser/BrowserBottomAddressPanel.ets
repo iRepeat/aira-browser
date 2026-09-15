@@ -167,6 +167,10 @@ const WEB_BOTTOM_ADDRESS_BAR_HEIGHT: number = 44;
 const USER_AGENT_ACTION_DIAGNOSTIC_LOG_DOMAIN: number = 0x0000;
 const USER_AGENT_ACTION_DIAGNOSTIC_LOG_TAG: string = 'BrowsingIdentity';
 const USER_AGENT_ACTION_DIAGNOSTIC_PREFIX: string = '[DEBUG-UA-ACTION-20260828]';
+// Temporary Phase-D timing evidence for routed toolbar actions. Remove with the diagnostic.
+const ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN: number = 0x0000;
+const ROUTE_ACTION_DIAGNOSTIC_LOG_TAG: string = 'RouteActionDiag';
+const ROUTE_ACTION_DIAGNOSTIC_PREFIX: string = '[DIAG-route-action-20260914]';
 const WEB_BOTTOM_ADDRESS_INPUT_CONTENT_HEIGHT: number = 44;
 const WEB_BOTTOM_ADDRESS_INPUT_LINE_HEIGHT: number = BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT;
 const WEB_BOTTOM_ADDRESS_BUTTON_SIZE: number = 44;
@@ -462,6 +466,12 @@ export struct BrowserBottomAddressPanel {
   onHomeRevealSuggestions: () => void = () => {};
   onHomeDismiss: () => void = () => {};
   onAction: (actionId: BrowserBottomAddressPanelActionId) => void = (_actionId: BrowserBottomAddressPanelActionId) => {};
+  // The Shell answers this from the fixed action application so this UI shell does not own
+  // which actions replace the page. A page-replacing Sheet action may dispatch in the tap
+  // frame instead of waiting for the Sheet's dismiss animation; in-shell surfaces keep the
+  // dismissal gate because their own sheet or overlay would collide with the closing Sheet.
+  onShouldDispatchSheetActionImmediately: (actionId: BrowserBottomAddressPanelActionId) => boolean =
+    (_actionId: BrowserBottomAddressPanelActionId) => false;
   onContinueReading: () => void = (): void => {};
   onKeyboardResizeSessionBegin: () => void = () => {};
   onKeyboardResizeSessionEnd: () => void = () => {};
@@ -2181,6 +2191,8 @@ export struct BrowserBottomAddressPanel {
     return [];
   }
 
+  private toolbarActionTapStartedAt: number = -1;
+
   private dispatchPanelAction(item: BrowserBottomAddressPanelAction): void {
     hilog.info(
       USER_AGENT_ACTION_DIAGNOSTIC_LOG_DOMAIN,
@@ -2201,8 +2213,26 @@ export struct BrowserBottomAddressPanel {
       }
       return;
     }
+    this.toolbarActionTapStartedAt = Date.now();
+    hilog.info(
+      ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN,
+      ROUTE_ACTION_DIAGNOSTIC_LOG_TAG,
+      '%{public}s panel_action_tap id=%{public}s expansionStage=%{public}s detent=%{public}s',
+      ROUTE_ACTION_DIAGNOSTIC_PREFIX,
+      item.id,
+      this.toolbarExpansionStage,
+      this.panelDetent
+    );
     this.beginFloatingActionContentExit((): void => {
       this.finishAddressEditing(true);
+      hilog.info(
+        ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN,
+        ROUTE_ACTION_DIAGNOSTIC_LOG_TAG,
+        '%{public}s panel_action_handoff id=%{public}s waitMs=%{public}d',
+        ROUTE_ACTION_DIAGNOSTIC_PREFIX,
+        item.id,
+        Date.now() - this.toolbarActionTapStartedAt
+      );
       this.onAction(item.id);
     });
   }
@@ -2218,6 +2248,28 @@ export struct BrowserBottomAddressPanel {
       if (message.length > 0) {
         this.getUIContext().getPromptAction().showToast({ message: message, duration: 1500 });
       }
+      return;
+    }
+    this.toolbarActionTapStartedAt = Date.now();
+    hilog.info(
+      ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN,
+      ROUTE_ACTION_DIAGNOSTIC_LOG_TAG,
+      '%{public}s sheet_action_requested id=%{public}s',
+      ROUTE_ACTION_DIAGNOSTIC_PREFIX,
+      item.id
+    );
+    if (this.onShouldDispatchSheetActionImmediately(item.id)) {
+      this.pendingToolbarSystemSheetAction = undefined;
+      this.toolbarSystemSheetVisible = false;
+      hilog.info(
+        ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN,
+        ROUTE_ACTION_DIAGNOSTIC_LOG_TAG,
+        '%{public}s sheet_action_immediate id=%{public}s waitMs=%{public}d',
+        ROUTE_ACTION_DIAGNOSTIC_PREFIX,
+        item.id,
+        Date.now() - this.toolbarActionTapStartedAt
+      );
+      this.onAction(item.id);
       return;
     }
     this.pendingToolbarSystemSheetAction = item;
@@ -2254,6 +2306,14 @@ export struct BrowserBottomAddressPanel {
     // instances and debounces the rest, so a fast close-then-reopen does not flap.
     this.onToolbarSystemSheetDismissed(this.toolbarSystemSheetInstanceToken);
     if (pendingAction !== undefined) {
+      hilog.info(
+        ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN,
+        ROUTE_ACTION_DIAGNOSTIC_LOG_TAG,
+        '%{public}s sheet_dismissed_handoff id=%{public}s waitMs=%{public}d',
+        ROUTE_ACTION_DIAGNOSTIC_PREFIX,
+        pendingAction.id,
+        Date.now() - this.toolbarActionTapStartedAt
+      );
       this.onAction(pendingAction.id);
     }
   }

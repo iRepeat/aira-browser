@@ -1,5 +1,5 @@
 import { ReaderModeTheme } from '../../../common/models/BrowserModels';
-import { BROWSER_SYSTEM_FONT_SIZE_SCALE_STORAGE_KEY } from '../../../core/browser/BrowserSystemFontScaleCoordinator';
+import { BROWSER_CONTENT_FONT_SIZE_SCALE_STORAGE_KEY } from '../../../core/browser/BrowserSystemFontScaleCoordinator';
 import {
   ReadingAnchor,
   ReadingDocument,
@@ -80,7 +80,9 @@ export struct ReadingSurface {
   @Prop @Watch('onCommandChanged') command: ReadingSurfaceCommand = createDefaultReadingSurfaceCommand();
   @Prop @Watch('onSearchChanged') search: ReadingSurfaceSearchPresentation =
     createDefaultReadingSurfaceSearchPresentation();
-  @StorageProp(BROWSER_SYSTEM_FONT_SIZE_SCALE_STORAGE_KEY) @Watch('onPresentationChanged')
+  // Reader content follows the shell-aware content scale: the PC shell pins it to
+  // the app default so book/article text does not inflate with the system setting.
+  @StorageProp(BROWSER_CONTENT_FONT_SIZE_SCALE_STORAGE_KEY) @Watch('onPresentationChanged')
   private systemFontSizeScale: number = 1;
   onAction: (action: ReadingSurfaceAction) => void = (_action: ReadingSurfaceAction): void => {};
 

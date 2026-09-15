@@ -107,6 +107,12 @@ export struct BrowserLargeScreenPrimarySurface {
   @Prop userScriptApplicationSnapshot: BrowserUserScriptApplicationSnapshot =
     createBrowserUserScriptApplicationSnapshot();
   @Prop nativeVideoTakeoverActive: boolean = false;
+  // Web content / video fullscreen (or the manual full-screen mode). The large
+  // screen owns its chrome inside the shell, so the window-level full-screen
+  // change alone leaves the tab strip and toolbar painted. This flag collapses
+  // that chrome so the Web stage fills the window, matching the phone shell,
+  // which hides its chrome through the top-chrome immersion path.
+  @Prop webFullscreenActive: boolean = false;
   @Prop quickSearchPresentation: BrowserQuickSearchSwitchingPresentation =
     createHiddenBrowserQuickSearchSwitchingPresentation();
   @Prop recentlyClosed: BrowserRecentlyClosedApplicationSnapshot =
@@ -149,7 +155,13 @@ export struct BrowserLargeScreenPrimarySurface {
       // the entire session. Reparenting the ArkWeb node when takeover starts can
       // detach its media surface on large screens even though audio continues.
       Column({ space: 0 }) {
-        if (!this.nativeVideoTakeoverActive) {
+        // Entering Web/video fullscreen collapses the whole Large-Screen chrome
+        // (tab strip, navigation toolbar, bookmark bar, quick-search row). The
+        // window-level full-screen change alone leaves this chrome painted, so
+        // the Web stage would never reach the window edges. The window decor
+        // lease lives on this surface, not on the top shell, so unmounting the
+        // shell keeps the system title bar hidden.
+        if (!this.nativeVideoTakeoverActive && !this.webFullscreenActive) {
           BrowserLargeScreenTopShellSurface({
         windowChromeLeaseId: this.titleBarWindowChromeLeaseId,
         presentation: this.presentation,
@@ -179,7 +191,6 @@ export struct BrowserLargeScreenPrimarySurface {
         }
           })
           .zIndex(LARGE_SCREEN_TOP_SHELL_Z_INDEX)
-          .visibility(Visibility.Visible)
 
       // Quick search-engine switch bar. On phone this lives in the web top-chrome
       // overlay; the large-screen shell has its own chrome, so surface it here as
@@ -256,14 +267,14 @@ export struct BrowserLargeScreenPrimarySurface {
   }
 
   private shouldRenderSidePanel(): boolean {
-    if (this.nativeVideoTakeoverActive) {
+    if (this.nativeVideoTakeoverActive || this.webFullscreenActive) {
       return false;
     }
     return this.presentation === undefined ? this.sidePanelVisible : this.presentation.sidePanel.visible;
   }
 
   private shouldRenderBottomStatus(): boolean {
-    if (this.nativeVideoTakeoverActive) {
+    if (this.nativeVideoTakeoverActive || this.webFullscreenActive) {
       return false;
     }
     return this.presentation === undefined ? this.bottomStatusVisible : this.presentation.bottomStatusVisible;

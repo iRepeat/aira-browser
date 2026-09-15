@@ -11,6 +11,7 @@ import {
 import {
   sharedNovelSourceIdentityService
 } from '../../services/novel/NovelSourceIdentityService';
+import { NovelFontSubstitutionPolicy } from '../../features/novel/NovelFontSubstitutionPolicy';
 
 interface NovelChapterArtifactCacheDocument extends NovelChapterArtifactCacheRecord {
   schemaVersion: number;
@@ -51,6 +52,7 @@ const NOVEL_CHAPTER_CACHE_MAX_IMAGES: number = 4096;
 export class NovelChapterArtifactCacheRepository implements NovelChapterArtifactCachePort {
   private readonly encoder: util.TextEncoder = util.TextEncoder.create('utf-8');
   private readonly decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
+  private readonly fontSubstitutionPolicy: NovelFontSubstitutionPolicy = new NovelFontSubstitutionPolicy();
   private mutationTask: Promise<void> = Promise.resolve();
   private cleanupTask: Promise<void> = Promise.resolve();
   private writeSequence: number = 0;
@@ -145,7 +147,8 @@ export class NovelChapterArtifactCacheRepository implements NovelChapterArtifact
     const normalized: NovelChapterArtifactCacheRecord | undefined = this.normalizeArtifact(document);
     const expectedUrl: string = sharedNovelSourceIdentityService.normalizeUrl(chapterUrl);
     if (document.schemaVersion !== NOVEL_CHAPTER_CACHE_SCHEMA_VERSION || normalized === undefined ||
-      sharedNovelSourceIdentityService.normalizeUrl(normalized.canonicalUrl) !== expectedUrl) {
+      sharedNovelSourceIdentityService.normalizeUrl(normalized.canonicalUrl) !== expectedUrl ||
+      this.isSubstitutedArtifact(normalized)) {
       await this.removePath(path);
       return undefined;
     }
@@ -154,6 +157,21 @@ export class NovelChapterArtifactCacheRepository implements NovelChapterArtifact
       refreshRecommended: normalized.cachedAt <= 0 ||
         Date.now() - normalized.cachedAt >= NOVEL_CHAPTER_CACHE_REFRESH_INTERVAL_MS
     };
+  }
+
+  /**
+   * Whether a cached record holds text that its page drew through a substitution
+   * font, i.e. characters that are not the real content.
+   *
+   * Such a record can never be served: the codepoint mapping is randomised per
+   * response and the font that decodes it is long gone, so the text can only be
+   * recovered by fetching the chapter again. Rejecting it here covers every cache
+   * consumer — automatic open, Bookshelf navigation, chapter transition, and
+   * prefetch — instead of each caller remembering to check, and removing the file
+   * lets the fresh, deobfuscated fetch replace it.
+   */
+  private isSubstitutedArtifact(artifact: NovelChapterArtifactCacheRecord): boolean {
+    return this.fontSubstitutionPolicy.isSubstitutedParagraphs(artifact.paragraphs);
   }
 
   private async writeNow(value: NovelChapterArtifactCacheRecord): Promise<void> {

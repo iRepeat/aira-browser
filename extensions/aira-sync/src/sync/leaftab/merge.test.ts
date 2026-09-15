@@ -4,6 +4,7 @@ import {
   parseCanonicalLeafTabSyncWireSnapshot,
   toLeafTabSyncWireSnapshot,
   type LeafTabSyncSnapshot,
+  type LeafTabSyncTombstone,
 } from './schema';
 
 const T0 = '2026-08-04T00:00:00.000Z';
@@ -307,6 +308,84 @@ describe('mergeLeafTabSyncSnapshot', () => {
     expect(merged.bookmarkOrders[preservedFolderId!]).toBeUndefined();
     expect(parseCanonicalLeafTabSyncWireSnapshot(toLeafTabSyncWireSnapshot(merged))).not.toBeNull();
   });
+});
 
+describe('missing-baseline deletion is not a delete-vs-edit conflict', () => {
+  // A first join has no shared ancestor, so neither side can be proven to have edited
+  // anything. A surviving tombstone is therefore a deletion instruction, exactly as the App's
+  // mergeMissingBaselineDataSets already treats it (docs/aira-bookmark-canonical-identity-design.md 6.1b).
+  // Reporting a conflict here asked the user to arbitrate content they never changed, and the
+  // dialog could not be resolved because the no-baseline rerun re-derived the same conflict.
+  const tombstoneFor = (id: string, lastKnownRevision: number): LeafTabSyncTombstone => ({
+    id,
+    type: 'bookmark-item',
+    deletedAt: T0,
+    deletedBy: 'phone-a',
+    lastKnownRevision,
+  });
 
+  test('a locally edited item against a remote tombstone deletes instead of asking the user', () => {
+    const local = createSnapshot('desktop-a', { includeLiveItem: true });
+    local.bookmarkItems[COLLIDING_ID].title = 'Desktop edit';
+    local.bookmarkItems[COLLIDING_ID].revision = 2;
+    const remote = createSnapshot('phone-a', { includeItemTombstone: true });
+
+    const result = mergeLeafTabSyncSnapshotWithoutBaseline(local, remote, {
+      deviceId: 'desktop-a',
+      generatedAt: T0,
+    });
+
+    expect(result.conflicts).toEqual([]);
+    expect(result.snapshot.bookmarkItems[COLLIDING_ID]).toBeUndefined();
+    expect(result.snapshot.tombstones[`bookmark-item|${COLLIDING_ID}`]).toBeDefined();
+  });
+
+  test('a local tombstone against a remote live item also reports no conflict', () => {
+    // This direction is settled earlier: a first join drops the local tombstone when the remote
+    // still lists that id live, so the remote entity survives. The point here is only that it
+    // must not surface as a user-facing conflict.
+    const local = createSnapshot('desktop-a', { includeItemTombstone: true });
+    local.tombstones[`bookmark-item|${COLLIDING_ID}`].deletedAt = T1;
+    const remote = createSnapshot('phone-a', { includeLiveItem: true });
+    remote.bookmarkItems[COLLIDING_ID].revision = 2;
+
+    const result = mergeLeafTabSyncSnapshotWithoutBaseline(local, remote, {
+      deviceId: 'desktop-a',
+      generatedAt: T0,
+    });
+
+    expect(result.conflicts).toEqual([]);
+  });
+
+  test('a tombstone whose revision is the older one still deletes, matching the App', () => {
+    const local = createSnapshot('desktop-a', { includeLiveItem: true });
+    local.bookmarkItems[COLLIDING_ID].revision = 5;
+    const remote = createSnapshot('phone-a');
+    remote.tombstones[`bookmark-item|${COLLIDING_ID}`] = tombstoneFor(COLLIDING_ID, 1);
+
+    const result = mergeLeafTabSyncSnapshotWithoutBaseline(local, remote, {
+      deviceId: 'desktop-a',
+      generatedAt: T0,
+    });
+
+    expect(result.conflicts).toEqual([]);
+    expect(result.snapshot.bookmarkItems[COLLIDING_ID]).toBeUndefined();
+  });
+
+  test('an ordinary merge with a baseline still reports the same situation as a conflict', () => {
+    // The no-baseline rule must not weaken the established three-way conflict contract:
+    // ADR-0049 keeps deletion versus a concurrent incompatible field edit as a conflict.
+    const baseline = createSnapshot('baseline', { includeLiveItem: true });
+    const local = createSnapshot('desktop-a', { includeLiveItem: true });
+    local.bookmarkItems[COLLIDING_ID].title = 'Desktop edit';
+    local.bookmarkItems[COLLIDING_ID].revision = 2;
+    const remote = createSnapshot('phone-a', { includeItemTombstone: true });
+
+    const result = mergeLeafTabSyncSnapshot(baseline, local, remote, {
+      deviceId: 'desktop-a',
+      generatedAt: T0,
+    });
+
+    expect(result.conflicts.map((conflict) => conflict.id)).toEqual([COLLIDING_ID]);
+  });
 });

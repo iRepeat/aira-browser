@@ -39,6 +39,16 @@ LARGE_SCREEN_TAB_SNAPSHOT_ADAPTER_REL="AiraBrowser/entry/src/main/ets/core/brows
 LARGE_SCREEN_TAB_SNAPSHOT_ADAPTER="${REPO_ROOT}/${LARGE_SCREEN_TAB_SNAPSHOT_ADAPTER_REL}"
 LARGE_SCREEN_NAV_TOOLBAR_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserLargeScreenNavigationToolbarSurface.ets"
 LARGE_SCREEN_NAV_TOOLBAR="${REPO_ROOT}/${LARGE_SCREEN_NAV_TOOLBAR_REL}"
+LARGE_SCREEN_PRIMARY_SURFACE_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserLargeScreenPrimarySurface.ets"
+LARGE_SCREEN_PRIMARY_SURFACE="${REPO_ROOT}/${LARGE_SCREEN_PRIMARY_SURFACE_REL}"
+SHELL_PRIMARY_SURFACE_HOST_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserShellPrimarySurfaceHost.ets"
+SHELL_PRIMARY_SURFACE_HOST="${REPO_ROOT}/${SHELL_PRIMARY_SURFACE_HOST_REL}"
+NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/video/NativeVideoFullscreenWindowService.ets"
+NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE="${REPO_ROOT}/${NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE_REL}"
+SHELL_FONT_SCALE_POLICY_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserShellFontScalePolicy.ets"
+SHELL_FONT_SCALE_POLICY="${REPO_ROOT}/${SHELL_FONT_SCALE_POLICY_REL}"
+SYSTEM_FONT_SCALE_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSystemFontScaleCoordinator.ets"
+SYSTEM_FONT_SCALE_COORDINATOR="${REPO_ROOT}/${SYSTEM_FONT_SCALE_COORDINATOR_REL}"
 WEB_VIEWPORT_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserWebViewportCoordinator.ets"
 WEB_VIEWPORT_COORDINATOR="${REPO_ROOT}/${WEB_VIEWPORT_COORDINATOR_REL}"
 WEB_TOP_CHROME_OVERLAY_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserWebTopChromeOverlay.ets"
@@ -111,12 +121,39 @@ BOTTOM_ADDRESS_PANEL_METRICS_REL="AiraBrowser/entry/src/main/ets/core/browser/Br
 BOTTOM_ADDRESS_PANEL_METRICS="${REPO_ROOT}/${BOTTOM_ADDRESS_PANEL_METRICS_REL}"
 SEARCH_SUGGESTIONS_PANEL_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserSearchSuggestionsPanel.ets"
 SEARCH_SUGGESTIONS_PANEL="${REPO_ROOT}/${SEARCH_SUGGESTIONS_PANEL_REL}"
+LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserLargeScreenOmniboxSearchSurface.ets"
+LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE="${REPO_ROOT}/${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL}"
+LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserLargeScreenOmniboxSearchViewModel.ets"
+LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL="${REPO_ROOT}/${LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL_REL}"
+LARGE_SCREEN_SHELL_INTENT_APPLICATION_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserLargeScreenShellIntentApplication.ets"
+LARGE_SCREEN_SHELL_INTENT_APPLICATION="${REPO_ROOT}/${LARGE_SCREEN_SHELL_INTENT_APPLICATION_REL}"
 SEARCH_LIST_SURFACE_REL="AiraBrowser/entry/src/main/ets/app/components/browser/BrowserSearchListSurface.ets"
 SEARCH_LIST_SURFACE="${REPO_ROOT}/${SEARCH_LIST_SURFACE_REL}"
 SEARCH_LIST_LAYOUT_VIEW_MODEL_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSearchListSurfaceLayoutViewModel.ets"
 SEARCH_LIST_LAYOUT_VIEW_MODEL="${REPO_ROOT}/${SEARCH_LIST_LAYOUT_VIEW_MODEL_REL}"
 SEARCH_SUGGESTION_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSearchSuggestionCoordinator.ets"
 SEARCH_SUGGESTION_COORDINATOR="${REPO_ROOT}/${SEARCH_SUGGESTION_COORDINATOR_REL}"
+TABLET_INTERFACE_MODE_POLICY_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserTabletInterfaceModePolicy.ets"
+TABLET_INTERFACE_MODE_POLICY="${REPO_ROOT}/${TABLET_INTERFACE_MODE_POLICY_REL}"
+WINDOW_PRESENTATION_PROFILE_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserWindowPresentationProfile.ets"
+WINDOW_PRESENTATION_PROFILE="${REPO_ROOT}/${WINDOW_PRESENTATION_PROFILE_REL}"
+TABLET_INTERFACE_MODE_SETTINGS_REL="AiraBrowser/entry/src/main/ets/core/settings/BrowserTabletInterfaceModeSettingsCoordinator.ets"
+TABLET_INTERFACE_MODE_SETTINGS="${REPO_ROOT}/${TABLET_INTERFACE_MODE_SETTINGS_REL}"
+PRESENTATION_PROFILE_INPUT_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/browser/BrowserWindowPresentationProfileInputService.ets"
+PRESENTATION_PROFILE_INPUT_SERVICE="${REPO_ROOT}/${PRESENTATION_PROFILE_INPUT_SERVICE_REL}"
+NOVEL_FONT_POLICY_REL="AiraBrowser/entry/src/main/ets/features/novel/NovelFontSubstitutionPolicy.ets"
+NOVEL_FONT_POLICY="${REPO_ROOT}/${NOVEL_FONT_POLICY_REL}"
+NOVEL_FONT_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/novel/NovelFontDeobfuscationService.ets"
+NOVEL_FONT_SERVICE="${REPO_ROOT}/${NOVEL_FONT_SERVICE_REL}"
+NOVEL_EXTRACTION_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/novel/NovelExtractionService.ets"
+NOVEL_EXTRACTION_SERVICE="${REPO_ROOT}/${NOVEL_EXTRACTION_SERVICE_REL}"
+NOVEL_CHAPTER_ARTIFACT_CACHE_REL="AiraBrowser/entry/src/main/ets/data/novel/NovelChapterArtifactCacheRepository.ets"
+NOVEL_CHAPTER_ARTIFACT_CACHE="${REPO_ROOT}/${NOVEL_CHAPTER_ARTIFACT_CACHE_REL}"
+NOVEL_FONT_RUNTIME_REL="AiraBrowser/entry/src/main/resources/rawfile/novel-font-deobfuscation.js"
+NOVEL_FONT_RUNTIME="${REPO_ROOT}/${NOVEL_FONT_RUNTIME_REL}"
+NOVEL_FONT_BUILDER_REL="scripts/build-novel-font-deobfuscator.js"
+NOVEL_FONT_BUILDER="${REPO_ROOT}/${NOVEL_FONT_BUILDER_REL}"
+NOVEL_FONT_LICENSE_REL="AiraBrowser/entry/src/main/resources/rawfile/novel-font-deobfuscation-LICENSE.txt"
 SEARCH_INVOCATION_SURFACE_ADAPTER_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserShellSearchInvocationAdapter.ets"
 SEARCH_INVOCATION_SURFACE_ADAPTER="${REPO_ROOT}/${SEARCH_INVOCATION_SURFACE_ADAPTER_REL}"
 OLD_SEARCH_OVERLAY_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserSearchOverlayCoordinator.ets"
@@ -4820,11 +4857,32 @@ check_file_contains_rule "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION}" "${ROOT_BOTTO
   'mediaResourceSessionCoordinator\.openResources\(\)' \
   "Root Bottom Panel resource action must execute through the fixed Media Resource owner."
 check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
-  'const dispatchAfterLowSettle = this\.isExpandedDetent\(snapshot\.currentDetent\);' \
+  'const panelExpanded = this\.isExpandedDetent\(snapshot\.currentDetent\);' \
   "Root Bottom Panel ordinary actions must inherit safe expanded-panel dispatch timing from the Session owner."
 check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
+  'const dispatchAfterLowSettle = panelExpanded &&' \
+  "Root Bottom Panel ordinary actions must inherit safe expanded-panel dispatch timing from the Session owner."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
+  '!this\.resolveActionApplication\(\)\.isShellDepartingAction\(dispatch\)' \
+  "Root Bottom Panel page-replacing actions must be the only expanded-panel actions allowed to start before the low settle."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION}" "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION_REL}" \
+  'isShellDepartingAction\(dispatch: BrowserRootBottomPanelActionDispatch\): boolean' \
+  "Root Bottom Panel page-replacing action ids must stay declared in the fixed action application."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION}" "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION_REL}" \
+  'isShellDepartingSheetAction\(isHomeLane: boolean, actionId: string\): boolean' \
+  "Root Bottom Panel page-replacing Sheet actions must share the fixed action application's classification."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
+  'isShellDepartingSheetAction\(isHomeLane: boolean, actionId: string\): boolean;' \
+  "Root Bottom Panel Sheet dispatch timing must be answerable through the Session action-application boundary."
+check_file_contains_rule "${BOTTOM_ADDRESS_PANEL}" "${BOTTOM_ADDRESS_PANEL_REL}" \
+  'onShouldDispatchSheetActionImmediately' \
+  "The toolbar Sheet must ask the Shell's fixed action application before dispatching a page-replacing action immediately."
+check_file_contains_rule "${SHELL_PAGE}" "${SHELL_PAGE_REL}" \
+  'isShellDepartingSheetAction\(' \
+  "BrowserShellPage must answer the Sheet's immediate-dispatch question from the fixed action application, not decide it itself."
+check_file_contains_rule "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR}" "${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}" \
   "dispatchTiming: dispatchAfterLowSettle \? 'after_low_settle' : 'immediate'" \
-  "Root Bottom Panel expanded actions must execute only after the low-detent settle effects complete."
+  "Root Bottom Panel ordinary expanded actions must execute only after the low-detent settle effects complete."
 check_file_contains_rule "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION}" "${ROOT_BOTTOM_PANEL_ACTION_APPLICATION_REL}" \
   'bookmarkActionCoordinator\.toggle\(this\.shell\.resolveBookmarkTarget\(\)\)' \
   "Root Bottom Panel Bookmark action must execute through the fixed Bookmark owner."
@@ -5052,6 +5110,189 @@ check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLB
 check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
   "BrowserLargeScreenAccountPopover\(\{" \
   "must still render the account popover for Official alongside its distribution gate."
+check_file_contains_rule "${SHELL_PRIMARY_SURFACE_HOST}" "${SHELL_PRIMARY_SURFACE_HOST_REL}" \
+  'webFullscreenActive: this\.largeScreenWebFullscreenActive' \
+  "must forward the Web fullscreen flag into the Large-Screen surface so its chrome can collapse."
+check_file_contains_rule "${LARGE_SCREEN_PRIMARY_SURFACE}" "${LARGE_SCREEN_PRIMARY_SURFACE_REL}" \
+  'webFullscreenActive: boolean = false' \
+  "Large-Screen surface must accept the Web fullscreen flag that hides its own chrome."
+check_file_contains_rule "${LARGE_SCREEN_PRIMARY_SURFACE}" "${LARGE_SCREEN_PRIMARY_SURFACE_REL}" \
+  'if \(!this\.nativeVideoTakeoverActive && !this\.webFullscreenActive\) \{' \
+  "Large-Screen top chrome must collapse for Web/video fullscreen, matching the phone shell's immersion path."
+check_file_contains_rule "${LARGE_SCREEN_PRIMARY_SURFACE}" "${LARGE_SCREEN_PRIMARY_SURFACE_REL}" \
+  'if \(this\.nativeVideoTakeoverActive \|\| this\.webFullscreenActive\) \{' \
+  "Large-Screen side panel and bottom status must stay hidden during Web/video fullscreen."
+check_file_contains_rule "${NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE}" "${NATIVE_VIDEO_FULLSCREEN_WINDOW_SERVICE_REL}" \
+  'await this\.applyPreferredOrientation\(mainWindow, orientation\);' \
+  "Full-screen entry must treat the navigation-bar and orientation steps as best-effort so a PC/2-in-1 window still enters fullscreen."
+check_file_contains_rule "${SHELL_FONT_SCALE_POLICY}" "${SHELL_FONT_SCALE_POLICY_REL}" \
+  "return shellFamily !== 'large_screen';" \
+  "PC/large-screen shell must be excluded from following the system font scale."
+check_file_contains_rule "${SHELL_FONT_SCALE_POLICY}" "${SHELL_FONT_SCALE_POLICY_REL}" \
+  'return this\.followsSystemFontScale\(shellFamily\) \? this\.normalize\(systemScale\) : BROWSER_FONT_SCALE_PINNED;' \
+  "PC/large-screen UI and content text must both pin to the app default font scale."
+check_file_contains_rule "${SYSTEM_FONT_SCALE_COORDINATOR}" "${SYSTEM_FONT_SCALE_COORDINATOR_REL}" \
+  "BROWSER_CONTENT_FONT_SIZE_SCALE_STORAGE_KEY" \
+  "content consumers must read the shell-aware content scale, not the raw system scale."
+check_file_contains_rule "${SYSTEM_FONT_SCALE_COORDINATOR}" "${SYSTEM_FONT_SCALE_COORDINATOR_REL}" \
+  'this\.fontScalePolicy\.resolveContentScale\(this\.currentScale, this\.currentShellFamily\)' \
+  "content font scale must stay owned by the shell-family policy."
+# Consumers must read the shell-aware content scale; reading the raw system scale
+# directly is what let the PC shell inflate web and reader text.
+system_font_scale_offenders="$(
+  grep -rl "BROWSER_SYSTEM_FONT_SIZE_SCALE_STORAGE_KEY" \
+    "${REPO_ROOT}/AiraBrowser/entry/src/main/ets" -r --include='*.ets' |
+    grep -v "${SYSTEM_FONT_SCALE_COORDINATOR}" || true
+)"
+if [ -n "${system_font_scale_offenders}" ]; then
+  report_failure "only ${SYSTEM_FONT_SCALE_COORDINATOR_REL} may read the raw system font scale; other consumers must use BROWSER_CONTENT_FONT_SIZE_SCALE_STORAGE_KEY: ${system_font_scale_offenders}"
+fi
+if grep -Eq "setFontSizeScale\(this\.currentScale\)" "${SYSTEM_FONT_SCALE_COORDINATOR}"; then
+  report_failure "${SYSTEM_FONT_SCALE_COORDINATOR_REL} must not apply the raw system scale to the native UI; the PC shell has to keep the app default."
+fi
+check_file_contains_rule "${LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL}" "${LARGE_SCREEN_OMNIBOX_SEARCH_VIEW_MODEL_REL}" \
+  'hasHistorySuggestions' \
+  "the PC suggestion list must project whether history is present so the header only appears with real history."
+check_file_contains_rule "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE}" "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL}" \
+  'if \(this\.resolvePresentation\(\)\.hasHistorySuggestions\) \{' \
+  "the PC suggestion header must be gated on projected history, not rendered unconditionally."
+check_file_contains_rule "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE}" "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL}" \
+  'onClearHistorySuggestions\(\);' \
+  "the PC suggestion header clear action must dispatch the clear-history intent."
+check_file_contains_rule "${SEARCH_SUGGESTION_COORDINATOR}" "${SEARCH_SUGGESTION_COORDINATOR_REL}" \
+  'clearHistorySuggestions\(\): Promise<boolean>' \
+  "clearing search history must stay owned by the suggestion coordinator, not the UI shell."
+check_file_contains_rule "${SEARCH_SUGGESTION_COORDINATOR}" "${SEARCH_SUGGESTION_COORDINATOR_REL}" \
+  'clearRegularProfileSearchHistory\(boundaryInput\)' \
+  "clearing search history must run through the privacy-gated service, scoped to the current boundary."
+check_file_contains_rule "${LARGE_SCREEN_SHELL_INTENT_APPLICATION}" "${LARGE_SCREEN_SHELL_INTENT_APPLICATION_REL}" \
+  "'clear_history_suggestions'" \
+  "the clear-history action must stay a typed Large-Screen navigation intent."
+# The surface's clear callback defaults to a no-op, so a missing wire-up here
+# compiles cleanly and leaves the button silently inert. Pin the connection.
+check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
+  "onClearHistorySuggestions: \(\): void => \{" \
+  "the navigation toolbar must forward the suggestion clear action into the typed intent."
+# The empty-list state means "no history"; a history glyph there advertises
+# records the user may have just cleared.
+check_file_contains_rule "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE}" "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL}" \
+  "if \(this\.query\.trim\(\)\.length > 0\) \{" \
+  "the empty suggestion row must gate its trailing glyph on an active query, not render one beside 暂无搜索历史."
+if grep -q 'browser\.shortcut\.history' "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE}"; then
+  report_failure "${LARGE_SCREEN_OMNIBOX_SEARCH_SURFACE_REL} must not pair the empty history state with a history icon."
+fi
+check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
+  "'clear_history_suggestions'" \
+  "the navigation toolbar must emit the clear-history intent rather than clearing anything itself."
+# A pocket foldable is a phone-class device that merely folds. Unfolding one
+# must not promote it to the PC shell, or its fixed chrome fights a phone-width
+# surface. Identity, not geometry, is what separates it: Pura X (pocket, 1.61)
+# sits below Pura X Max (book, 1.41) and the Mate XT tri-fold (1.43), so any
+# ratio that admits the first admits the last two. Pin the blocklist and the
+# exact-match rule that keeps a longer name from matching a shorter one.
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  "SMALL_FOLDABLE_MARKET_NAMES: string\[\]" \
+  "the pocket-foldable blocklist must stay a named, documented catalog."
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  "SMALL_FOLDABLE_MODEL_PREFIXES: string\[\] = \['BAL', 'LEM', 'PSD', 'VDE'\]" \
+  "the pocket-foldable SKU series tokens are the fallback identity when the marketing name is unset."
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  "'small-fold-expanded-auto-touch'" \
+  "automatic expansion of a pocket foldable must stay on the touch shell."
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  'isKnownSmallFoldable' \
+  "the pocket-foldable decision must stay owned by the policy, not inlined in a shell."
+# "HUAWEI PURA X" is a prefix of the large "HUAWEI PURA X MAX"; a substring or
+# startsWith match on the marketing name would demote that book foldable.
+check_file_contains_rule "${TABLET_INTERFACE_MODE_POLICY}" "${TABLET_INTERFACE_MODE_POLICY_REL}" \
+  'this\.normalizeMarketName\(candidate\) === normalized' \
+  "the pocket-foldable marketing-name match must be exact after brand normalisation on both sides."
+if grep -Eq 'startsWith\(.*(MARKET_NAME|marketName)' "${TABLET_INTERFACE_MODE_POLICY}"; then
+  report_failure "${TABLET_INTERFACE_MODE_POLICY_REL} must not prefix-match a marketing name; it would demote Pura X Max."
+fi
+# The exemption only works if the policy actually receives the device identity.
+check_file_contains_rule "${WINDOW_PRESENTATION_PROFILE}" "${WINDOW_PRESENTATION_PROFILE_REL}" \
+  'deviceMarketName: input\.deviceMarketName' \
+  "the live profile must pass the reported marketing name into the foldable policy."
+check_file_contains_rule "${WINDOW_PRESENTATION_PROFILE}" "${WINDOW_PRESENTATION_PROFILE_REL}" \
+  'deviceProductModel: input\.deviceProductModel' \
+  "the live profile must pass the reported SKU into the foldable policy."
+# The device-preference setting describes the same device the runtime switches,
+# so it has to classify a pocket foldable the same way or its footer lies.
+check_file_contains_rule "${TABLET_INTERFACE_MODE_SETTINGS}" "${TABLET_INTERFACE_MODE_SETTINGS_REL}" \
+  'this\.interfaceModePolicy\.isKnownSmallFoldable\(' \
+  "the interface-mode setting must reuse the policy's pocket-foldable classification."
+check_file_contains_rule "${TABLET_INTERFACE_MODE_SETTINGS}" "${TABLET_INTERFACE_MODE_SETTINGS_REL}" \
+  '小折叠屏展开后仍使用触屏界面' \
+  "the foldable footer must state the pocket-foldable rule the shell actually applies."
+# The policy can only classify a pocket foldable if the platform adapter hands
+# it the platform-reported identity.
+check_file_contains_rule "${PRESENTATION_PROFILE_INPUT_SERVICE}" "${PRESENTATION_PROFILE_INPUT_SERVICE_REL}" \
+  'resolveDeviceMarketName\(\): string' \
+  "the platform adapter must expose the reported marketing name for fold-size classification."
+check_file_contains_rule "${PRESENTATION_PROFILE_INPUT_SERVICE}" "${PRESENTATION_PROFILE_INPUT_SERVICE_REL}" \
+  'resolveDeviceProductModel\(\): string' \
+  "the platform adapter must expose the reported SKU as the identity fallback."
+check_file_contains_rule "${PRESENTATION_PROFILE_INPUT_SERVICE}" "${PRESENTATION_PROFILE_INPUT_SERVICE_REL}" \
+  'deviceMarketName: this\.resolveDeviceMarketName\(\)' \
+  "the live profile input must carry the device marketing name."
+# Novel sites that draw text through a per-response substitution font must keep
+# recovering it, and must keep doing so without blocking the ordinary path.
+# Pin the detection gate, the substitution-plane bound, and the runtime.
+check_file_contains_rule "${NOVEL_FONT_POLICY}" "${NOVEL_FONT_POLICY_REL}" \
+  'SUBSTITUTION_PLANE_START: number = 0x20000' \
+  "font-substitution detection must key on the CJK Extension B plane, not on the PUA range that older sites used."
+check_file_contains_rule "${NOVEL_FONT_POLICY}" "${NOVEL_FONT_POLICY_REL}" \
+  'NOVEL_FONT_MIN_SUBSTITUTED_COUNT: number = 8' \
+  "the substituted-character count gate must stay a named constant."
+check_file_contains_rule "${NOVEL_FONT_POLICY}" "${NOVEL_FONT_POLICY_REL}" \
+  'NOVEL_FONT_MIN_SUBSTITUTED_RATIO: number = 0.05' \
+  "the substituted-ratio gate must stay a named constant."
+# The mapping is randomised per response, so it must never be cached or reused
+# across documents; the recovery has to happen in the page that owns the font.
+check_file_contains_rule "${NOVEL_FONT_SERVICE}" "${NOVEL_FONT_SERVICE_REL}" \
+  "'aira-novel-font-1'" \
+  "the page-side runtime version must stay pinned so a stale injection is detected."
+check_file_contains_rule "${NOVEL_FONT_SERVICE}" "${NOVEL_FONT_SERVICE_REL}" \
+  'novel-font-deobfuscation\.js' \
+  "the recovery runtime must remain the committed, generated rawfile bundle."
+check_file_contains_rule "${NOVEL_FONT_SERVICE}" "${NOVEL_FONT_SERVICE_REL}" \
+  'runtime\.resolveForDocument\(doc\)' \
+  "recovery must resolve the font from the document that owns it, never from a cached mapping."
+# The mapping is randomised per response, so no field may hold one. Check for a
+# declared field rather than the word, which appears in the explanatory comment.
+if grep -Eq 'private +(readonly )?[A-Za-z]*(mapping|Mapping)[A-Za-z]* *: *(Map|Record)' "${NOVEL_FONT_SERVICE}"; then
+  report_failure "${NOVEL_FONT_SERVICE_REL} must not hold a font mapping field; the mapping is randomised per response."
+fi
+check_file_contains_rule "${NOVEL_EXTRACTION_SERVICE}" "${NOVEL_EXTRACTION_SERVICE_REL}" \
+  'this\.fontSubstitutionPolicy\.isSubstitutedParagraphs\(' \
+  "the extraction path must gate recovery on substitution detection."
+check_file_contains_rule "${NOVEL_EXTRACTION_SERVICE}" "${NOVEL_EXTRACTION_SERVICE_REL}" \
+  'retrySubstitutedChapter' \
+  "recovery must stay a single opt-in retry so ordinary pages keep the existing fetch path."
+check_file_contains_rule "${NOVEL_EXTRACTION_SERVICE}" "${NOVEL_EXTRACTION_SERVICE_REL}" \
+  'airaNovelFontFixup' \
+  "extraction must deobfuscate in the page, where the per-response font is available."
+# The bundle is generated, not hand-edited. Its builder and its licence must ship.
+check_file_contains_rule "${NOVEL_FONT_BUILDER}" "${NOVEL_FONT_BUILDER_REL}" \
+  "BROTLI_VERSION = '1.3.3'" \
+  "the recovery runtime must pin the vendored Brotli decoder version."
+check_file_contains_rule "${NOVEL_FONT_RUNTIME}" "${NOVEL_FONT_RUNTIME_REL}" \
+  'Generated by scripts/build-novel-font-deobfuscator.js' \
+  "the recovery runtime must stay generated by its builder, not edited in place."
+# A chapter cached before this fix holds the substituted codepoints, and its
+# per-response font is gone, so serving it can never be correct. The rejection
+# belongs in the cache reader: every consumer (automatic open, bookshelf
+# navigation, chapter transition, prefetch) reads through readChapterNow.
+check_file_contains_rule "${NOVEL_CHAPTER_ARTIFACT_CACHE}" "${NOVEL_CHAPTER_ARTIFACT_CACHE_REL}" \
+  'this\.isSubstitutedArtifact\(normalized\)' \
+  "the chapter cache must reject a record whose text came from a substitution font."
+check_file_contains_rule "${NOVEL_CHAPTER_ARTIFACT_CACHE}" "${NOVEL_CHAPTER_ARTIFACT_CACHE_REL}" \
+  'isSubstitutedParagraphs\(artifact\.paragraphs\)' \
+  "cache rejection must key on the shared substitution policy, not a local heuristic."
+check_file_contains_rule "${REPO_ROOT}/${NOVEL_FONT_LICENSE_REL}" "${NOVEL_FONT_LICENSE_REL}" \
+  'brotli.js 1.3.3' \
+  "the bundled Brotli decoder must carry its MIT license text."
 
 if [ "${ARCH_GUARD_ALLOW_PAGE_GROWTH:-0}" = "1" ]; then
   echo "Architecture page-growth diff guard bypassed by ARCH_GUARD_ALLOW_PAGE_GROWTH=1."

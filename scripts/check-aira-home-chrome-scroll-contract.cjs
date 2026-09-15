@@ -730,13 +730,16 @@ function checkRoutedToolbarBackdropContract() {
     shellPageSource.includes('.resetForRouteTransitionPresentation(preservedCustomBottomSurfaceIds);'),
   'route transition cleanup must synchronously invalidate the Root Bottom-Panel backdrop channel in its owner');
   assert(routeSource.includes("import { FrameCallback, UIContext } from '@kit.ArkUI';") &&
-    routeSource.includes('class BrowserShellRouteIdleCallback extends FrameCallback') &&
-    routeSource.includes('onIdle(_timeLeftInNano: number): void') &&
+    routeSource.includes('class BrowserShellRouteFrameCallback extends FrameCallback') &&
+    routeSource.includes('onFrame(_frameTimeInNano: number): void {\n    this.task();') &&
     routeSource.includes('private routeTransitionRunId: number = 0;') &&
     routeSource.includes('this.dependencies.resolveUIContext().postFrameCallback(') &&
     routeSource.includes('if (runId !== this.routeTransitionRunId)') &&
-    routerPushIndex > pushRouteSource.indexOf('new BrowserShellRouteIdleCallback'),
-  'router must start from a latest-request-only post-render idle callback, not in the reset UI turn');
+    !routeSource.includes('onIdle(_timeLeftInNano: number): void {\n    this.task();') &&
+    routerPushIndex > pushRouteSource.indexOf('new BrowserShellRouteFrameCallback'),
+  'router must start from a latest-request-only post-render frame callback that runs on the next frame, ' +
+  'not in the reset UI turn and not once the frame goes idle (an idle callback is starved by a running ' +
+  'bottom-panel collapse animation and defers the route until the animation ends)');
   assert(presentationChannelSource.includes('surfaceSuppressed: boolean;') &&
     presentationChannelSource.includes('publishRouteTransitionSuppression(): void') &&
     expandedScrimSource.includes('@State private surfaceSuppressed: boolean = false;') &&
