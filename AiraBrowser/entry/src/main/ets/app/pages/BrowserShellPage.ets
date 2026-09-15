@@ -1481,7 +1481,7 @@ struct BrowserShellPage {
       webScrollExperimentSettings: this.webScrollExperimentSettings,
       currentWindowId: this.currentWindowId,
       hostedWebSurfaceSuspended: this.shouldSuspendHostedWebSurface(),
-      visualSamplingSuppressed: this.isTopImmersionPreferenceEnabled()
+      visualSamplingSuppressed: this.isWebPageDrawnUnderTopSafeArea()
     }),
     applyState: (application: BrowserWebActiveSurfaceStateApplication): void => {
       if (application.visualState !== undefined) {
@@ -7110,7 +7110,7 @@ struct BrowserShellPage {
       state: this.browserChromeRuntimeState,
       activeTabId: this.activeTabId,
       webPageVisible: !this.showHomePage,
-      globalImmersionEnabled: this.isTopImmersionPreferenceEnabled(),
+      pageDrawnUnderTopSafeArea: this.isWebPageDrawnUnderTopSafeArea(),
       resolvedThemeMode: this.browserThemeModeCoordinator.resolveEffectiveMode(preferences.themeMode),
       readerModeVisible: this.readerModeSessionSnapshot.state.visible,
       readerModeTheme: this.articleReadingSession.resolveEffectiveTheme(
@@ -7407,7 +7407,7 @@ struct BrowserShellPage {
       state: this.browserChromeRuntimeState,
       activeTabId: this.activeTabId,
       webPageVisible: !this.showHomePage,
-      globalImmersionEnabled: this.isTopImmersionPreferenceEnabled(),
+      pageDrawnUnderTopSafeArea: this.isWebPageDrawnUnderTopSafeArea(),
       resolvedThemeMode: this.browserThemeModeCoordinator.resolveEffectiveMode()
     });
   }
@@ -10014,6 +10014,12 @@ struct BrowserShellPage {
 
   private isTopImmersionPreferenceEnabled(): boolean {
     return this.webScrollGlobalImmersionEnabled || this.webScrollAlwaysTopImmersionEnabled;
+  }
+
+  // Distinct from isTopImmersionPreferenceEnabled: scroll-driven immersion keeps the strip while the
+  // status bar is visible, so only always-immersion actually removes the separately painted top color.
+  private isWebPageDrawnUnderTopSafeArea(): boolean {
+    return this.isAlwaysTopImmersionEnabled();
   }
 
   private isAlwaysTopImmersionEnabled(): boolean {

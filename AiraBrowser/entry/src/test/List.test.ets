@@ -43,6 +43,7 @@ import huaweiSpaceTransportWarmupTest from './HuaweiSpaceTransportWarmup.test';
 import historySelectionMoreMenuTest from './HistorySelectionMoreMenu.test';
 import huaweiIapProductCatalogTest from './HuaweiIapProductCatalog.test';
 import startupWelcomeIntroTest from './StartupWelcomeIntro.test';
+import browserWebTopSafeAreaColorTest from './BrowserWebTopSafeAreaColor.test';
 
 export default function tests(): void {
   userScriptValueStateStoreTest();
@@ -88,4 +89,5 @@ export default function tests(): void {
   historySelectionMoreMenuTest();
   huaweiIapProductCatalogTest();
   startupWelcomeIntroTest();
+  browserWebTopSafeAreaColorTest();
 }

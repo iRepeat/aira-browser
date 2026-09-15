@@ -34,7 +34,7 @@ export interface BrowserWebTopSafeAreaBackdropInput {
   state: BrowserChromeRuntimeState;
   activeTabId: string;
   webPageVisible: boolean;
-  globalImmersionEnabled: boolean;
+  pageDrawnUnderTopSafeArea: boolean;
   resolvedThemeMode: BrowserResolvedThemeMode;
 }
 
@@ -77,7 +77,9 @@ export class BrowserChromeRuntimeCoordinator {
   }
 
   resolveWebTopSafeAreaBackdropColor(input: BrowserWebTopSafeAreaBackdropInput): string {
-    if (!input.webPageVisible || input.globalImmersionEnabled) {
+    // Scroll-driven immersion keeps the strip while the status bar is visible, so only a page that
+    // is drawn all the way under the top safe area removes the separately painted color.
+    if (!input.webPageVisible || input.pageDrawnUnderTopSafeArea) {
       return '';
     }
     const theme = input.state.pageChromeThemes[input.activeTabId];
