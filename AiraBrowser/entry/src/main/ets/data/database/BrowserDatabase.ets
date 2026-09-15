@@ -5585,9 +5585,17 @@ export class BrowserDatabase {
         return 0;
       }
     }
+    // Every victim satisfies `visited_at <= threshold`: the age branch needs `visited_at < cutoffAt`
+    // and the boundary branch needs `visited_at <= boundaryVisitedAt`, both `<= max(cutoffAt,
+    // boundaryVisitedAt)`. Bounding the read by it is therefore exact, and it replaces a scan of the
+    // account's whole synced window (up to 10000 rows, each mapped to an object) with a range the
+    // retention ordering index already serves. The predicate below is deliberately unchanged: it
+    // tie-breaks sync ids with localeCompare, whose collation differs from SQL's BINARY ordering, so
+    // pushing that comparison into the query would silently shift which rows get deleted.
     const predicates = new relationalStore.RdbPredicates(HISTORY_VISITS_TABLE);
     predicates.equalTo('sync_account_uid', accountUid);
     predicates.equalTo('data_scope', 'profile_persistent');
+    predicates.lessThanOrEqualTo('visited_at', threshold);
     const resultSet = await store.query(predicates, HISTORY_VISIT_COLUMNS);
     const visits = await this.hydrateHistoryVisits(this.mapHistoryVisitEventRows(resultSet));
     const victims = visits.filter((visit: HistoryVisit): boolean => {

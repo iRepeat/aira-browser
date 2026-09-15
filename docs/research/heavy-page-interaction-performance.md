@@ -434,11 +434,13 @@ Aira 唯一运行在渲染进程里的代码是**注入的 document-start 脚本
 
 因此新增 `idx_history_visits_sync_scope_time(sync_account_uid, data_scope, visited_at DESC, sync_id DESC)`（schema 6→7；独立迁移步骤，已到 6 的库无需重跑列迁移）。设备同规模（1 万条同步行）实测：300 次边界读取 4.18s → 0.18s，计划变为 `USING COVERING INDEX`。写入代价可忽略（5000 条插入 0.051s → 0.055s）。
 
-### 随后的两处清理（同一路径）
+### 随后的三处清理（同一路径）
 
 **prune 受害者选择改为 SQL。** `pruneHistorySyncProjection` 原本读该账号整个同步窗口（最多 10000 行）、把每行映射成对象，再在内存里筛出受害者（早于 cutoff 的，加上超出上限的全部）。新索引同时服务这个选择：溢出尾部用 `LIMIT -1 OFFSET 9999` 取，过期行用 `visited_at < ?` 取；尾部首行即边界本身，前沿由同一结果持久化。等价性用 20000 例随机窗口验证（窗口大小低于/等于/高于上限，边界过期与未过期），受害者集合与边界完全一致；顺序有差异但两处消费方均为集合语义。300 次读：4.18s → 0.18s。
 
 `LIMIT -1` 在本客户端无先例，而它若失效会使保留策略静默停止推进，故已在真机确认：10000 条同步行下该查询返回 10000 行，边界与受害者计数均符合旧定义。
+
+**华为空间路径的同一份全量扫描。** `deleteHistoryVisitsBehindRetentionFrontierInStore` 原本也只按账号读全部同步行，与上面同形。它按已持久化前沿判定，两个分支的受害者都满足 `visited_at <= max(cutoffAt, boundaryVisitedAt)`，而函数内本就有这个 `threshold`（原先只用于存在性探测），因此读出范围直接加上 `visited_at <= threshold` 即为精确裁剪。**JS 判据一字未改**：它用 `localeCompare` 对并列 sync id 做次级排序，而 SQL 的 BINARY 排序与之不同，若下推到查询里会悄悄改变删除集合。等价性用 27519 例随机向量验证（含 `cutoffAt`/`boundaryVisitedAt` 各自为 0、并列与不并列、空 sync id、大小写混排的 id），受害者集合完全一致；其中约 3943 例受害者恰好等于 threshold，说明这里是闭区间 `<=`、写成开区间会漏删。实测（设备同规模 10000 行、滞留 3 行）：300 次读 4.00s → 0.016s，读取行数 10000 → 3，计划走 `idx_history_visits_sync_scope_time`。
 
 **少量记录时的逐条查询改为批量。** `hydrateHistoryVisits` 在少于 80 条时对每个访问单独发一次 URL 查询，范围删除几十条即几十次数据库往返，现合并为一次 `IN` 查询。
 
