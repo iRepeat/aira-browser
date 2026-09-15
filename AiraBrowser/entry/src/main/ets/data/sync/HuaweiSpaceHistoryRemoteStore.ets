@@ -39,7 +39,14 @@ interface HuaweiSpaceHistoryHeadChecksum {
   stateChecksum: string;
 }
 
-const HUAWEI_SPACE_HISTORY_SYNC_TIMEOUT_MS: number = 45000;
+// This pass shares one serialized transport with the Bookmark, Personalization and Novel paths
+// (HuaweiSpaceCloudSyncCoordinator keys its queue by database|uid), so its wait is whatever else is
+// queued plus its own transfer. A device that just switched to Huawei Space uploads the whole
+// dataset at once and each record costs the platform hundreds of ms to several seconds: a measured
+// history pass finished in 49.1 s (up=730 blocks) only 4 s after this budget gave up at 45 s, and the
+// abandoned task kept the transport quarantined until it settled. Match the Bookmark budget, which
+// already allows for exactly this, rather than failing a transfer that is still progressing.
+const HUAWEI_SPACE_HISTORY_SYNC_TIMEOUT_MS: number = 300000;
 const HUAWEI_HISTORY_LOG_DOMAIN: number = 0x0000;
 const HUAWEI_HISTORY_LOG_TAG: string = 'HuaweiHistorySync';
 

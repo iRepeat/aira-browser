@@ -8,7 +8,13 @@ import { HuaweiSpaceCloudSyncCoordinator } from './HuaweiSpaceCloudSyncCoordinat
 import { HuaweiSpaceRdbStoreOwner } from './HuaweiSpaceRdbStoreOwner';
 import { HuaweiSpaceSnapshotBlobCodec } from './HuaweiSpaceSnapshotBlobCodec';
 
-const HUAWEI_SPACE_CONDITIONAL_SNAPSHOT_TIMEOUT_MS: number = 30000;
+// Personalization and Novel Bookshelf run on the same serialized transport as the Bookmark and
+// History passes (HuaweiSpaceCloudSyncCoordinator keys its queue by database|uid), so this budget
+// has to cover the transfers queued ahead of it. It matters most on a provider switch, where the
+// whole dataset is uploaded at once and the platform charges hundreds of ms to several seconds per
+// record; a history pass in that situation took 49 s. Kept equal to the other Huawei Space passes so
+// one path cannot give up on a transfer the others would still wait for.
+const HUAWEI_SPACE_CONDITIONAL_SNAPSHOT_TIMEOUT_MS: number = 300000;
 const HUAWEI_SPACE_CONDITIONAL_SNAPSHOT_LOG_DOMAIN: number = 0x0000;
 const HUAWEI_SPACE_CONDITIONAL_SNAPSHOT_DELETE_BATCH_SIZE: number = 100;
 
