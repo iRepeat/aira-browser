@@ -37,6 +37,7 @@ import {
 } from './SyncPersonalizationDomain';
 import { SyncSettingsRefreshSignal } from './SyncSettingsRefreshSignal';
 import { AiraSyncJankProbe } from '../../common/debug/AiraSyncJankProbe';
+import { sharedBrowsingActivitySignal } from '../../common/activity/BrowsingActivitySignal';
 
 const DOMAIN = 0x0000;
 const TAG = 'SyncExperienceAuto';
@@ -47,8 +48,19 @@ const BOOKMARK_AUTO_SYNC_FOREGROUND_DELAY_MS: number = 30000;
 const BOOKMARK_NETWORK_RECOVERY_DELAY_MS: number = 1000;
 const BOOKMARK_PERIODIC_SYNC_STARTUP_DELAY_MS: number = 30000;
 const BOOKMARK_PERIODIC_SYNC_INTERVAL_MS: number = 180000;
+// A periodic run with no local change only needs to discover REMOTE changes. Reading and merging a
+// full remote snapshot (measured ~100 KB plus a full compare/commit round trip) every 3 minutes
+// costs network, RDB writes and cross-thread marshaling even when nothing changed. Widen the
+// interval for that case; a local change keeps the 3-minute cadence.
+const BOOKMARK_PERIODIC_IDLE_INTERVAL_MS: number = 15 * 60 * 1000;
 export const HUAWEI_SPACE_TRANSPORT_WARMUP_DELAY_MS: number = 2000;
 export const AUTOMATIC_DRAIN_YIELD_MS: number = 16;
+// Deferral while the user is actively browsing: retry cadence and the cap after which the burst
+// runs regardless, so a long continuous scroll cannot starve automatic sync. The cap is
+// deliberately generous — this is background maintenance, and running it during a long scroll
+// would reintroduce exactly the contention it exists to avoid.
+const SYNC_BROWSING_DEFER_RETRY_MS: number = 1200;
+const SYNC_BROWSING_DEFER_CAP_MS: number = 30000;
 const BOOKMARK_WEBDAV_PERIODIC_SYNC_INTERVAL_MS: number = 15 * 60 * 1000;
 const BOOKMARK_RETRY_MAX_DELAY_MS: number = 30 * 60 * 1000;
 
@@ -81,6 +93,9 @@ export function resolveHistoryStartupQuietDelayMs(
 const HISTORY_NETWORK_RECOVERY_DELAY_MS: number = 1000;
 const HISTORY_PERIODIC_STARTUP_DELAY_MS: number = 30000;
 const HISTORY_PERIODIC_INTERVAL_MS: number = 3 * 60 * 1000;
+// Idle cadence for history when no local change has happened since the last completed run; the
+// periodic pass still runs (it discovers remote changes), just less often.
+const HISTORY_PERIODIC_IDLE_INTERVAL_MS: number = 15 * 60 * 1000;
 const HISTORY_RETRY_START_DELAY_MS: number = 20000;
 const HISTORY_RETRY_MAX_DELAY_MS: number = 30 * 60 * 1000;
 const MANUAL_RECENT_SUCCESS_WINDOW_MS: number = 30 * 1000;
@@ -248,6 +263,8 @@ export class SyncExperienceAutomaticRuntime {
   private historyAutomaticNotBefore: number = 0;
   private automaticDrainQueued: boolean = false;
   private automaticDrainTimerId: number = -1;
+  // First moment we started holding automatic sync back for foreground browsing; 0 when not held.
+  private automaticBrowsingDeferSinceMs: number = 0;
   private automaticGeneration: number = 0;
   private huaweiTransportWarmupTimerId: number = -1;
   private huaweiTransportWarmupScheduled: boolean = false;
@@ -1227,6 +1244,26 @@ export class SyncExperienceAutomaticRuntime {
       !this.pendingPersonalizationAutomaticRun && !this.pendingHistoryAutomaticRun)) {
       return;
     }
+    // Automatic sync runs an RDB- and marshaling-heavy burst that, measured on device, lands
+    // about 22 s / 30 s / 31 s after content is ready. When that overlaps the user actively
+    // scrolling a heavy page the two compete for the ArkTS main thread. Hold the burst back while
+    // the user is browsing and retry shortly; the pending flags above keep the work queued, so
+    // nothing is dropped. The cap guarantees it still runs during a long continuous scroll.
+    if (this.shouldDeferAutomaticDrainForBrowsing()) {
+      if (this.automaticBrowsingDeferSinceMs <= 0) {
+        this.automaticBrowsingDeferSinceMs = this.clock.now();
+      }
+      if (this.clock.now() - this.automaticBrowsingDeferSinceMs < SYNC_BROWSING_DEFER_CAP_MS) {
+        this.automaticDrainQueued = true;
+        this.automaticDrainTimerId = this.clock.setTimeout((): void => {
+          this.automaticDrainTimerId = -1;
+          this.automaticDrainQueued = false;
+          this.schedulePendingAutomaticDrain();
+        }, SYNC_BROWSING_DEFER_RETRY_MS);
+        return;
+      }
+    }
+    this.automaticBrowsingDeferSinceMs = 0;
     this.automaticDrainQueued = true;
     this.automaticDrainTimerId = this.clock.setTimeout((): void => {
       this.automaticDrainTimerId = -1;
@@ -1248,6 +1285,14 @@ export class SyncExperienceAutomaticRuntime {
         hilog.warn(DOMAIN, TAG, 'automatic sync queue failed: %{public}s', JSON.stringify(error));
       });
     }, AUTOMATIC_DRAIN_YIELD_MS);
+  }
+
+  private shouldDeferAutomaticDrainForBrowsing(): boolean {
+    try {
+      return sharedBrowsingActivitySignal.isBrowsingRecently(this.clock.now());
+    } catch (_error) {
+      return false;
+    }
   }
 
   private cancelAutomaticDrainTimer(): void {
@@ -1413,7 +1458,16 @@ export class SyncExperienceAutomaticRuntime {
       this.scheduleBookmarkPeriodicRun(waitMs);
       return;
     }
+    // With no local change there is nothing of ours to push, but the run must still happen: the
+    // periodic pass is what discovers REMOTE changes. Lengthen the interval instead of skipping,
+    // so an idle browser stops paying for a full remote read/compare every 3 minutes. A local
+    // change keeps the short cadence via schedulePendingBookmarkSync.
+    const hasLocalChanges = this.bookmarkHasPendingChanges;
     this.requestAutomaticRun(true, false, 'periodic', 'periodic', false, 'periodic');
+    if (!hasLocalChanges) {
+      this.scheduleBookmarkPeriodicRun(BOOKMARK_PERIODIC_IDLE_INTERVAL_MS);
+      return;
+    }
     const nextDelay = this.getActiveProviderKind() === 'webdav'
       ? BOOKMARK_WEBDAV_PERIODIC_SYNC_INTERVAL_MS
       : BOOKMARK_PERIODIC_SYNC_INTERVAL_MS;
@@ -1697,8 +1751,14 @@ export class SyncExperienceAutomaticRuntime {
         this.scheduleHistoryPeriodicRun(waitMs);
         return;
       }
+      // Same reasoning as bookmarks: the periodic pass is also what discovers REMOTE history
+      // changes, so it must keep running, but a browser with no local history change should not
+      // pay for a full remote exchange every 3 minutes.
+      const changedSinceLastRun = this.historyChangeRevision !== this.historyCompletionCoveredRevision;
       this.requestAutomaticRun(false, false, 'periodic', 'periodic', true, 'periodic');
-      this.scheduleHistoryPeriodicRun(HISTORY_PERIODIC_INTERVAL_MS);
+      this.scheduleHistoryPeriodicRun(
+        changedSinceLastRun ? HISTORY_PERIODIC_INTERVAL_MS : HISTORY_PERIODIC_IDLE_INTERVAL_MS
+      );
     }, delayMs);
   }
 

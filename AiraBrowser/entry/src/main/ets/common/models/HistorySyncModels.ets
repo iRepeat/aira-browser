@@ -89,6 +89,12 @@ export interface HistorySyncRetentionFrontier {
   updatedAt: number;
 }
 
+/** The single visit that anchors the retention window; read on its own without materializing rows. */
+export interface HistorySyncRetentionBoundary {
+  visitedAt: number;
+  syncId: string;
+}
+
 export interface HuaweiSpaceHistorySyncState {
   visits: HistorySyncVisit[];
   tombstones: HistorySyncExactTombstone[];

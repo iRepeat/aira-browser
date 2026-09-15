@@ -505,7 +505,11 @@ export class BrowserBottomChromeScrollCoordinator {
       lastScrollOffsetY: Math.max(0, Math.floor(scrollOffsetY)),
       downwardDelta: 0,
       upwardDelta: 0,
-      lastTransitionAt: 0
+      // Preserve the cooldown across baseline resets. Resets happen on every programmatic or
+      // momentum scroll sample, and clearing the stamp here let the collapse/reveal pair toggle
+      // faster than transitionCooldownMs was meant to allow. The top-immersion coordinator keeps
+      // its stamp for the same reason.
+      lastTransitionAt: this.state.lastTransitionAt
     };
   }
 }

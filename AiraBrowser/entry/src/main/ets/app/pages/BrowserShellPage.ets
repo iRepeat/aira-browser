@@ -151,6 +151,8 @@ import {
 import {
   AiraCloudBookmarkV4BootstrapViewState
 } from '../../core/sync/AiraCloudBookmarkV4BootstrapViewModelService';
+import { sharedBrowsingActivitySignal } from '../../common/activity/BrowsingActivitySignal';
+import { AiraScrollOscProbe } from '../../common/debug/AiraScrollOscProbe';
 import {
   AppReviewPromptCoordinator,
   AppReviewPromptShell,
@@ -7302,10 +7304,20 @@ struct BrowserShellPage {
   private refreshWebViewportPresentation(
     visualTopInsetPx: number = this.getWebViewportVisualTopInsetPx()
   ): void {
+    const previousPresentation = this.webViewportPresentation;
     this.webViewportPresentation = BrowserWebViewportCoordinator.resolvePresentationUpdate({
       current: this.webViewportPresentation,
       next: this.resolveWebViewportPresentationState(visualTopInsetPx)
     });
+    if (this.webViewportPresentation !== previousPresentation) {
+      AiraScrollOscProbe.markViewport(
+        this.webStatusBarVisible,
+        visualTopInsetPx,
+        this.webViewportPresentation.contentHeightPx,
+        this.webViewportPresentation.contentTopPx,
+        this.webViewportPresentation.hostHeightPx
+      );
+    }
   }
 
   private setWebBottomAddressFocused(focused: boolean): void {
@@ -9741,10 +9753,16 @@ struct BrowserShellPage {
         this.browserWebPageLifecycleApplicationCoordinator.handleLoadFinished(tabId),
       onProgressChange: (tabId: string, event: OnProgressChangeEvent) =>
         this.browserWebPageLifecycleApplicationCoordinator.handleProgressChange(tabId, event.newProgress),
-      onScroll: (tabId: string, event: OnScrollEvent) =>
-        this.browserWebScrollInteractionCoordinator.handleScroll(tabId, event.yOffset),
-      onTouch: (tabId: string, event: TouchEvent) =>
-        this.browserWebScrollInteractionCoordinator.handleTouchEvent(tabId, event.type),
+      onScroll: (tabId: string, event: OnScrollEvent) => {
+        // Cheap field write: tells the automatic-sync scheduler the user is browsing so it holds
+        // its RDB-heavy burst back instead of competing for the main thread mid-scroll.
+        sharedBrowsingActivitySignal.markBrowsingInteraction();
+        this.browserWebScrollInteractionCoordinator.handleScroll(tabId, event.yOffset);
+      },
+      onTouch: (tabId: string, event: TouchEvent) => {
+        sharedBrowsingActivitySignal.markBrowsingInteraction();
+        this.browserWebScrollInteractionCoordinator.handleTouchEvent(tabId, event.type);
+      },
       onNavigationEntryCommitted: (tabId: string, details: LoadCommittedDetails) => {
         this.browserWebPageLifecycleApplicationCoordinator.handleNavigationEntryCommitted(tabId, details);
         this.novelReaderApplication.handleNavigationEntryCommitted(this.novelReaderSession, {

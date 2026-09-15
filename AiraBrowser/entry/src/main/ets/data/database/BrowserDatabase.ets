@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { relationalStore } from '@kit.ArkData';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AiraSyncJankProbe } from '../../common/debug/AiraSyncJankProbe';
+import { sharedBrowsingActivitySignal } from '../../common/activity/BrowsingActivitySignal';
 import urlUtils from '@ohos.url';
 import {
   BookmarkImportBatchRecord,
@@ -26,6 +27,7 @@ import {
   HistorySyncExactTombstone,
   HistorySyncExchangeResponse,
   HistorySyncLocalState,
+  HistorySyncRetentionBoundary,
   HistorySyncRetentionFrontier,
   HISTORY_SYNC_MAX_VISITS,
   HistorySyncMutation,
@@ -327,6 +329,14 @@ const HISTORY_VISIT_SCHEMA_SQL: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_history_visits_sync_account ON ${HISTORY_VISITS_TABLE}(sync_account_uid, sync_origin)`
 ];
 const HISTORY_SYNC_OUTBOX_TABLE = 'history_sync_outbox_v1';
+// Cooperative yielding while applying remote history on the ArkTS thread. On device a single visit
+// upsert or range delete costs tens to hundreds of milliseconds, so a change count cannot bound the
+// stall: five changes were measured holding the thread for over a second while a gesture was in
+// flight. Bound the uninterrupted run by elapsed time instead, and settle out of an active gesture
+// before the transaction opens so the two never compete.
+const HISTORY_SYNC_APPLY_YIELD_BUDGET_MS: number = 24;
+const HISTORY_SYNC_APPLY_YIELD_MS: number = 8;
+const HISTORY_SYNC_SETTLE_MAX_WAIT_MS: number = 1500;
 const HISTORY_SYNC_STATE_TABLE = 'history_sync_state_v1';
 const HISTORY_SYNC_DELETE_RANGES_TABLE = 'history_sync_delete_ranges_v1';
 const HISTORY_SYNC_FRONTIERS_TABLE = 'history_sync_frontiers_v1';
@@ -2161,6 +2171,7 @@ export class BrowserDatabase {
     AiraSyncJankProbe.mark('history_local_apply_exchange_start');
     const store = await this.getStore();
     let transactionStarted = false;
+    await this.settleHistorySyncBeforeApply();
     try {
       store.beginTransaction();
       transactionStarted = true;
@@ -2205,6 +2216,7 @@ export class BrowserDatabase {
     AiraSyncJankProbe.mark('history_local_apply_bootstrap_start');
     const store = await this.getStore();
     let transactionStarted = false;
+    await this.settleHistorySyncBeforeApply();
     try {
       store.beginTransaction();
       transactionStarted = true;
@@ -2236,11 +2248,20 @@ export class BrowserDatabase {
         });
       });
       let applied = await this.applyHistorySyncChangesInStore(store, accountUid, frontierChanges);
+      let bootstrapYieldStartedAt = Date.now();
       for (const visitId of response.deletedVisitIds) {
+        if (Date.now() - bootstrapYieldStartedAt >= HISTORY_SYNC_APPLY_YIELD_BUDGET_MS) {
+          await this.yieldHistorySyncWriteToBrowsing();
+          bootstrapYieldStartedAt = Date.now();
+        }
         await this.persistHistorySyncTombstone(store, accountUid, visitId, Date.now());
         applied += await this.deleteHistoryVisitBySyncIdInStore(store, accountUid, visitId);
       }
       for (const visit of response.visits) {
+        if (Date.now() - bootstrapYieldStartedAt >= HISTORY_SYNC_APPLY_YIELD_BUDGET_MS) {
+          await this.yieldHistorySyncWriteToBrowsing();
+          bootstrapYieldStartedAt = Date.now();
+        }
         applied += await this.applyHistorySyncVisitUpsert(store, accountUid, visit);
       }
       await this.upsertHistorySyncState(store, {
@@ -4604,17 +4625,23 @@ export class BrowserDatabase {
     changes: HistorySyncChange[]
   ): Promise<number> {
     let applied = 0;
+    let unyieldedStartedAt = Date.now();
     for (const change of changes) {
+      // Budgeted by elapsed time, not by change count: this loop runs synchronous RDB writes on the
+      // ArkTS thread, and one range delete can scan the whole history table. Device measurement had
+      // five changes holding the thread for over 1.5s while a gesture was in flight, so a count
+      // threshold cannot bound the stall.
+      if (Date.now() - unyieldedStartedAt >= HISTORY_SYNC_APPLY_YIELD_BUDGET_MS) {
+        await this.yieldHistorySyncWriteToBrowsing();
+        unyieldedStartedAt = Date.now();
+      }
+      const changeStartedAt = Date.now();
       if (change.kind === 'upsert_visit' && change.visit !== undefined) {
         applied += await this.applyHistorySyncVisitUpsert(store, accountUid, change.visit);
-        continue;
-      }
-      if (change.kind === 'delete_visit') {
+      } else if (change.kind === 'delete_visit') {
         await this.persistHistorySyncTombstone(store, accountUid, change.visitId, Date.now());
         applied += await this.deleteHistoryVisitBySyncIdInStore(store, accountUid, change.visitId);
-        continue;
-      }
-      if (change.kind === 'delete_range') {
+      } else if (change.kind === 'delete_range') {
         const range: HistorySyncDeleteRange = {
           rangeId: change.rangeId ?? '',
           url: change.url ?? '',
@@ -4624,23 +4651,60 @@ export class BrowserDatabase {
         };
         await this.persistHistorySyncDeleteRange(store, accountUid, range);
         applied += await this.deleteHistorySyncRangeInStore(store, accountUid, range);
-        continue;
-      }
-      if (change.kind === 'clear_before') {
+      } else if (change.kind === 'clear_before') {
         const clearBefore = change.clearBefore ?? 0;
         await this.persistHistorySyncClearBefore(store, accountUid, clearBefore);
         applied += await this.deleteHistorySyncBeforeInStore(store, accountUid, clearBefore);
-        continue;
-      }
-      if (change.kind === 'retention_prune') {
-        for (const visitId of change.visitIds ?? []) {
+      } else if (change.kind === 'retention_prune') {
+        const pruneVisitIds = change.visitIds ?? [];
+        const pruneDeleteStartedAt = Date.now();
+        for (const visitId of pruneVisitIds) {
           await this.deleteHistorySyncCanonicalVisit(store, accountUid, visitId);
           applied += await this.deleteHistoryVisitBySyncIdInStore(store, accountUid, visitId);
         }
+        AiraSyncJankProbe.endExtra(
+          'history_prune_delete_loop',
+          pruneDeleteStartedAt,
+          `visitIds=${pruneVisitIds.length}`
+        );
+        const pruneBoundaryStartedAt = Date.now();
         await this.advanceHistorySyncRetentionFromRemotePrune(store, accountUid, change.cutoff ?? 0);
+        AiraSyncJankProbe.end('history_prune_boundary', pruneBoundaryStartedAt);
       }
+      AiraSyncJankProbe.endExtra(
+        'history_change',
+        changeStartedAt,
+        `kind=${change.kind} count=${changes.length}`
+      );
     }
     return applied;
+  }
+
+  /**
+   * Hands the ArkTS thread back for one short slice so pending input frames and gestures can run
+   * between history write bursts. Deliberately bounded and never waiting out the whole gesture: the
+   * history transaction is already open, and holding it longer would stall sync behind a scroll that
+   * may last minutes. One slice per period is enough to keep the frame pipeline moving.
+   */
+  private async yieldHistorySyncWriteToBrowsing(): Promise<void> {
+    await new Promise<void>((resolve: () => void): void => {
+      setTimeout((): void => resolve(), HISTORY_SYNC_APPLY_YIELD_MS);
+    });
+  }
+
+  /**
+   * Settles out of an in-progress gesture before the history transaction opens, so the write burst
+   * does not begin on top of an active scroll. This is the case that reproduces when the user
+   * returns from another page and immediately scrolls. Bounded so a long scroll cannot starve sync.
+   */
+  private async settleHistorySyncBeforeApply(): Promise<void> {
+    let waitedMs = 0;
+    while (waitedMs < HISTORY_SYNC_SETTLE_MAX_WAIT_MS && sharedBrowsingActivitySignal.isBrowsingRecently()) {
+      await new Promise<void>((resolve: () => void): void => {
+        setTimeout((): void => resolve(), HISTORY_SYNC_APPLY_YIELD_MS);
+      });
+      waitedMs += HISTORY_SYNC_APPLY_YIELD_MS;
+    }
   }
 
   private async applyHistorySyncVisitUpsert(
@@ -5367,17 +5431,7 @@ export class BrowserDatabase {
     accountUid: string,
     cutoff: number
   ): Promise<void> {
-    const predicates = new relationalStore.RdbPredicates(HISTORY_VISITS_TABLE);
-    predicates.equalTo('sync_account_uid', accountUid.trim());
-    predicates.equalTo('data_scope', 'profile_persistent');
-    predicates.orderByDesc('visited_at');
-    predicates.orderByDesc('sync_id');
-    predicates.limitAs(HISTORY_SYNC_MAX_VISITS);
-    const resultSet = await store.query(predicates, HISTORY_VISIT_COLUMNS);
-    const visits = this.mapHistoryVisitEventRows(resultSet);
-    const boundary = visits.length >= HISTORY_SYNC_MAX_VISITS
-      ? visits[HISTORY_SYNC_MAX_VISITS - 1]
-      : undefined;
+    const boundary = await this.readHistorySyncRetentionBoundaryInStore(store, accountUid);
     const roundedCutoff = Math.floor(Math.max(0, cutoff) / HISTORY_SYNC_RETENTION_FRONTIER_GRANULARITY_MS) *
       HISTORY_SYNC_RETENTION_FRONTIER_GRANULARITY_MS;
     await this.persistHistorySyncRetentionFrontier(store, accountUid, {
@@ -5386,6 +5440,36 @@ export class BrowserDatabase {
       boundaryVisitId: (boundary?.syncId ?? '').trim(),
       updatedAt: Math.max(roundedCutoff, boundary?.visitedAt ?? 0)
     });
+  }
+
+  /**
+   * Reads the retention boundary: the HISTORY_SYNC_MAX_VISITS-th newest synced visit, or undefined
+   * when fewer exist. Only that one row is needed, so it is fetched with an offset instead of
+   * ordering and materializing the whole window: reading up to 10000 visits to use the last one cost
+   * 332 ms on device, which is what made deleting a history record stall the next scroll.
+   */
+  private async readHistorySyncRetentionBoundaryInStore(
+    store: relationalStore.RdbStore,
+    accountUid: string
+  ): Promise<HistorySyncRetentionBoundary | undefined> {
+    const resultSet = await store.querySql(
+      `SELECT visited_at, sync_id FROM ${HISTORY_VISITS_TABLE} WHERE sync_account_uid = ? ` +
+        `AND data_scope = 'profile_persistent' ORDER BY visited_at DESC, sync_id DESC ` +
+        `LIMIT 1 OFFSET ${HISTORY_SYNC_MAX_VISITS - 1}`,
+      [accountUid.trim()]
+    );
+    try {
+      if (!resultSet.goToNextRow()) {
+        return undefined;
+      }
+      const syncIdIndex = resultSet.getColumnIndex('sync_id');
+      return {
+        visitedAt: resultSet.getLong(resultSet.getColumnIndex('visited_at')),
+        syncId: resultSet.isColumnNull(syncIdIndex) ? '' : resultSet.getString(syncIdIndex)
+      };
+    } finally {
+      resultSet.close();
+    }
   }
 
   private async deleteHistoryVisitsBehindRetentionFrontierInStore(

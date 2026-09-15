@@ -546,6 +546,25 @@ export class BrowserAdBlockCoordinator {
       const isRedirect = context.request.isRedirect();
       const signaledPing = !isMainFrame &&
         this.pingRequestSignalService.consume(context.tabId, requestUrl, requestMethod);
+      const enabledForRequest = this.isFilteringEnabledForRequest(
+        snapshot,
+        policy,
+        context.strengthenForSmoothScroll
+      );
+      // The native authority answers "allow" for both the network and the response whenever
+      // filtering is off for this request or the URL is not http(s) that the engine accepts, so
+      // request classification and rule matching cannot change the outcome. Skip them; only the
+      // CSP native-fallback bookkeeping still has to run.
+      if (!enabledForRequest || !this.isNativeAuthorityRequestUrl(requestUrl)) {
+        this.responseFactory.consumeCspNativeFallback({
+          tabId: context.tabId,
+          profileId: context.profileId,
+          privacyMode: context.privacyMode,
+          dataScope: context.dataScope,
+          url: requestUrl
+        });
+        return null;
+      }
       const classification: AdBlockRequestClassification = signaledPing
         ? {
           resourceType: 'ping',
@@ -560,11 +579,6 @@ export class BrowserAdBlockCoordinator {
           isRedirect: isRedirect,
           request: context.request
         });
-      const enabledForRequest = this.isFilteringEnabledForRequest(
-        snapshot,
-        policy,
-        context.strengthenForSmoothScroll
-      );
       const evaluationInput: AdBlockRequestEvaluationInput = {
         url: requestUrl,
         pageUrl: context.pageUrl,
@@ -861,6 +875,12 @@ export class BrowserAdBlockCoordinator {
   ): boolean {
     return snapshot.settings.preferences.enabled &&
       (policy.enabledForPage || (!policy.allowlisted && strengthenForSmoothScroll));
+  }
+
+  // Mirrors the http(s) gate the native authority applies before it consults its rule set.
+  private isNativeAuthorityRequestUrl(url: string): boolean {
+    const normalizedUrl = url.trim().toLowerCase();
+    return normalizedUrl.startsWith('http://') || normalizedUrl.startsWith('https://');
   }
 
   private countRemovedUrlParameters(originalUrl: string, rewrittenUrl: string): number {

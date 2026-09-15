@@ -19,6 +19,7 @@ import {
   BrowserScrollPerformanceState
 } from './BrowserScrollPerformanceCoordinator';
 import { BrowserWebTopImmersionSessionCoordinator } from './BrowserWebTopImmersionSessionCoordinator';
+import { AiraScrollOscProbe } from '../../common/debug/AiraScrollOscProbe';
 import { HomeSearchPanelDetent } from './HomeSearchPanelDetentViewModel';
 
 export type BrowserWebScrollTouchPhase = 'down' | 'move' | 'up' | 'cancel';
@@ -117,12 +118,16 @@ export class BrowserWebScrollInteractionCoordinator {
       return;
     }
     const scrollY = this.normalizeScrollY(scrollOffsetY);
+    const probePreviousY = this.lastScrollY;
     this.scheduleContinuationScrollCheckpoint(tabId, scrollY);
     this.adoptBottomChromeScrollSource(`global:${tabId}`, tabId, scrollY);
     const interaction = this.resolveScrollInteraction(this.lastScrollY, scrollY);
     this.lastScrollY = scrollY;
     this.lastBottomChromeScrollY = scrollY;
     if (interaction.kind !== 'user') {
+      AiraScrollOscProbe.markSignal(
+        `global:${tabId}`, scrollY, scrollY - probePreviousY, 'skip_' + interaction.reason, interaction.reason
+      );
       this.dependencies.bottomChromeScrollCoordinator.reset(tabId, scrollY);
       this.dependencies.topImmersionSessionCoordinator.resetScrollBaseline(tabId, scrollY);
       if (interaction.reason === 'programmatic_suppressed') {
@@ -132,6 +137,9 @@ export class BrowserWebScrollInteractionCoordinator {
     }
     const decision = this.dependencies.bottomChromeScrollCoordinator.handleWebScrollMove(
       this.buildBottomChromeInput(facts, tabId, scrollY, interaction.presentationChangeAllowed)
+    );
+    AiraScrollOscProbe.markSignal(
+      `global:${tabId}`, scrollY, scrollY - probePreviousY, decision.reason, interaction.reason
     );
     this.shell.applyBottomChromeDecision(decision);
     this.dependencies.topImmersionSessionCoordinator.handleScroll(tabId, scrollY);
@@ -175,6 +183,9 @@ export class BrowserWebScrollInteractionCoordinator {
     this.lastBottomChromeScrollY = scrollY;
     const interaction = this.resolveScrollDeltaInteraction(signal.deltaY);
     if (interaction.kind !== 'user') {
+      AiraScrollOscProbe.markSignal(
+        sourceId, scrollY, signal.deltaY, 'skip_' + interaction.reason, interaction.reason
+      );
       this.dependencies.bottomChromeScrollCoordinator.reset(tabId, scrollY);
       if (interaction.reason === 'programmatic_suppressed') {
         this.restoreBottomChromeScrollPresentation(facts, 'programmatic_local_scroll_restore');
@@ -184,6 +195,7 @@ export class BrowserWebScrollInteractionCoordinator {
     const decision = this.dependencies.bottomChromeScrollCoordinator.handleWebScrollMove(
       this.buildBottomChromeInput(facts, tabId, scrollY, interaction.presentationChangeAllowed)
     );
+    AiraScrollOscProbe.markSignal(sourceId, scrollY, signal.deltaY, decision.reason, interaction.reason);
     this.shell.applyBottomChromeDecision(decision);
     this.activatePerformanceForMove();
     this.applySmoothModeForScroll(facts, tabId);
@@ -370,8 +382,17 @@ export class BrowserWebScrollInteractionCoordinator {
   }
 
   private scheduleContinuationScrollCheckpoint(tabId: string, scrollY: number): void {
+    const normalizedScrollY = this.normalizeScrollY(scrollY);
+    // Re-arming for an unchanged checkpoint cannot change the value that gets flushed, so keep the
+    // timer already in flight. This avoids clearTimeout/setTimeout churn on every scroll event of
+    // content-heavy pages, which repeat identical offsets while the gesture is held.
+    if (this.continuationScrollCheckpointTimer >= 0 &&
+      this.pendingContinuationScrollTabId === tabId &&
+      this.pendingContinuationScrollY === normalizedScrollY) {
+      return;
+    }
     this.pendingContinuationScrollTabId = tabId;
-    this.pendingContinuationScrollY = this.normalizeScrollY(scrollY);
+    this.pendingContinuationScrollY = normalizedScrollY;
     if (this.continuationScrollCheckpointTimer >= 0) {
       clearTimeout(this.continuationScrollCheckpointTimer);
     }
@@ -510,6 +531,7 @@ export class BrowserWebScrollInteractionCoordinator {
     }
     this.bottomChromeScrollSourceId = sourceId;
     this.lastBottomChromeScrollY = this.normalizeScrollY(scrollY);
+    AiraScrollOscProbe.markSource(sourceId, this.lastBottomChromeScrollY);
     this.dependencies.bottomChromeScrollCoordinator.reset(tabId, this.lastBottomChromeScrollY);
   }
 

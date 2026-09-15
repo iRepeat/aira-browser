@@ -335,6 +335,19 @@ const WEB_FILE_SAVE_PICKER_COMPAT_SCRIPT: string = `
     } catch (_error) {
     }
   }
+  // "Holding" means our accessor is still in place: the property must exist AND not be a callable
+  // picker. A page that deletes the property, or redefines it as a function, both count as lost and
+  // get re-applied on the next probe.
+  function isCompatHolding() {
+    try {
+      if (Object.getOwnPropertyDescriptor(window, 'showSaveFilePicker') === undefined) {
+        return false;
+      }
+      return typeof window.showSaveFilePicker !== 'function';
+    } catch (_error) {
+      return true;
+    }
+  }
   function applyCompat() {
     hideShowSaveFilePicker();
   }
@@ -343,14 +356,32 @@ const WEB_FILE_SAVE_PICKER_COMPAT_SCRIPT: string = `
     return;
   }
   window.__airaWebFileSavePickerCompatTimerInstalled = true;
+  // Assignment cannot undo the compat (the defined setter swallows it), so only a page that
+  // redefines the property itself can bring the native picker back. Probe for that instead of
+  // redefining the descriptor on every tick.
   var attempts = 0;
   var timer = setInterval(function () {
     attempts += 1;
-    applyCompat();
+    if (!isCompatHolding()) {
+      applyCompat();
+    }
     if (attempts >= 80) {
       clearInterval(timer);
     }
   }, 250);
+})();
+`;
+const PAGE_BEHAVIOR_RESAMPLE_INSTALLED_RESULT: string = 'aira-page-behavior-installed';
+const PAGE_BEHAVIOR_RESAMPLE_SCRIPT: string = `
+(function () {
+  try {
+    if (typeof window.__airaPageBehaviorSignalForceSample === 'function') {
+      window.__airaPageBehaviorSignalForceSample('reinjected');
+      return '${PAGE_BEHAVIOR_RESAMPLE_INSTALLED_RESULT}';
+    }
+  } catch (_error) {
+  }
+  return 'aira-page-behavior-missing';
 })();
 `;
 const PAGE_CHROME_THEME_SIGNAL_SCRIPT: string = `
@@ -747,6 +778,10 @@ const PAGE_BEHAVIOR_SIGNAL_SCRIPT: string = `
   var bridgeRetryCount = 0;
   var screenCaptureTrackCount = 0;
   var userEdited = false;
+  var editedContentCacheValue = false;
+  var editedContentCacheAt = 0;
+  var editedContentCacheValid = false;
+  var editedContentCacheTtlMs = 1500;
   var mediaPlaybackHintActive = false;
   var mediaPlaybackHintExpiresAt = 0;
   var trackedMediaElements = [];
@@ -870,19 +905,36 @@ const PAGE_BEHAVIOR_SIGNAL_SCRIPT: string = `
     return isEditableElement(active) && readEditableText(active).trim().length > 0;
   }
 
+  // The selector below scans the whole document, so the answer is memoized. User-edit events
+  // invalidate it precisely; the TTL bounds staleness for edits made programmatically, which are
+  // not observable. Child list mutations deliberately do NOT invalidate: content-heavy pages
+  // insert nodes continuously, and re-scanning on that churn is exactly what this cache avoids.
+  function invalidateEditedContentCache() {
+    editedContentCacheValid = false;
+  }
+
   function hasEditedContent() {
+    var now = Date.now();
+    if (editedContentCacheValid && now - editedContentCacheAt < editedContentCacheTtlMs) {
+      return editedContentCacheValue;
+    }
+    var found = false;
     try {
       var nodes = document.querySelectorAll('input, textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"], [role="searchbox"], [aria-multiline="true"]');
       var limit = Math.min(nodes.length, 80);
       for (var index = 0; index < limit; index += 1) {
         var node = nodes[index];
         if (isEditableElement(node) && readEditableText(node).trim().length > 0) {
-          return true;
+          found = true;
+          break;
         }
       }
     } catch (_error) {
     }
-    return false;
+    editedContentCacheValue = found;
+    editedContentCacheAt = now;
+    editedContentCacheValid = true;
+    return found;
   }
 
   function resolveVideoRuntimeId(node) {
@@ -1243,6 +1295,12 @@ const PAGE_BEHAVIOR_SIGNAL_SCRIPT: string = `
       }
       doc.__airaPageBehaviorVideoGeometryTracked = true;
       doc.addEventListener('scroll', function () {
+        // The deferred refresh only reports playing videos, so with nothing playing it is a
+        // guaranteed no-op. Checking first keeps the scroll path from re-arming a timer on every
+        // scroll event of documents that have no video at all.
+        if (!hasTrackedVideoElementPlaying()) {
+          return;
+        }
         scheduleVideoGeometryRefresh('geometry_scroll');
       }, true);
       ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (eventName) {
@@ -1363,7 +1421,10 @@ const PAGE_BEHAVIOR_SIGNAL_SCRIPT: string = `
   }
 
   function clearEditingIfEmpty(reason) {
-    if (!hasEditedContent() && !hasFocusedEditableContent()) {
+    // Clearing is only meaningful once an edit was recorded. With userEdited already false the
+    // scan below cannot change any state, so skip the whole-document query it would otherwise run
+    // on every blur.
+    if (userEdited && !hasEditedContent() && !hasFocusedEditableContent()) {
       userEdited = false;
     }
     schedule(reason || 'editing_check', 80);
@@ -1635,6 +1696,23 @@ const PAGE_BEHAVIOR_SIGNAL_SCRIPT: string = `
     }
   }
 
+  // Every inserted node in the document reaches this callback on DOM-heavy pages, so reject roots
+  // that cannot hold media before they cost a queue entry and a TreeWalker.
+  function canContainMediaNode(node) {
+    try {
+      if (!node || node.nodeType !== 1) {
+        return false;
+      }
+      var tagName = String(node.tagName || '').toLowerCase();
+      if (tagName === 'audio' || tagName === 'video' || tagName === 'iframe' || tagName === 'frame') {
+        return true;
+      }
+      return node.firstElementChild !== null;
+    } catch (_error) {
+    }
+    return false;
+  }
+
   function enqueueAddedMediaElements(mutations, depth, observedDocument) {
     if (depth > 2) {
       return;
@@ -1646,6 +1724,9 @@ const PAGE_BEHAVIOR_SIGNAL_SCRIPT: string = `
         var addedCount = addedNodes ? addedNodes.length : 0;
         for (var nodeIndex = 0; nodeIndex < addedCount; nodeIndex += 1) {
           var node = addedNodes[nodeIndex];
+          if (!canContainMediaNode(node)) {
+            continue;
+          }
           if (!enqueueMediaRoot(node, depth, observedDocument)) {
             return;
           }
@@ -1807,6 +1888,7 @@ const PAGE_BEHAVIOR_SIGNAL_SCRIPT: string = `
   function notifyPageHide() {
     screenCaptureTrackCount = 0;
     userEdited = false;
+    invalidateEditedContentCache();
     if (pendingMediaRootTimer >= 0) {
       clearTimeout(pendingMediaRootTimer);
       pendingMediaRootTimer = -1;
@@ -1858,21 +1940,25 @@ const PAGE_BEHAVIOR_SIGNAL_SCRIPT: string = `
   });
   ['input', 'beforeinput', 'change', 'compositionend', 'paste', 'cut', 'keyup'].forEach(function (eventName) {
     document.addEventListener(eventName, function (event) {
+      invalidateEditedContentCache();
       if (findEditableElement(event.target) || hasFocusedEditableContent() || hasEditedContent()) {
         markEditing('editing_' + eventName);
       }
     }, true);
   });
   document.addEventListener('focusin', function (event) {
+    invalidateEditedContentCache();
     if (findEditableElement(event.target)) {
       clearEditingIfEmpty('editing_focus');
     }
   }, true);
   document.addEventListener('focusout', function () {
+    invalidateEditedContentCache();
     clearEditingIfEmpty('editing_blur');
   }, true);
   document.addEventListener('reset', function () {
     userEdited = false;
+    invalidateEditedContentCache();
     schedule('editing_reset', 40);
   }, true);
   document.addEventListener('visibilitychange', function () {
@@ -2122,6 +2208,22 @@ function injectPageBehaviorSignal(config: HostedWebNodeConfig): void {
     });
 }
 
+// PAGE_BEHAVIOR_SIGNAL_SCRIPT is normally installed as a document-start script, so by load-finished
+// re-shipping its ~40 KB body only re-forces a sample. Ask the installed runtime to sample instead,
+// and fall back to the full injection when it never installed (for example a document that never
+// fired page-end), so the signal can never be silently lost.
+function requestPageBehaviorResample(config: HostedWebNodeConfig): void {
+  void config.controller.runJavaScript(PAGE_BEHAVIOR_RESAMPLE_SCRIPT)
+    .then((resampled: string): void => {
+      if (String(resampled).indexOf(PAGE_BEHAVIOR_RESAMPLE_INSTALLED_RESULT) < 0) {
+        injectPageBehaviorSignal(config);
+      }
+    })
+    .catch((_error: Error) => {
+      injectPageBehaviorSignal(config);
+    });
+}
+
 function registerHostedWebNativeMediaObservation(config: HostedWebNodeConfig): void {
   const observationHandler = config.callbacks.onNativeMediaPlayerObserved;
   if (observationHandler === undefined) {
@@ -2252,7 +2354,7 @@ function HostedWebNodeBuilder(config: HostedWebNodeConfig) {
       })
       .onLoadFinished(() => {
         injectWebFileSavePickerCompat(config);
-        injectPageBehaviorSignal(config);
+        requestPageBehaviorResample(config);
         config.callbacks.onLoadFinished(config.tabId);
       })
       .onProgressChange((event: OnProgressChangeEvent) => {
