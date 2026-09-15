@@ -512,16 +512,35 @@ Aira 唯一运行在渲染进程里的代码是**注入的 document-start 脚本
 
 读路径（`readCatalog` 的三级依赖读取）仍未搬：解析 manifest 后才知道要读哪些 index，解析 index 后才知道要读哪些 chunk，而 RDB 只能在主线程访问，不能把整份数据交给 worker 自行递归读取。可行的拆分是「主线程收集原始字符串 → worker 解析/校验/物化」，模板同上，但成本明显高于写路径，留待后续。
 
+**写路径分片与探针的真机结论（已闭环）**：书签投影在设备上确实走 worker（`path=taskpool computeMs=64 mainThreadMs=12`，`inline-fallback` 归零）。但过程中暴露了一个自己写的 bug：`setTransferList` 之后又去读 `requestBuffer.byteLength`，而 buffer 所有权已移交、调用方副本已 detach，于是每次都抛 `IsDetachedBuffer`，被当成 worker 失败、**静默回退主线程且白算两遍**。修法是 transfer 前捕获大小（历史路径 `AiraSyncComputeExecutor.ets:468` 早就是这么做的），并加契约禁止该形态回归。
+
+### 已做：历史同步的「超预算掉主线程」悬崖（本次，真机闭环）
+
+一次手动同步曾在初始合并花 **137 秒**、写规划花 **172 秒**，且都在 UI 线程上。三个独立成因，全部经真机测量：
+
+1. **平台 `UNKNOWN_ERROR`（进度码 1）是瞬时的**：一次 Block 推送记录全部传成功（`up=10/10 down=10/10`）却返回 `code=1`，耗时 6118 ms；两分钟后**同一份逐字节相同的负载**（`requestBytes=104228 chunks=95`）成功。内容寻址 Block 与可替换的 Head 槽位让重推幂等，故给书签的 G8 推送加了**有界重试**（仅此一种错误、最多 2 次），且重试后仍跑 `confirmPublicationBlocks` / `hasPublishedHead` 校验。仓库里为此存在过一个 `recoverUnknownHeadUpload` 分支，但**参数从未被传过 `true`**，属不可达死代码。
+2. **传输预算被数据增长越过两次**（8 MB、再是 13 MB 行数据撞 16 MB）。实测合并负载打包 10.2 MB、写规划 22.5 MB，于是每一趟都掉进 cooperative UI 线程路径。提到 **24 MB**——13 MB 行传输已知可成功，故真实上限高于旧值，且超限仍有 catch 后回退兜底。
+3. **体积估算是虚高的**：`length * 2 + 32` 逐字段按 UTF-16 最坏情况估算，一个 visit 的九个字段各被加码，10.2 MB 的合并被估成 **24.9 MB**。**是估算值而非真实负载在决定要不要掉主线程。** 改为实测 UTF-8 字节数（虚高降到 1.54 倍，仍是上界）。
+
+三者**缺一不可**：旧估算+24 MB 或新估算+16 MB 都仍会掉主线程，只有新估算+24 MB 才能进 worker。修复后同一台设备：`history_merge_taskpool 6980ms`、`history_write_plan_taskpool 21980ms`，全程主线程持续输出日志（无阻塞）。
+
+另外，超预算时的 cooperative 合并**每搬移一个元素就让步一次**：1575 条 visit 的一次初始合并约 **11.3 万次 await**（实测 137 秒 ÷ 11.3 万 ≈ 1.21 ms/次）。排序改为**每趟让步一次**（一趟本身就是一致的中间态）。真机新增的 `history_merge_yield_stats` 证实让步开销已可忽略：`yields=4 sleptMs=64`（6991 ms 的合并里只睡 64 ms）。
+
+本次也修了让步预算自身的问题：最初设成 24 ms，而每次让步要睡 16 ms，等于 `24/40 = 60%` 占空比、**给命中的路径加 1.67 倍税**；改为 200 ms（`200/216 = 93%`），刚好落在计数阈值本就允许的 250 项停顿之内。
+
+> 教训记录：本轮有两次归因是在**没有测量数据时替系统下结论**，且都被真机推翻（一次是「旧构建也有该错误」，实为被一个失控的全量日志 dump 污染；一次是「cached 分支的跳过守卫可用」，实为该条件与进入条件互为取反、永远不可达）。因此新增 `takeYieldStats`，让「计算慢」与「让步睡眠多」能从日志直接区分，而不是继续推断。
+
 ### 未修，按性价比排序（供后续决定）
 
-1. **华为空间书签读路径的解析/校验/物化**仍未上 TaskPool（写路径本次已完成，见上）。`readCatalog` 是三级依赖读取，只能在主线程按层取数据，再交给 worker 做纯解析与物化。
-2. **`HuaweiSpaceConditionalSnapshotStore`**（小说书架等服务共用）的解析路径同样在调用线程上，`@Concurrent` 计数为 0。
-3. `resolveBucketIndex` 对每条记录算一次 SHA-256（`cryptoFramework` MD 每记录新建）只为决定分桶；它在写路径分桶与读路径校验两趟中各调一次，是同一批记录的两遍处理，若要优化需先确认两者能否共享一次结果。分桶现已随 codec 进入 worker，主线程不再承担这部分。
-4. **WebDAV `ensureRemoteLayout` 每次写入重发 MKCOL**（`AiraWebdavRemoteStore.ets:385`），无「已确保」缓存；WebDAV 延迟本就高，属纯开销。
-5. **WebDAV 无条件 GET 之外的重复下载**：`writeState` 内部又读一次（`:152`），尽管调用方刚读过；`readHead` 为拿几个计数下载并解析整个文件。
-6. **`lastMirror` 是死代码**：`HuaweiSpaceHistoryRemoteStore.ets:66` 只在 `:139/:593/:597` 被赋 `undefined`，从未赋实值，因此 `canReuseMirror` 恒为 false、`planWriteFromMirror` 不可达——设计中的镜像复用**从未生效**。需要决定是补上赋值还是删掉这条路径。
-7. **切换 provider 时的若干无上限读**：`readHistorySyncCanonicalVisitsUpdatedAfter`（`BrowserDatabase.ets:5050`）、`readHistorySyncTombstones`（`:5268`）、`readHistorySyncDeleteRanges`（`:5292`）无 `LIMIT` 也无廉价探测守卫，仅受 `HISTORY_SYNC_MAX_VISITS` 约束。仅在切换 provider 时触发，非常规路径。
-8. **多轮往返**：历史交换最多 200 轮 `/exchange` + 200 轮 `/bootstrap`（硬上限，非无界重试）；书签一次合并 3 次完整往返，其中写后确认是最贵的一次。
+1. **历史同步的云上传耗时**——这是当前剩下的真正大头，不是卡顿。修完上面三处后，一次自动同步仍要 **46 秒**，其中 `write-remote` 占 **37.5 秒**（`cloudSync` 推送 114~732 个 block，`AiraH2HistoryBlocks` 单次可达 90 秒）。本地计算已不占主线程，但耗时不会因此变短。可行的方向是**减少上传量**（行体积已接近 11 KB/行的上限、1727 个 chunk）或**分片流式上传**，属独立议题。
+2. **华为空间书签读路径的解析/校验/物化**仍未上 TaskPool（写路径本次已完成，见上）。`readCatalog` 是三级依赖读取，只能在主线程按层取数据，再交给 worker 做纯解析与物化。
+3. **`HuaweiSpaceConditionalSnapshotStore`**（小说书架等服务共用）的解析路径同样在调用线程上，`@Concurrent` 计数为 0。
+4. `resolveBucketIndex` 对每条记录算一次 SHA-256（`cryptoFramework` MD 每记录新建）只为决定分桶；它在写路径分桶与读路径校验两趟中各调一次，是同一批记录的两遍处理，若要优化需先确认两者能否共享一次结果。分桶现已随 codec 进入 worker，主线程不再承担这部分。
+5. **WebDAV `ensureRemoteLayout` 每次写入重发 MKCOL**（`AiraWebdavRemoteStore.ets:385`），无「已确保」缓存；WebDAV 延迟本就高，属纯开销。
+6. **WebDAV 无条件 GET 之外的重复下载**：`writeState` 内部又读一次（`:152`），尽管调用方刚读过；`readHead` 为拿几个计数下载并解析整个文件。
+7. **`lastMirror` 是死代码**：`HuaweiSpaceHistoryRemoteStore.ets:66` 只在 `:139/:593/:597` 被赋 `undefined`，从未赋实值，因此 `canReuseMirror` 恒为 false、`planWriteFromMirror` 不可达——设计中的镜像复用**从未生效**。需要决定是补上赋值还是删掉这条路径。
+8. **切换 provider 时的若干无上限读**：`readHistorySyncCanonicalVisitsUpdatedAfter`（`BrowserDatabase.ets:5050`）、`readHistorySyncTombstones`（`:5268`）、`readHistorySyncDeleteRanges`（`:5292`）无 `LIMIT` 也无廉价探测守卫，仅受 `HISTORY_SYNC_MAX_VISITS` 约束。仅在切换 provider 时触发，非常规路径。
+9. **多轮往返**：历史交换最多 200 轮 `/exchange` + 200 轮 `/bootstrap`（硬上限，非无界重试）；书签一次合并 3 次完整往返，其中写后确认是最贵的一次。
 
 > 早先另记过一条：书签排序原先在**每次比较里重建两个 key**，n 条记录耗 O(n log n) 次模板字符串构造（实测 1 万条约 13.3 万次），已改为装饰-排序-还原（n 次），比较仍用同一个 `localeCompare`，故顺序逐字节不变——这一点是硬要求。该优化随本次拆分一起进入 codec。
 
