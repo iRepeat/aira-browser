@@ -75,8 +75,8 @@ export class BrowserQrScanCoordinator {
     this.clipboardService = clipboardService ?? new BrowserClipboardService();
   }
 
-  async scan(context: common.Context): Promise<void> {
-    const result = await this.qrScanService.scan(context);
+  async scan(context: common.Context, preferAlbum: boolean = false): Promise<void> {
+    const result = await this.qrScanService.scan(context, preferAlbum);
     this.applyScanResult(result);
   }
 

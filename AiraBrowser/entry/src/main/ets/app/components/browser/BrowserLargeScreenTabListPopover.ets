@@ -469,7 +469,7 @@ export struct BrowserLargeScreenTabListPopover {
   private buildCloseButton(visible: boolean, accessibilityText: string, onClick: () => void) {
     Button({ type: ButtonType.Circle }) {
       AiraIcon({
-        airaIconId: 'browser.tabs.overviewClose',
+        airaIconId: 'browser.tabs.delete',
         iconSize: TAB_LIST_CLOSE_ICON_SIZE_VP,
         iconColor: this.storedSecondaryTextColor
       })

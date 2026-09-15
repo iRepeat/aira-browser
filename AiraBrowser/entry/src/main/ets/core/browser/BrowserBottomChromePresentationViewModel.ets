@@ -195,18 +195,18 @@ interface BrowserBottomChromePresentationValues {
   trailingHeaderActions: BrowserBottomAddressPanelHeaderAction[];
 }
 
-const BROWSER_BOTTOM_CHROME_MATERIAL_HEIGHT: number = 44;
+const BROWSER_BOTTOM_CHROME_MATERIAL_HEIGHT: number = 48;
 const BROWSER_BOTTOM_CHROME_RESTING_HORIZONTAL_PADDING: number = 2;
-const BROWSER_BOTTOM_CHROME_ACCESSORY_SIZE: number = 44;
+const BROWSER_BOTTOM_CHROME_ACCESSORY_SIZE: number = 48;
 const BROWSER_BOTTOM_CHROME_ACCESSORY_GAP: number = 2;
 const BROWSER_BOTTOM_CHROME_COMPACT_WIDTH: number = 96;
 const BROWSER_BOTTOM_CHROME_COMPACT_HEIGHT: number = 32;
 const BROWSER_BOTTOM_CHROME_COMPACT_RADIUS: number = 16;
 // Scroll-Compact: the capsule is bottom-aligned inside the chrome render rail, so both
-// shifts equal that rail's height minus the compact capsule (44 - 32). Update them together
+// shifts equal that rail's height minus the compact capsule (48 - 32). Update them together
 // with BROWSER_BOTTOM_CHROME_RENDER_HEIGHT or the capsule overflows the rail.
-const BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y: number = 12;
-const BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y: number = 12;
+const BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y: number = 16;
+const BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y: number = 16;
 const BROWSER_BOTTOM_CHROME_COMPACT_DISPLAY_SCALE: number = 14 / 15;
 const BROWSER_BOTTOM_CHROME_COMPACT_HORIZONTAL_PADDING: number = 10;
 const BROWSER_BOTTOM_CHROME_COMPACT_VERTICAL_PADDING: number = 4;

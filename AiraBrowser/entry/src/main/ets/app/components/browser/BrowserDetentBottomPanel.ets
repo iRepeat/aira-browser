@@ -123,8 +123,8 @@ const BROWSER_DETENT_FLOATING_CONTENT_ENTER_INITIAL_SCALE: number = 0.94;
 const BROWSER_DETENT_FLOATING_CONTENT_EXIT_TRANSLATE_Y: number = 8;
 const BROWSER_DETENT_FLOATING_CONTENT_ENTER_OPACITY_DURATION_MS: number = 160;
 const BROWSER_DETENT_FLOATING_CONTENT_ENTER_CURVE: ICurve = curves.springMotion(0.42, 0.62);
-const BROWSER_DETENT_FLOATING_PANEL_SHADOW_RADIUS: number = 16;
-const BROWSER_DETENT_FLOATING_PANEL_SHADOW_COLOR: string = '#14000000';
+const BROWSER_DETENT_FLOATING_PANEL_SHADOW_RADIUS: number = 40;
+const BROWSER_DETENT_FLOATING_PANEL_SHADOW_COLOR: string = '#12000000';
 const BROWSER_DETENT_FLOATING_PANEL_SHADOW_OFFSET_Y: number = 0;
 const BROWSER_DETENT_FLOATING_HOST_RESIZE_MOTION_THRESHOLD: number = 2;
 
@@ -476,7 +476,9 @@ export struct BrowserDetentBottomPanel {
     })
     .hitTestBehavior(this.shouldEnableFloatingHeaderInteraction() ?
       HitTestMode.BLOCK_HIERARCHY : HitTestMode.BLOCK_DESCENDANTS)
-    .clip(true)
+    // The three-block header paints no surface of its own here, so clipping this host would slice the
+    // round buttons' shadows off at an invisible pill edge. Clip only while the pill carries chrome.
+    .clip(this.floatingHeaderChromeVisible)
     .onAreaChange((_oldArea: Area, newArea: Area) => {
       this.dragGestureWidth = this.parseAreaDimension(newArea.width);
       this.reportFloatingPanelVisualHeightFromArea(newArea, 'header');

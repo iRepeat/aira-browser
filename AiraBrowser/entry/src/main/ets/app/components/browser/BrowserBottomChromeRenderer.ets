@@ -43,10 +43,10 @@ import {
   systemMaterialModifier
 } from '../common/FloatingGlassMaterialTokens';
 
-const BROWSER_BOTTOM_CHROME_RENDER_HEIGHT: number = 44;
+const BROWSER_BOTTOM_CHROME_RENDER_HEIGHT: number = 48;
 const BROWSER_BOTTOM_CHROME_ICON_SIZE: number = 22;
 const BROWSER_BOTTOM_CHROME_EDGE_HIGHLIGHT_WIDTH: number = 0.5;
-const BROWSER_BOTTOM_CHROME_SHADOW_RADIUS: number = 6;
+const BROWSER_BOTTOM_CHROME_SHADOW_RADIUS: number = 40;
 const BROWSER_BOTTOM_CHROME_ENABLED_OPACITY: number = 1;
 const BROWSER_BOTTOM_CHROME_DISABLED_OPACITY: number = 0.42;
 const BROWSER_BOTTOM_CHROME_PROGRESS_EPSILON: number = 0.001;
@@ -227,6 +227,7 @@ export struct BrowserBottomChromeRenderer {
     .width(this.animatedFrame.leadingOuterWidth)
     .height(this.resolveOuterVisualSize(this.animatedFrame.leadingOuterWidth))
     .borderRadius(this.resolveOuterVisualSize(this.animatedFrame.leadingOuterWidth) / 2)
+    .shadow(this.resolveMaterialShadow())
     .opacity(this.animatedFrame.outerOpacity)
     .translate({ y: this.resolveOuterVisualOffsetY(this.animatedFrame.leadingOuterWidth) })
     .scale({
@@ -284,6 +285,7 @@ export struct BrowserBottomChromeRenderer {
     .width(this.animatedFrame.trailingOuterWidth)
     .height(this.resolveOuterVisualSize(this.animatedFrame.trailingOuterWidth))
     .borderRadius(this.resolveOuterVisualSize(this.animatedFrame.trailingOuterWidth) / 2)
+    .shadow(this.resolveMaterialShadow())
     .opacity(this.animatedFrame.outerOpacity)
     .translate({ y: this.resolveOuterVisualOffsetY(this.animatedFrame.trailingOuterWidth) })
     .scale({
@@ -338,6 +340,7 @@ export struct BrowserBottomChromeRenderer {
       .width(this.animatedFrame.centerWidth)
       .height(this.animatedFrame.centerHeight)
       .borderRadius(this.animatedFrame.centerRadius)
+      .shadow(this.resolveMaterialShadow())
       .translate({ y: this.animatedFrame.centerTranslateY })
       .scale({
         x: this.resolveCenterBodyScaleX(),

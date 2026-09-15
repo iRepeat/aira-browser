@@ -205,7 +205,7 @@ export struct BrowserTabOverviewCard {
   private buildCloseButton() {
     Button({ type: ButtonType.Circle }) {
       AiraIcon({
-        airaIconId: 'browser.tabs.overviewClose',
+        airaIconId: 'browser.tabs.delete',
         iconSize: TAB_OVERVIEW_CARD_CLOSE_BUTTON_ICON_SIZE,
         iconColor: this.storedPrimaryTextColor
       })

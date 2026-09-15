@@ -291,7 +291,7 @@ export struct BrowserLargeScreenTabStripSurface {
       if (tab.closable && (tab.active || this.hoveredTabId === tab.id || !this.presentation.hoverVisible)) {
         Button({ type: ButtonType.Circle }) {
           AiraIcon({
-            airaIconId: 'browser.tabs.overviewClose',
+            airaIconId: 'browser.tabs.delete',
             iconSize: TAB_CLOSE_ICON_SIZE_VP,
             iconColor: this.storedSecondaryTextColor
           })

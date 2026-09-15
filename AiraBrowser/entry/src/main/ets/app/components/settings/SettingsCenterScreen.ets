@@ -559,7 +559,7 @@ export struct SettingsCenterScreen {
   }
 
   private scanQrCode(): void {
-    void this.qrScanCoordinator.scan(this.getHostContext());
+    void this.qrScanCoordinator.scan(this.getHostContext(), this.settingsShellFamily === 'large_screen');
   }
 
   private openScannedUrlInBrowser(value: string): void {
