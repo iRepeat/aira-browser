@@ -270,14 +270,18 @@ export class HistorySyncMergeService {
           }
           output += 1;
           processed += 1;
-          await throttle.afterBatchItem(processed);
         }
       }
       const swap = source;
       source = target;
       target = swap;
       width *= 2;
-      await throttle.afterStage();
+      // Yield once per completed pass, not once per element moved. Awaiting inside the move loop
+      // dominated oversized merges: a 1575-visit state is ~17k element moves per sort and the merge
+      // runs six normalizations, so per-element awaits cost ~113k awaits in one initial merge, which
+      // device logs measured at ~137 s. A pass is already a consistent intermediate state, so
+      // yielding at its boundary is both correct and ~1.5k-times cheaper.
+      await throttle.afterBatchItem(processed);
     }
     return source;
   }
@@ -311,14 +315,13 @@ export class HistorySyncMergeService {
           }
           output += 1;
           processed += 1;
-          await throttle.afterBatchItem(processed);
         }
       }
       const swap = source;
       source = target;
       target = swap;
       width *= 2;
-      await throttle.afterStage();
+      await throttle.afterBatchItem(processed);
     }
     return source;
   }
@@ -352,14 +355,13 @@ export class HistorySyncMergeService {
           }
           output += 1;
           processed += 1;
-          await throttle.afterBatchItem(processed);
         }
       }
       const swap = source;
       source = target;
       target = swap;
       width *= 2;
-      await throttle.afterStage();
+      await throttle.afterBatchItem(processed);
     }
     return source;
   }

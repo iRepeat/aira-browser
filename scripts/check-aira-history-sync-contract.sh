@@ -160,11 +160,17 @@ if [ "${failures}" -eq 0 ]; then
     "taskpool\.execute\(task, taskpool\.Priority\.LOW\)" \
     "Sync compute tasks must remain low priority"
   require_pattern "${COMPUTE_REL}" \
-    "AIRA_SYNC_TASKPOOL_TRANSFER_BUDGET_BYTES: number = 16 \* 1024 \* 1024" \
+    "AIRA_SYNC_TASKPOOL_TRANSFER_BUDGET_BYTES: number = 24 \* 1024 \* 1024" \
     "History TaskPool work must preflight the bounded structured-clone payload"
   require_pattern "${COMPUTE_REL}" \
-    "AIRA_SYNC_TASKPOOL_PACK_PREFLIGHT_BUDGET_BYTES: number = 16 \* 1024 \* 1024" \
+    "AIRA_SYNC_TASKPOOL_PACK_PREFLIGHT_BUDGET_BYTES: number = 24 \* 1024 \* 1024" \
     "History row packing must remain bounded before measuring the actual transferable bytes"
+  require_pattern "${COMPUTE_REL}" \
+    "resolveHistoryTransferEstimateEncoder" \
+    "the History transfer estimate must resolve its encoder safely instead of trusting module-level init"
+  require_pattern "${COMPUTE_REL}" \
+    "return text\.length \* 2 \+ 32" \
+    "the History transfer estimate must keep a conservative fallback so it can never fail a sync"
   require_pattern "${COMPUTE_REL}" \
     "fitsTaskpoolTransferBudget\(transferBytes\)" \
     "changed Huawei History writes must keep the actual transfer bytes inside the same bound as packing"

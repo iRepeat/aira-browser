@@ -66,10 +66,15 @@ export class AiraHuaweiSpaceBookmarkComputeExecutor implements HuaweiBookmarkPro
     const startedAt = Date.now();
     const encodeStartedAt = Date.now();
     const requestBuffer = AiraHuaweiSpaceBookmarkTaskpoolTransferCodec.encodeProjectionRequest(request);
+    // Every fact about the buffer must be captured here. setTransferList hands its ownership to the
+    // worker, and the caller's copy is then detached, so reading even requestBuffer.byteLength
+    // afterwards throws IsDetachedBuffer -- which would surface as an offload "failure" and make the
+    // caller recompute the whole projection on its own thread.
+    const requestBytes = requestBuffer.byteLength;
     const encodeMs = Date.now() - encodeStartedAt;
-    if (requestBuffer.byteLength > AIRA_HUAWEI_BOOKMARK_TASKPOOL_BUDGET_BYTES) {
+    if (requestBytes > AIRA_HUAWEI_BOOKMARK_TASKPOOL_BUDGET_BYTES) {
       throw new Error(
-        `Huawei Bookmark TaskPool request exceeds the transfer budget: ${requestBuffer.byteLength}`
+        `Huawei Bookmark TaskPool request exceeds the transfer budget: ${requestBytes}`
       );
     }
     const task = new taskpool.Task(
@@ -80,8 +85,11 @@ export class AiraHuaweiSpaceBookmarkComputeExecutor implements HuaweiBookmarkPro
     task.setTransferList([requestBuffer]);
     const outcome = await taskpool.execute(task, taskpool.Priority.LOW) as HuaweiBookmarkProjectionPackedOutcome;
     if (outcome === undefined || outcome.errorMessage.length > 0) {
+      // Prefixed so a log read can tell a genuine worker failure from caller-side bookkeeping.
       throw new Error(
-        outcome === undefined ? 'Huawei Bookmark TaskPool job returned no outcome.' : outcome.errorMessage
+        outcome === undefined
+          ? 'Huawei Bookmark TaskPool job returned no outcome.'
+          : `Huawei Bookmark TaskPool worker failed: ${outcome.errorMessage}`
       );
     }
     const decodeStartedAt = Date.now();
@@ -90,28 +98,34 @@ export class AiraHuaweiSpaceBookmarkComputeExecutor implements HuaweiBookmarkPro
     // Only the encode and the decode still occupy the caller's thread; the projection itself
     // (computeMs) no longer does. Those two numbers are the before/after for this stage, so they are
     // reported together with the same field names as the on-thread path logs.
+    //
+    // Reporting must not be able to fail: the caller treats any throw from here as a worker failure
+    // and rebuilds the projection inline, so a logging bug would silently double the work.
     const mainThreadMs = encodeMs + decodeMs;
-    AiraSyncJankProbe.endExtra(
-      'huawei_bookmark_projection',
-      startedAt,
-      `path=taskpool computeMs=${outcome.computeMs} mainThreadMs=${mainThreadMs}` +
-        ` requestBytes=${requestBuffer.byteLength} chunks=${projection.chunks.length}` +
-        ` indexes=${projection.indexes.length}`
-    );
-    hilog.info(
-      HUAWEI_BOOKMARK_COMPUTE_LOG_DOMAIN,
-      HUAWEI_BOOKMARK_COMPUTE_LOG_TAG,
-      'G8 projection path=taskpool encodeMs=%{public}d computeMs=%{public}d decodeMs=%{public}d' +
-        ' mainThreadMs=%{public}d wallMs=%{public}d requestBytes=%{public}d chunks=%{public}d indexes=%{public}d',
-      encodeMs,
-      outcome.computeMs,
-      decodeMs,
-      mainThreadMs,
-      Date.now() - startedAt,
-      requestBuffer.byteLength,
-      projection.chunks.length,
-      projection.indexes.length
-    );
+    try {
+      AiraSyncJankProbe.endExtra(
+        'huawei_bookmark_projection',
+        startedAt,
+        `path=taskpool computeMs=${outcome.computeMs} mainThreadMs=${mainThreadMs}` +
+          ` requestBytes=${requestBytes} chunks=${projection.chunks.length}` +
+          ` indexes=${projection.indexes.length}`
+      );
+      hilog.info(
+        HUAWEI_BOOKMARK_COMPUTE_LOG_DOMAIN,
+        HUAWEI_BOOKMARK_COMPUTE_LOG_TAG,
+        'G8 projection path=taskpool encodeMs=%{public}d computeMs=%{public}d decodeMs=%{public}d' +
+          ' mainThreadMs=%{public}d wallMs=%{public}d requestBytes=%{public}d chunks=%{public}d indexes=%{public}d',
+        encodeMs,
+        outcome.computeMs,
+        decodeMs,
+        mainThreadMs,
+        Date.now() - startedAt,
+        requestBytes,
+        projection.chunks.length,
+        projection.indexes.length
+      );
+    } catch (_error) {
+    }
     return projection;
   }
 }

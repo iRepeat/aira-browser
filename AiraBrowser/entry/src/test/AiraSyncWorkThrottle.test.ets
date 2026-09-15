@@ -88,5 +88,20 @@ export default function airaSyncWorkThrottleTest(): void {
 
       expect(clock.sleepDelaysMs.length).assertEqual(1);
     });
+
+    it('does not let the default budget tax a large loop ahead of the count threshold', 0, async () => {
+      const clock = new RecordingThrottleClock();
+      const throttle = new AiraSyncWorkThrottleService(clock, { batchSize: 250 });
+
+      // 250 items at 1 ms is the count threshold's own stall allowance (~250 ms). A default budget
+      // stricter than that sleeps more often than the count path already did, which slows every
+      // large sync down without bounding anything new.
+      for (let index = 1; index <= 250; index++) {
+        clock.advance(1);
+        await throttle.afterBatchItem(index);
+      }
+
+      expect(clock.sleepDelaysMs.length).assertEqual(1);
+    });
   });
 }

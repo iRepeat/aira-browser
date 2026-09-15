@@ -291,6 +291,12 @@ if [ "${failures}" -eq 0 ]; then
   require_pattern "${HUAWEI_BLOCK_COMPUTE_REL}" \
     'AIRA_HUAWEI_BOOKMARK_TASKPOOL_BUDGET_BYTES: number = 16 \* 1024 \* 1024[\s\S]*task\.setTransferList\(\[requestBuffer\]\)' \
     "Huawei G8 TaskPool work must preflight and transfer the bounded request payload"
+  # setTransferList moves the buffer's ownership to the worker and detaches the caller's copy, so any
+  # later read (even .byteLength) throws IsDetachedBuffer. That surfaced as an offload "failure" that
+  # silently rebuilt the projection on the caller's thread, so the size must be captured beforehand.
+  forbid_pattern "${HUAWEI_BLOCK_COMPUTE_REL}" \
+    "setTransferList\\(\\[requestBuffer\\]\\)[\\s\\S]*requestBuffer\\.byteLength" \
+    "Huawei G8 must capture the request size before transferring the buffer, never read it after"
   forbid_pattern "${HUAWEI_BLOCK_COMPUTE_REL}" \
     "HuaweiSpaceBookmarkChunkRepository" \
     "the Huawei G8 block worker must not import the RDB repository"
@@ -318,6 +324,12 @@ if [ "${failures}" -eq 0 ]; then
   require_pattern "${HUAWEI_STORE_REL}" \
     'writeSnapshotBlocks[\s\S]*SYNC_MODE_TIME_FIRST[\s\S]*getBlockCloudTableNames\(\)[\s\S]*confirmPublicationBlocks[\s\S]*publishHead[\s\S]*SYNC_MODE_TIME_FIRST[\s\S]*getHeadCloudTableNames\(\)[\s\S]*hasPublishedHead' \
     "Huawei G8 must upload Blocks then Head with TIME_FIRST after local confirmation, without a full CLOUD_FIRST reread"
+  # A platform UNKNOWN_ERROR (progress code 1) was observed on a Block push whose records all
+  # transferred and which then succeeded on the next run with a byte-identical payload, so the G8
+  # pushes must absorb it with a bounded retry instead of surfacing a user-facing failure.
+  require_pattern "${HUAWEI_STORE_REL}" \
+    'HUAWEI_SPACE_TRANSIENT_SYNC_ATTEMPTS: number = 2[\s\S]*runManualCloudSyncWithTransientRetry[\s\S]*isTransientCloudSyncError' \
+    "Huawei G8 pushes must retry the platform's transient UNKNOWN_ERROR before failing the domain"
   require_pattern "${HUAWEI_STORE_REL}" \
     'readHead\(\)[\s\S]*getHeadCloudTableNames\(\)[\s\S]*readHeadSummaries[\s\S]*readAggregateAfterCloudFirst[\s\S]*getHeadCloudTableNames\(\)[\s\S]*if \(readResult\.needsBlockSync\)[\s\S]*getBlockCloudTableNames\(\)' \
     "Huawei G8 no-op discovery must synchronize Heads first and fetch Blocks only when materialization needs them"

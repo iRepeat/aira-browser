@@ -1,4 +1,4 @@
-import { taskpool } from '@kit.ArkTS';
+import { taskpool, util } from '@kit.ArkTS';
 import {
   HuaweiSpaceHistorySyncState
 } from '../../common/models/HistorySyncModels';
@@ -23,8 +23,20 @@ import { AiraSyncJankProbe } from '../../common/debug/AiraSyncJankProbe';
 // the UI thread and turns a ~6 s job into a ~140 s one. Keep it aligned with the
 // pack preflight below; exceeding the true platform limit surfaces as a
 // serialization error, which the callers already catch and retry cooperatively.
-const AIRA_SYNC_TASKPOOL_TRANSFER_BUDGET_BYTES: number = 16 * 1024 * 1024;
-const AIRA_SYNC_TASKPOOL_PACK_PREFLIGHT_BUDGET_BYTES: number = 16 * 1024 * 1024;
+//
+// The bound has now been crossed twice by growth alone (8 MB, then 16 MB at 13 MB
+// of rows). A device measured on 2026-09-15 packed 13 MB of rows plus a 5.6 MB
+// merged state -- 18.9 MB -- so every pass fell to the UI thread and one manual
+// sync spent 137 s in the initial merge and another 172 s in the write plan.
+// 13 MB row transfers are known to succeed, so the practical limit is above the
+// old bound; raising it to 24 MB clears the measured payload while staying close
+// enough that the catch-and-retry-cooperatively path still covers a genuine
+// platform rejection. The durable answer is a size-independent transfer (chunked
+// buffers) rather than another round of raising this number.
+const AIRA_SYNC_TASKPOOL_TRANSFER_BUDGET_BYTES: number = 24 * 1024 * 1024;
+// Kept equal to the transfer bound: a preflight stricter than the transfer would reject a payload
+// the transfer would have accepted, which is the same cliff one gate earlier.
+const AIRA_SYNC_TASKPOOL_PACK_PREFLIGHT_BUDGET_BYTES: number = 24 * 1024 * 1024;
 
 export interface AiraHistoryInitialMergePlan {
   merged: HuaweiSpaceHistorySyncState;
@@ -382,8 +394,49 @@ function resolveHuaweiHistoryRemoteWriteConfirmationOutcome(
   return outcome.confirmation;
 }
 
+// Framing overhead a packed state adds per field (name, quotes, separator). Measured against a packed
+// state rather than assumed, and deliberately a small over-count so the estimate stays an upper bound.
+const HISTORY_TRANSFER_FIELD_OVERHEAD_BYTES: number = 8;
+
+// Created lazily rather than as a module-level constant. This module also holds the @Concurrent
+// workers, and a module-level initializer that calls into a platform API does not reliably survive in
+// that shape: a module-level `util.TextEncoder.create('utf-8')` here produced an undefined encoder at
+// runtime, so the estimate threw "Cannot read property byteLength of undefined" and failed the whole
+// History sync. The two files that do create encoders successfully both hold them as instance fields.
+let historyTransferEstimateEncoder: util.TextEncoder | undefined = undefined;
+
+function resolveHistoryTransferEstimateEncoder(): util.TextEncoder | undefined {
+  if (historyTransferEstimateEncoder === undefined) {
+    try {
+      historyTransferEstimateEncoder = util.TextEncoder.create('utf-8');
+    } catch (_error) {
+      historyTransferEstimateEncoder = undefined;
+    }
+  }
+  return historyTransferEstimateEncoder;
+}
+
 function estimateTransferStringBytes(value: string): number {
-  return value.length * 2 + 32;
+  // Measured UTF-8 length, not `length * 2 + 32`. The old heuristic assumed the UTF-16 worst case and
+  // padded every one of a visit's nine fields, so an ordinary state estimated at roughly twice its
+  // packed size: a ~11 MB merge read as ~20 MB, crossed the bound, and ran its whole multi-pass
+  // normalization on the UI thread instead of a worker. The estimate, not the payload, was choosing
+  // the fallback.
+  //
+  // This is only an estimate, so it must never be able to fail a sync: if the encoder is unavailable
+  // or misbehaves, fall back to the conservative UTF-16 heuristic that the value is an upper bound for.
+  const text = typeof value === 'string' ? value : '';
+  const encoder = resolveHistoryTransferEstimateEncoder();
+  if (encoder !== undefined) {
+    try {
+      const bytes = encoder.encodeInto(text);
+      if (bytes !== undefined && bytes.byteLength !== undefined) {
+        return bytes.byteLength + HISTORY_TRANSFER_FIELD_OVERHEAD_BYTES;
+      }
+    } catch (_error) {
+    }
+  }
+  return text.length * 2 + 32;
 }
 
 function estimateHuaweiHistoryStateTransferBytes(state: HuaweiSpaceHistorySyncState): number {
@@ -443,6 +496,14 @@ export class AiraSyncComputeExecutor {
     undefined,
     { batchSize: 250, batchPauseMs: 16, stagePauseMs: 16 }
   );
+
+  /**
+   * Yield count and sleep time the last cooperative stage paid. Lets a log read split a slow
+   * oversized merge into actual work versus yield overhead instead of guessing which it was.
+   */
+  takeCooperativeYieldStats(): string {
+    return this.cooperativeThrottle.takeYieldStats();
+  }
 
   async decodeHuaweiHistoryRemoteState(
     uid: string,

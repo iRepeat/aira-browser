@@ -264,6 +264,11 @@ export class HuaweiSpaceHistorySyncRunner {
     stageStartedAt = Date.now();
     const initialPlan: AiraHistoryInitialMergePlan =
       await this.computeExecutor.planHuaweiHistoryInitialMerge(remote, local);
+    AiraSyncJankProbe.markExtra(
+      'history_merge_yield_stats',
+      `${this.computeExecutor.takeCooperativeYieldStats()} remoteVisits=${remote.visits.length}` +
+        ` localVisits=${local.visits.length}`
+    );
     this.logStage(
       'plan-merge',
       stageStartedAt,

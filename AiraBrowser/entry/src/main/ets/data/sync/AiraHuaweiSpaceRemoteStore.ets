@@ -44,6 +44,15 @@ interface HuaweiSpaceBookmarkWriteParents {
   headCommitIds: string[];
 }
 
+// A platform UNKNOWN_ERROR (progress code 1) has been observed on a Block push whose records all
+// transferred (up=10/10 down=10/10) and which then succeeded on the next run with a byte-identical
+// payload (requestBytes=104228, chunks=95 both times). So it is a transient platform hiccup, not a
+// data problem. Content-addressed Blocks and the replaceable Head slot make re-running the push
+// idempotent, so a bounded retry here turns that hiccup into a success instead of a user-facing
+// "部分内容需要处理" that asks the user to retry by hand.
+const HUAWEI_SPACE_TRANSIENT_SYNC_ATTEMPTS: number = 2;
+const HUAWEI_SPACE_TRANSIENT_SYNC_RETRY_DELAY_MS: number = 400;
+
 export class HuaweiSpaceBookmarkSyncError extends Error {
   retryable: boolean;
 
@@ -148,13 +157,15 @@ export class AiraHuaweiSpaceRemoteStore implements AiraSyncRemoteStore {
   async confirmPendingWrites(): Promise<void> {
     this.assertConfigured();
     const store = await this.getStore();
-    await this.runManualCloudSync(
+    // Same push of pending Blocks then Heads as writeState, so it carries the same transient-error
+    // exposure and gets the same bounded retry.
+    await this.runManualCloudSyncWithTransientRetry(
       store,
       relationalStore.SyncMode.SYNC_MODE_TIME_FIRST,
       this.chunkRepository.getBlockCloudTableNames(),
       true
     );
-    await this.runManualCloudSync(
+    await this.runManualCloudSyncWithTransientRetry(
       store,
       relationalStore.SyncMode.SYNC_MODE_TIME_FIRST,
       this.chunkRepository.getHeadCloudTableNames(),
@@ -211,7 +222,7 @@ export class AiraHuaweiSpaceRemoteStore implements AiraSyncRemoteStore {
         generatedAt,
         updatedAt
       });
-      await this.runManualCloudSync(
+      await this.runManualCloudSyncWithTransientRetry(
         store,
         relationalStore.SyncMode.SYNC_MODE_TIME_FIRST,
         this.chunkRepository.getBlockCloudTableNames(),
@@ -224,7 +235,7 @@ export class AiraHuaweiSpaceRemoteStore implements AiraSyncRemoteStore {
         );
       }
       await this.chunkRepository.publishHead(store, writeResult.publication);
-      await this.runManualCloudSync(
+      await this.runManualCloudSyncWithTransientRetry(
         store,
         relationalStore.SyncMode.SYNC_MODE_TIME_FIRST,
         this.chunkRepository.getHeadCloudTableNames(),
@@ -393,6 +404,59 @@ export class AiraHuaweiSpaceRemoteStore implements AiraSyncRemoteStore {
       return AppRuntimeContext.getUIAbilityContext();
     }
     return AppRuntimeContext.getApplicationContext();
+  }
+
+  /**
+   * Runs a cloud push and retries it once when the platform reports its transient UNKNOWN_ERROR.
+   *
+   * Only that specific, observed-transient error is retried; anything else propagates on the first
+   * attempt. The caller's post-push verification (confirmPublicationBlocks / hasPublishedHead) still
+   * runs after this returns, so a retry cannot let an unverified write through.
+   */
+  private async runManualCloudSyncWithTransientRetry(
+    store: relationalStore.RdbStore,
+    syncMode: relationalStore.SyncMode,
+    tableNames: string[],
+    requireFreshTask: boolean
+  ): Promise<void> {
+    for (let attempt = 1; attempt <= HUAWEI_SPACE_TRANSIENT_SYNC_ATTEMPTS; attempt += 1) {
+      try {
+        await this.runManualCloudSync(store, syncMode, tableNames, requireFreshTask);
+        if (attempt > 1) {
+          hilog.info(
+            HUAWEI_SPACE_LOG_DOMAIN,
+            HUAWEI_SPACE_LOG_TAG,
+            'G8 transient cloud sync recovered uid=%{public}s tables=%{public}s attempt=%{public}d',
+            this.maskUid(this.uid),
+            tableNames.join(','),
+            attempt
+          );
+        }
+        return;
+      } catch (error) {
+        const failed = error as Error;
+        if (attempt >= HUAWEI_SPACE_TRANSIENT_SYNC_ATTEMPTS || !this.isTransientCloudSyncError(failed)) {
+          throw failed;
+        }
+        hilog.warn(
+          HUAWEI_SPACE_LOG_DOMAIN,
+          HUAWEI_SPACE_LOG_TAG,
+          'G8 transient cloud sync error; retrying uid=%{public}s tables=%{public}s attempt=%{public}d reason=%{public}s',
+          this.maskUid(this.uid),
+          tableNames.join(','),
+          attempt,
+          this.stringifyError(failed)
+        );
+        await new Promise<void>((resolve: () => void): void => {
+          setTimeout((): void => resolve(), HUAWEI_SPACE_TRANSIENT_SYNC_RETRY_DELAY_MS);
+        });
+      }
+    }
+  }
+
+  private isTransientCloudSyncError(error: Error): boolean {
+    return isRetryableHuaweiSpaceBookmarkSyncError(error) &&
+      this.stringifyError(error).indexOf('进度码 1') >= 0;
   }
 
   private runManualCloudSync(
