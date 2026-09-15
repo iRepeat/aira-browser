@@ -1,5 +1,6 @@
 import { taskpool } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AiraSyncJankProbe } from '../../common/debug/AiraSyncJankProbe';
 import { HuaweiSpaceBookmarkBlockCodec } from '../../data/sync/HuaweiSpaceBookmarkBlockCodec';
 import {
   AiraHuaweiSpaceBookmarkTaskpoolTransferCodec,
@@ -19,6 +20,10 @@ const AIRA_HUAWEI_BOOKMARK_TASKPOOL_BUDGET_BYTES: number = 16 * 1024 * 1024;
 
 interface HuaweiBookmarkProjectionPackedOutcome {
   projectionBuffer: ArrayBuffer;
+  // Time spent inside the worker building the projection, i.e. exactly the work that used to occupy
+  // the caller's thread. Reported back so one log line shows the before/after without needing a
+  // fallback run to measure the other half.
+  computeMs: number;
   errorMessage: string;
 }
 
@@ -38,15 +43,19 @@ function buildHuaweiBookmarkProjectionPacked(
 ): HuaweiBookmarkProjectionPackedOutcome {
   try {
     const request = AiraHuaweiSpaceBookmarkTaskpoolTransferCodec.decodeProjectionRequest(requestBuffer);
+    const computeStartedAt = Date.now();
     const projection = new HuaweiSpaceBookmarkBlockCodec().buildWriteProjection(request);
+    const computeMs = Date.now() - computeStartedAt;
     return {
       projectionBuffer: AiraHuaweiSpaceBookmarkTaskpoolTransferCodec.encodeProjection(projection),
+      computeMs,
       errorMessage: ''
     };
   } catch (error) {
     const candidate = error as Error;
     return {
       projectionBuffer: new ArrayBuffer(0),
+      computeMs: 0,
       errorMessage: candidate.message ?? JSON.stringify(error)
     };
   }
@@ -54,7 +63,10 @@ function buildHuaweiBookmarkProjectionPacked(
 
 export class AiraHuaweiSpaceBookmarkComputeExecutor implements HuaweiBookmarkProjectionOffload {
   async buildWriteProjection(request: HuaweiBookmarkProjectionRequest): Promise<HuaweiBookmarkProjectionWire> {
+    const startedAt = Date.now();
+    const encodeStartedAt = Date.now();
     const requestBuffer = AiraHuaweiSpaceBookmarkTaskpoolTransferCodec.encodeProjectionRequest(request);
+    const encodeMs = Date.now() - encodeStartedAt;
     if (requestBuffer.byteLength > AIRA_HUAWEI_BOOKMARK_TASKPOOL_BUDGET_BYTES) {
       throw new Error(
         `Huawei Bookmark TaskPool request exceeds the transfer budget: ${requestBuffer.byteLength}`
@@ -72,11 +84,30 @@ export class AiraHuaweiSpaceBookmarkComputeExecutor implements HuaweiBookmarkPro
         outcome === undefined ? 'Huawei Bookmark TaskPool job returned no outcome.' : outcome.errorMessage
       );
     }
+    const decodeStartedAt = Date.now();
     const projection = AiraHuaweiSpaceBookmarkTaskpoolTransferCodec.decodeProjection(outcome.projectionBuffer);
+    const decodeMs = Date.now() - decodeStartedAt;
+    // Only the encode and the decode still occupy the caller's thread; the projection itself
+    // (computeMs) no longer does. Those two numbers are the before/after for this stage, so they are
+    // reported together with the same field names as the on-thread path logs.
+    const mainThreadMs = encodeMs + decodeMs;
+    AiraSyncJankProbe.endExtra(
+      'huawei_bookmark_projection',
+      startedAt,
+      `path=taskpool computeMs=${outcome.computeMs} mainThreadMs=${mainThreadMs}` +
+        ` requestBytes=${requestBuffer.byteLength} chunks=${projection.chunks.length}` +
+        ` indexes=${projection.indexes.length}`
+    );
     hilog.info(
       HUAWEI_BOOKMARK_COMPUTE_LOG_DOMAIN,
       HUAWEI_BOOKMARK_COMPUTE_LOG_TAG,
-      'G8 write projection built on TaskPool requestBytes=%{public}d chunks=%{public}d indexes=%{public}d',
+      'G8 projection path=taskpool encodeMs=%{public}d computeMs=%{public}d decodeMs=%{public}d' +
+        ' mainThreadMs=%{public}d wallMs=%{public}d requestBytes=%{public}d chunks=%{public}d indexes=%{public}d',
+      encodeMs,
+      outcome.computeMs,
+      decodeMs,
+      mainThreadMs,
+      Date.now() - startedAt,
       requestBuffer.byteLength,
       projection.chunks.length,
       projection.indexes.length

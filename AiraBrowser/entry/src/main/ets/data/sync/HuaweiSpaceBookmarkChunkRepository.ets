@@ -549,19 +549,38 @@ export class HuaweiSpaceBookmarkChunkRepository {
     request: HuaweiBookmarkProjectionRequest
   ): Promise<HuaweiBookmarkProjectionWire> {
     if (this.projectionOffload === undefined) {
-      return this.blockCodec.buildWriteProjection(request);
+      const startedAt = Date.now();
+      const projection = this.blockCodec.buildWriteProjection(request);
+      hilog.info(
+        HUAWEI_SPACE_G8_LOG_DOMAIN,
+        HUAWEI_SPACE_G8_LOG_TAG,
+        'G8 projection path=inline computeMs=%{public}d chunks=%{public}d indexes=%{public}d',
+        Date.now() - startedAt,
+        projection.chunks.length,
+        projection.indexes.length
+      );
+      return projection;
     }
     try {
       return await this.projectionOffload.buildWriteProjection(request);
     } catch (error) {
       const candidate = error as Error;
+      // Falling back is intentional, but it silently moves this build back onto the caller's thread.
+      // Log it so a log read can tell an offloaded pass from a degraded one instead of assuming the
+      // TaskPool path always ran.
+      const startedAt = Date.now();
+      const projection = this.blockCodec.buildWriteProjection(request);
       hilog.warn(
         HUAWEI_SPACE_G8_LOG_DOMAIN,
         HUAWEI_SPACE_G8_LOG_TAG,
-        'G8 write projection taskpool fell back to the caller thread message=%{public}s',
+        'G8 projection path=inline-fallback computeMs=%{public}d chunks=%{public}d' +
+          ' indexes=%{public}d reason=%{public}s',
+        Date.now() - startedAt,
+        projection.chunks.length,
+        projection.indexes.length,
         candidate.message ?? JSON.stringify(error)
       );
-      return this.blockCodec.buildWriteProjection(request);
+      return projection;
     }
   }
 
