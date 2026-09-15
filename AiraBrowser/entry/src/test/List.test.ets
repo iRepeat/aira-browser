@@ -38,6 +38,7 @@ import airaCloudBookmarkV4BootstrapViewModelTest from './AiraCloudBookmarkV4Boot
 import syncExperienceAutomaticDomainGateTest from './SyncExperienceAutomaticDomainGate.test';
 import airaBookmarkIdentityNoOpServiceTest from './AiraBookmarkIdentityNoOpService.test';
 import airaSyncClosedLoopTest from './AiraSyncClosedLoop.test';
+import airaSyncWorkThrottleTest from './AiraSyncWorkThrottle.test';
 import huaweiSpaceHistoryCloudReadGateTest from './HuaweiSpaceHistoryCloudReadGate.test';
 import huaweiSpaceTransportWarmupTest from './HuaweiSpaceTransportWarmup.test';
 import historySelectionMoreMenuTest from './HistorySelectionMoreMenu.test';
@@ -84,6 +85,7 @@ export default function tests(): void {
   syncExperienceAutomaticDomainGateTest();
   airaBookmarkIdentityNoOpServiceTest();
   airaSyncClosedLoopTest();
+  airaSyncWorkThrottleTest();
   huaweiSpaceHistoryCloudReadGateTest();
   huaweiSpaceTransportWarmupTest();
   historySelectionMoreMenuTest();

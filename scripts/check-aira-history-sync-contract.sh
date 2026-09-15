@@ -271,11 +271,17 @@ if [ "${failures}" -eq 0 ]; then
     "history_sync_retention_v1" \
     "History retention must keep a stale-device resurrection frontier"
   require_pattern "${DATABASE_REL}" \
-    "CURRENT_BROWSER_DATABASE_SCHEMA_VERSION = 6" \
-    "Huawei History tables must advance the local browser database schema to version 6"
+    "CURRENT_BROWSER_DATABASE_SCHEMA_VERSION = 7" \
+    "Huawei History tables must advance the local browser database schema to version 7"
   require_pattern "${DATABASE_REL}" \
     "schemaVersion < 6" \
     "version-5 browser databases must run the idempotent History schema migration"
+  require_pattern "${DATABASE_REL}" \
+    "schemaVersion >= 6 && schemaVersion < 7" \
+    "version-6 browser databases must pick up the retention ordering index"
+  require_pattern "${DATABASE_REL}" \
+    "idx_history_visits_sync_scope_time" \
+    "retention boundary and overflow reads must be served by an ordered index, not a full sort"
   require_pattern "${DATABASE_REL}" \
     "huawei_history_remote_head_v1" \
     "Huawei History must persist the last confirmed remote head checksum"
