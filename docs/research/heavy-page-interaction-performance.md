@@ -476,6 +476,38 @@ Aira 唯一运行在渲染进程里的代码是**注入的 document-start 脚本
 `ticks` 统计的是 `onScroll` 事件数，**不是主线程存活度**。页面不滚动时（用户未触摸）自然为 0，因此「某秒 tick 少」本身不构成主线程停顿的证据。仅当**页面确实在移动**时低吞吐才有意义：本节 17:51:32–34 的窗口内同时有翻转与反转事件，说明页面在动，故该低吞吐可作占用证据。后续判断停顿应改用「有滚动请求但帧/事件被合并」的口径。
 
 
+## 十、三条同步路径的冗余读取审查
+
+历史同步那条路径修完后的延伸：把 Aira Cloud、自建服务器 / Personal Server、WebDAV、华为空间四条 provider 路径都过了一遍，重点找「重复取回已经有的数据」。结论是**冗余读取多于主线程阻塞**——真正影响流畅度的只有华为空间书签路径（见下），其余是纯网络与解析浪费，不影响滑动但影响同步耗时与流量。
+
+### 已修（提交 acbbf87）
+
+**WebDAV 从未发送条件读。** `readSnapshotFile` 一直是裸 `GET`；ETag 明明已经取到（`readHeaderValue(response.headers, 'etag')`），却只用于写的预条件，从不回传给读。于是**每次同步都完整下载并 JSON 解析整个快照文件，哪怕一个字节没变**。
+
+现在读请求带上 `If-None-Match`，304 时复用已解析的文件。关键前提是**一次同步运行内同一个 store 实例贯穿多次读**（身份探测 `readHead`、状态读 `readState`、写后确认 `readState`），所以第二次及之后的读才可能命中——这也是为什么同样的改动放在个人化 / 小说书架那条路径上是**无效**的（那边每个实例只读一次就写，缓存永远不命中），已实测确认并放弃该处改动。
+
+写路径刻意保持无条件读：预条件必须用当前 ETag。且**每次写完清空缓存**，这正是让调用方的写后确认读保持为真实读取而非缓存命中的机制。
+
+304 逻辑用一个模型 WebDAV 服务器做了 9 个场景的仿真，全部通过，其中两条是防回归的关键：外部设备改动后必须被观察到、写后确认必须看到本次写入；另有一条覆盖「provider 忽略校验头、照样回正文」的情况。
+
+**自建服务器不再回读自己的写入。** `confirmRemoteBookmarkCommit` 原本写完后再 `readState()` 把整个快照下回来做深比较。查证 `services/personal-server/src/snapshot-store.js`：`writeBookmark` 就是把 `JSON.stringify(body.snapshot)` 原样落库，冲突靠 `parentCommitId` 比较，**不做任何服务端规范化或合并**，并返回刚持久化的 `commitId`。所以这份回读只是把自己刚发的内容再下载一遍，已跳过。
+
+**Aira Cloud 未动，这是刻意的。** 它的服务端不在本仓库，同样的「原样落库」保证无法查证，因此保留回读确认。这一条我无法凭客户端代码判断，不做假设。
+
+**历史 outbox 确认删除改为批量。** 原先对每条 acknowledgement 单独 `store.delete`，一轮最多 200 条且发生在已开启的事务内；现改为每 200 条一次 `IN` 删除（批量大小取仓库既有 IN 谓词的保守端，`HuaweiSpaceBookmarkChunkRepository` 用的是 400）。
+
+**移除探针遗留。** `measureSnapshotPayloadBytes` 每次同步把整个书签快照 `JSON.stringify` **两遍**只为拼一条日志，其自身注释即写明随 `[DEBUG-sync-jank-9f3c]` 一并删除，已删。
+
+### 未修，按性价比排序（供后续决定）
+
+1. **华为空间书签路径完全没有 TaskPool**：`HuaweiSpaceBookmarkChunkRepository` / `AiraHuaweiSpaceRemoteStore` / `HuaweiSpaceConditionalSnapshotStore` 三个文件 grep `taskpool|@Concurrent` 均为 0，而历史路径的解析与合并早已在 TaskPool 上。其中 `resolveBucketIndex`（`HuaweiSpaceBookmarkChunkRepository.ets:1620`）对**每条记录算一次 SHA-256**，只为决定分桶。书签量大时是主线程上的一串哈希加 `JSON.stringify`。工程量最大，且只有华为空间用户会遇到。
+2. **WebDAV `ensureRemoteLayout` 每次写入重发 MKCOL**（`AiraWebdavRemoteStore.ets:385`），无「已确保」缓存；WebDAV 延迟本就高，属纯开销。
+3. **WebDAV 无条件 GET 之外的重复下载**：`writeState` 内部又读一次（`:152`），尽管调用方刚读过；`readHead` 为拿几个计数下载并解析整个文件。
+4. **`lastMirror` 是死代码**：`HuaweiSpaceHistoryRemoteStore.ets:66` 只在 `:139/:593/:597` 被赋 `undefined`，从未赋实值，因此 `canReuseMirror` 恒为 false、`planWriteFromMirror` 不可达——设计中的镜像复用**从未生效**。需要决定是补上赋值还是删掉这条路径。
+5. **切换 provider 时的若干无上限读**：`readHistorySyncCanonicalVisitsUpdatedAfter`（`BrowserDatabase.ets:5050`）、`readHistorySyncTombstones`（`:5268`）、`readHistorySyncDeleteRanges`（`:5292`）无 `LIMIT` 也无廉价探测守卫，仅受 `HISTORY_SYNC_MAX_VISITS` 约束。仅在切换 provider 时触发，非常规路径。
+6. **多轮往返**：历史交换最多 200 轮 `/exchange` + 200 轮 `/bootstrap`（硬上限，非无界重试）；书签一次合并 3 次完整往返，其中写后确认是最贵的一次。
+
+
 ## 来源
 
 ### 本机官方 SDK 声明（逐条核对签名与版本）
