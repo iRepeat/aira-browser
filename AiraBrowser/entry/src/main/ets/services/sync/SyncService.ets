@@ -36,6 +36,7 @@ import {
 import { PreferencesRepository } from '../../data/preferences/PreferencesRepository';
 import { BookmarkRepository } from '../../data/repositories/BrowserRepositories';
 import { AiraBookmarkSnapshotService } from './AiraBookmarkSnapshotService';
+import { AiraBookmarkComputeExecutor } from './AiraBookmarkComputeExecutor';
 import {
   AiraBookmarkMergeResult,
   AiraBookmarkMergeService
@@ -110,6 +111,7 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
   private static bookmarkMergeQueue: Promise<void> = Promise.resolve();
   private bookmarkSnapshotService: AiraBookmarkSnapshotService;
   private bookmarkMergeService: AiraBookmarkMergeService = new AiraBookmarkMergeService();
+  private bookmarkComputeExecutor: AiraBookmarkComputeExecutor = new AiraBookmarkComputeExecutor();
   private bookmarkDecisionService: AiraBookmarkSyncDecisionService = new AiraBookmarkSyncDecisionService();
   private bookmarkHistoryService: AiraBookmarkTombstoneLifecycleService =
     new AiraBookmarkTombstoneLifecycleService();
@@ -188,7 +190,7 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
     const validated = this.bookmarkSnapshotService.validateBookmarkSnapshot(snapshot, '本地备份');
     const incoming = this.stripBookmarkTombstones(validated);
     const local = await this.buildFreshAiraBookmarkSnapshot();
-    const mergeResult = await this.bookmarkMergeService.mergeCooperatively(
+    const mergeResult = await this.bookmarkComputeExecutor.mergeCooperatively(
       null,
       local,
       incoming,

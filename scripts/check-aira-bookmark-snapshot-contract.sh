@@ -70,6 +70,10 @@ forbid_file_pattern() {
 
 MODELS_REL="AiraBrowser/entry/src/main/ets/common/models/AiraSyncModels.ets"
 SNAPSHOT_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraBookmarkSnapshotService.ets"
+SNAPSHOT_COMPUTE_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraBookmarkSnapshotCompute.ets"
+COMPUTE_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraBookmarkComputeExecutor.ets"
+TRANSFER_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraBookmarkTaskpoolTransferCodec.ets"
+DECISION_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraBookmarkSyncDecisionService.ets"
 VALIDATION_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraBookmarkSnapshotValidationService.ets"
 MERGE_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraBookmarkMergeService.ets"
 LIFECYCLE_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraBookmarkTombstoneLifecycleService.ets"
@@ -87,7 +91,8 @@ ADR_REL="docs/adr/0049-bookmark-sync-uses-one-snapshot-commit-path.md"
 RETENTION_ADR_REL="docs/adr/0010-huawei-space-does-not-time-expire-sync-history.md"
 PRIVATE_BACKEND_ROOT="${AIRA_PRIVATE_BACKEND_ROOT:-}"
 
-for rel_path in "${MODELS_REL}" "${SNAPSHOT_REL}" "${VALIDATION_REL}" "${MERGE_REL}" \
+for rel_path in "${MODELS_REL}" "${SNAPSHOT_REL}" "${SNAPSHOT_COMPUTE_REL}" \
+  "${COMPUTE_REL}" "${TRANSFER_REL}" "${DECISION_REL}" "${VALIDATION_REL}" "${MERGE_REL}" \
   "${LIFECYCLE_REL}" "${SYNC_REL}" "${BASELINE_REL}" "${DATABASE_REL}" \
   "${AIRA_STORE_REL}" "${WEBDAV_STORE_REL}" "${HUAWEI_STORE_REL}" "${HUAWEI_REPOSITORY_REL}" \
   "${HUAWEI_RDB_OWNER_REL}" "${ADR_REL}" "${RETENTION_ADR_REL}"; do
@@ -110,6 +115,39 @@ if [ "${failures}" -eq 0 ]; then
   require_pattern "${SNAPSHOT_REL}" \
     'buildFreshBookmarkSnapshot[\s\S]*snapshotValidationService\.validate\(snapshot, '\''本机'\''\)' \
     "fresh local Bookmark snapshots must pass canonical validation"
+  require_pattern "${SNAPSHOT_REL}" \
+    'buildBookmarkSnapshotWithTaskpool[\s\S]*computeExecutor\.buildFreshSnapshot[\s\S]*upsertSyncNodesWithCooperativeBatches\(packed\.originRepairs\)[\s\S]*buildBookmarkSnapshotProgressively' \
+    "fresh local Bookmark snapshots must pack compute onto TaskPool and keep origin repairs plus oversized fallback on the existing owners"
+  require_pattern "${DECISION_REL}" \
+    'computeExecutor\.mergeCooperatively\([\s\S]*input\.baseline[\s\S]*input\.local[\s\S]*input\.remote' \
+    "ordinary Bookmark merge decisions must execute packed merge compute on TaskPool"
+  require_pattern "${SYNC_REL}" \
+    'bookmarkComputeExecutor\.mergeCooperatively\([\s\S]*null[\s\S]*local[\s\S]*incoming' \
+    "local backup Bookmark imports must reuse the same packed merge compute path"
+  require_pattern "${COMPUTE_REL}" \
+    '@Concurrent[\s\S]*function mergeBookmarksPacked\([\s\S]*new AiraBookmarkMergeService\(\)[\s\S]*mergeService\.merge\(' \
+    "Bookmark merge TaskPool work must reuse the synchronous merge algorithm"
+  require_pattern "${COMPUTE_REL}" \
+    '@Concurrent[\s\S]*function buildBookmarkSnapshotPacked\([\s\S]*AiraBookmarkSnapshotCompute\(\)\.buildFreshSnapshot\(' \
+    "Bookmark snapshot TaskPool work must reuse the extracted pure snapshot compute"
+  require_pattern "${COMPUTE_REL}" \
+    'taskpool\.execute\(task, taskpool\.Priority\.LOW\)' \
+    "Bookmark TaskPool work must remain low priority"
+  require_pattern "${COMPUTE_REL}" \
+    'AIRA_BOOKMARK_TASKPOOL_TRANSFER_BUDGET_BYTES: number = 16 \* 1024 \* 1024' \
+    "Bookmark TaskPool work must preflight the bounded structured-clone payload"
+  require_pattern "${COMPUTE_REL}" \
+    'task\.setTransferList\(\[baselineBuffer, localBuffer, remoteBuffer\]\)' \
+    "Bookmark merge must transfer packed snapshots without cloning the live objects"
+  require_pattern "${COMPUTE_REL}" \
+    'task\.setTransferList\(\[regularBuffer, privateBuffer, previousBuffer\]\)' \
+    "Bookmark snapshot capture must transfer packed nodes without cloning the live objects"
+  require_pattern "${COMPUTE_REL}" \
+    'bookmark_merge_fallback_budget[\s\S]*mergeService\.mergeCooperatively' \
+    "oversized Bookmark merges must keep the cooperative correctness path"
+  require_pattern "${TRANSFER_REL}" \
+    'static encodeSnapshot\(snapshot: AiraSyncSnapshot\): ArrayBuffer[\s\S]*static decodeSnapshot\(snapshotBuffer: ArrayBuffer\): AiraSyncSnapshot' \
+    "Bookmark TaskPool snapshots must round-trip through one imported codec"
   require_pattern "${SNAPSHOT_REL}" \
     'applyBookmarkSnapshotToLocalDb[\s\S]*snapshotValidationService\.validate\(snapshot, '\''合并结果'\''\)' \
     "local apply must fail closed on a non-canonical merged snapshot"

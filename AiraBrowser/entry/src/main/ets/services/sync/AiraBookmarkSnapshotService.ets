@@ -25,6 +25,7 @@ import {
   isBookmarkRootNodeId,
   resolveBookmarkScope
 } from '../../data/repositories/BookmarkRepositoryCore';
+import { AiraBookmarkComputeExecutor } from './AiraBookmarkComputeExecutor';
 import { AiraBookmarkSnapshotValidationService } from './AiraBookmarkSnapshotValidationService';
 import { AiraSyncWorkThrottleService } from './AiraSyncWorkThrottleService';
 import { AiraSyncJankProbe } from '../../common/debug/AiraSyncJankProbe';
@@ -74,6 +75,7 @@ export class AiraBookmarkSnapshotService {
   private workThrottle: AiraSyncWorkThrottleService;
   private snapshotValidationService: AiraBookmarkSnapshotValidationService =
     new AiraBookmarkSnapshotValidationService();
+  private computeExecutor: AiraBookmarkComputeExecutor = new AiraBookmarkComputeExecutor();
 
   constructor(
     bookmarkRepository: BookmarkRepository,
@@ -103,7 +105,7 @@ export class AiraBookmarkSnapshotService {
       AiraSyncJankProbe.endExtra('bookmark_local_repository_refresh', refreshStartedAt, '');
     }
     const buildStartedAt = Date.now();
-    const snapshot = await this.buildBookmarkSnapshotProgressively(deviceId, previousSnapshot);
+    const snapshot = await this.buildBookmarkSnapshotWithTaskpool(deviceId, previousSnapshot);
     AiraSyncJankProbe.endExtra(
       'bookmark_local_progressive_build',
       buildStartedAt,
@@ -385,6 +387,47 @@ export class AiraBookmarkSnapshotService {
       }
     }
     return effectiveDeletedLocalIds;
+  }
+
+  private async buildBookmarkSnapshotWithTaskpool(
+    deviceId: string = DEFAULT_DEVICE_ID,
+    previousSnapshot?: AiraSyncSnapshot | null
+  ): Promise<AiraSyncSnapshot> {
+    const regularNodes = this.bookmarkRepository.listSyncNodes(resolveBookmarkScope(AIRA_BOOKMARK_SYNC_SCOPE));
+    const privateNodes = this.bookmarkRepository.listSyncNodes(resolveBookmarkScope(AIRA_PRIVATE_BOOKMARK_SYNC_SCOPE));
+    let regularLiveCount = 0;
+    for (let index = 0; index < regularNodes.length; index += 1) {
+      if (regularNodes[index].sync.deletedAt === undefined) {
+        regularLiveCount += 1;
+      }
+    }
+    let privateLiveCount = 0;
+    for (let index = 0; index < privateNodes.length; index += 1) {
+      if (privateNodes[index].sync.deletedAt === undefined) {
+        privateLiveCount += 1;
+      }
+    }
+    AiraSyncJankProbe.markExtra(
+      'bookmark_local_nodes',
+      `scope=${AIRA_BOOKMARK_SYNC_SCOPE} total=${regularNodes.length} live=${regularLiveCount} deleted=${regularNodes.length - regularLiveCount}`
+    );
+    AiraSyncJankProbe.markExtra(
+      'bookmark_local_nodes',
+      `scope=${AIRA_PRIVATE_BOOKMARK_SYNC_SCOPE} total=${privateNodes.length} live=${privateLiveCount} deleted=${privateNodes.length - privateLiveCount}`
+    );
+    const packed = await this.computeExecutor.buildFreshSnapshot(
+      regularNodes,
+      privateNodes,
+      deviceId,
+      previousSnapshot
+    );
+    if (packed !== undefined) {
+      if (packed.originRepairs.length > 0) {
+        await this.upsertSyncNodesWithCooperativeBatches(packed.originRepairs);
+      }
+      return packed.snapshot;
+    }
+    return this.buildBookmarkSnapshotProgressively(deviceId, previousSnapshot);
   }
 
   private async buildBookmarkSnapshotProgressively(

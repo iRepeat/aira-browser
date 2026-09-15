@@ -1,4 +1,5 @@
 import { AiraSyncSnapshot } from '../../common/models/AiraSyncModels';
+import { AiraBookmarkComputeExecutor } from './AiraBookmarkComputeExecutor';
 import {
   AiraBookmarkMergeResult,
   AiraBookmarkMergeService
@@ -16,6 +17,7 @@ interface AiraBookmarkSyncDecisionInput {
 
 export class AiraBookmarkSyncDecisionService {
   private mergeService: AiraBookmarkMergeService = new AiraBookmarkMergeService();
+  private computeExecutor: AiraBookmarkComputeExecutor = new AiraBookmarkComputeExecutor();
 
   private decide(input: AiraBookmarkSyncDecisionInput): AiraBookmarkMergeResult {
     if (input.intent === 'cloud-over-local') {
@@ -67,7 +69,7 @@ export class AiraBookmarkSyncDecisionService {
       await throttle.afterStage();
       return this.decide(input);
     }
-    return this.mergeService.mergeCooperatively(
+    return this.computeExecutor.mergeCooperatively(
       input.baseline,
       input.local,
       input.remote,

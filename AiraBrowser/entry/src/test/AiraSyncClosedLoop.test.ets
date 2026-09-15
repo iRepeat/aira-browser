@@ -9,6 +9,7 @@ import {
 } from '../main/ets/common/models/AiraSyncModels';
 import { AiraBookmarkMergeService } from '../main/ets/services/sync/AiraBookmarkMergeService';
 import { AiraBookmarkIdentityNoOpService } from '../main/ets/services/sync/AiraBookmarkIdentityNoOpService';
+import { AiraBookmarkTaskpoolTransferCodec } from '../main/ets/services/sync/AiraBookmarkTaskpoolTransferCodec';
 import { AiraHistoryTaskpoolTransferCodec } from '../main/ets/services/sync/AiraHistoryTaskpoolTransferCodec';
 import { HistorySyncMergeService } from '../main/ets/services/sync/HistorySyncMergeService';
 import {
@@ -268,6 +269,18 @@ export default function airaSyncClosedLoopTest(): void {
         .concat(chunkRows);
       expect(codec.needsBlockCloudSync(missingOneBucket)).assertTrue();
       expect(codec.needsBlockCloudSync([])).assertFalse();
+    });
+
+    it('round-trips Bookmark snapshots through the TaskPool codec', 0, () => {
+      const snapshot = bookmarkSnapshot('phone-a', true, true);
+      const decoded = AiraBookmarkTaskpoolTransferCodec.decodeSnapshot(
+        AiraBookmarkTaskpoolTransferCodec.encodeSnapshot(snapshot)
+      );
+      expect(bookmarkMerge.sameSnapshotContent(decoded, snapshot)).assertTrue();
+      const empty = AiraBookmarkTaskpoolTransferCodec.decodeOptionalSnapshot(
+        AiraBookmarkTaskpoolTransferCodec.encodeOptionalSnapshot(null)
+      );
+      expect(empty === null).assertTrue();
     });
 
     it('round-trips History state and rows through the TaskPool codec', 0, () => {
