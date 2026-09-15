@@ -65,6 +65,11 @@ interface HuaweiHistoryRemoteHeadRecord {
   updatedAt: number;
 }
 
+interface HistorySyncProjectionVictims {
+  boundary: HistorySyncRetentionBoundary | undefined;
+  victims: HistoryVisit[];
+}
+
 const DOMAIN = 0x0000;
 const TAG = 'BrowserDatabase';
 const DATABASE_NAME = 'aira_browser.db';
@@ -2323,16 +2328,8 @@ export class BrowserDatabase {
         transactionStarted = false;
         return 0;
       }
-      const predicates = new relationalStore.RdbPredicates(HISTORY_VISITS_TABLE);
-      predicates.equalTo('sync_account_uid', normalizedUid);
-      predicates.equalTo('data_scope', 'profile_persistent');
-      predicates.orderByDesc('visited_at');
-      predicates.orderByDesc('sync_id');
-      const resultSet = await store.query(predicates, HISTORY_VISIT_COLUMNS);
-      const visits = this.mapHistoryVisitEventRows(resultSet);
-      const victims = visits.filter((visit: HistoryVisit, index: number): boolean => {
-        return visit.visitedAt < cutoff || index >= HISTORY_SYNC_MAX_VISITS;
-      });
+      const projection = await this.readHistorySyncProjectionVictimsInStore(store, normalizedUid, cutoff);
+      const victims = projection.victims;
       if (victims.length <= 0) {
         store.commit();
         transactionStarted = false;
@@ -2376,7 +2373,7 @@ export class BrowserDatabase {
       await this.advanceHistorySyncRetentionForVictims(
         store,
         normalizedUid,
-        visits,
+        projection.boundary,
         victims,
         cutoff,
         normalizedNow
@@ -3074,7 +3071,7 @@ export class BrowserDatabase {
 
   /**
    * Builds the index every retention read of one account's synced visits depends on: the boundary
-   * row (`LIMIT 1 OFFSET MAX_VISITS`), its overflow probe, and the prune scan all order by
+   * row (`LIMIT 1 OFFSET MAX_VISITS`), its overflow probe, and the prune victim scan all order by
    * `visited_at DESC, sync_id DESC` under `sync_account_uid` + `data_scope`. The existing indexes
    * covered neither the pair nor the ordering, so SQLite copied every synced row into a temp b-tree
    * and sorted it just to answer one row. Measured over 300 boundary reads on a 50k-visit fixture
@@ -4458,15 +4455,22 @@ export class BrowserDatabase {
         return this.mergeHistoryVisitWithUrlRecord(visit, urlRecord);
       });
     }
-    for (const visit of visits) {
+    // One IN-query instead of a lookup per visit: this branch is the small-batch path, and a range
+    // delete of a few dozen visits used to issue a separate round trip for each distinct URL.
+    const missingUrlIds: Set<string> = new Set<string>();
+    visits.forEach((visit: HistoryVisit): void => {
       const urlId = visit.urlId ?? '';
-      if (urlId.length === 0 || urls[urlId] !== undefined) {
-        continue;
+      if (urlId.length > 0 && urls[urlId] === undefined) {
+        missingUrlIds.add(urlId);
       }
-      const urlRecord = await this.findHistoryUrlById(store, urlId);
-      if (urlRecord !== undefined) {
-        urls[urlId] = urlRecord;
-      }
+    });
+    if (missingUrlIds.size > 0) {
+      const urlPredicates = new relationalStore.RdbPredicates(HISTORY_URLS_TABLE);
+      urlPredicates.in('id', Array.from(missingUrlIds));
+      const urlRows = await store.query(urlPredicates, HISTORY_URL_COLUMNS);
+      this.mapHistoryUrlRows(urlRows).forEach((urlRecord: HistoryUrlRecord): void => {
+        urls[urlRecord.id] = urlRecord;
+      });
     }
     return visits.map((visit: HistoryVisit) => {
       const urlRecord = urls[visit.urlId ?? ''];
@@ -5415,19 +5419,78 @@ export class BrowserDatabase {
     return prunedTotal;
   }
 
+  /**
+   * Reads the retention victims of one account's synced history: visits older than the cutoff, plus
+   * every visit past the newest HISTORY_SYNC_MAX_VISITS. The overflow query walks the ordered index
+   * and returns only the tail, so its first row is the retention boundary itself -- the caller no
+   * longer orders and materializes the whole synced window (up to 10000 rows turned into objects)
+   * to select a handful of victims.
+   */
+  private async readHistorySyncProjectionVictimsInStore(
+    store: relationalStore.RdbStore,
+    accountUid: string,
+    cutoff: number
+  ): Promise<HistorySyncProjectionVictims> {
+    const victims: HistoryVisit[] = [];
+    const victimIds: Set<string> = new Set<string>();
+    const overflowResult = await store.querySql(
+      `SELECT ${HISTORY_VISIT_COLUMNS.join(', ')} FROM ${HISTORY_VISITS_TABLE} ` +
+        `WHERE sync_account_uid = ? AND data_scope = 'profile_persistent' ` +
+        `ORDER BY visited_at DESC, sync_id DESC LIMIT -1 OFFSET ${HISTORY_SYNC_MAX_VISITS - 1}`,
+      [accountUid]
+    );
+    let boundary: HistorySyncRetentionBoundary | undefined = undefined;
+    try {
+      const rows = this.mapHistoryVisitEventRows(overflowResult);
+      // The first row is the HISTORY_SYNC_MAX_VISITS-th newest visit. It is the boundary only when
+      // the window is over full, matching the previous `length > HISTORY_SYNC_MAX_VISITS` test; it
+      // is a victim only if it additionally falls behind the age cutoff.
+      if (rows.length > 1) {
+        boundary = {
+          visitedAt: rows[0].visitedAt,
+          syncId: (rows[0].syncId ?? '').trim()
+        };
+      }
+      for (let index = 1; index < rows.length; index += 1) {
+        victimIds.add(rows[index].id);
+        victims.push(rows[index]);
+      }
+      if (rows.length > 0 && rows[0].visitedAt < cutoff) {
+        victimIds.add(rows[0].id);
+        victims.push(rows[0]);
+      }
+    } finally {
+      overflowResult.close();
+    }
+    const agedResult = await store.querySql(
+      `SELECT ${HISTORY_VISIT_COLUMNS.join(', ')} FROM ${HISTORY_VISITS_TABLE} ` +
+        `WHERE sync_account_uid = ? AND data_scope = 'profile_persistent' AND visited_at < ?`,
+      [accountUid, cutoff]
+    );
+    try {
+      this.mapHistoryVisitEventRows(agedResult).forEach((visit: HistoryVisit): void => {
+        if (victimIds.has(visit.id)) {
+          return;
+        }
+        victimIds.add(visit.id);
+        victims.push(visit);
+      });
+    } finally {
+      agedResult.close();
+    }
+    return { boundary: boundary, victims: victims };
+  }
+
   private async advanceHistorySyncRetentionForVictims(
     store: relationalStore.RdbStore,
     accountUid: string,
-    allVisits: HistoryVisit[],
+    boundary: HistorySyncRetentionBoundary | undefined,
     victims: HistoryVisit[],
     cutoff: number,
     now: number
   ): Promise<void> {
     const roundedCutoff = Math.floor(Math.max(0, cutoff) / HISTORY_SYNC_RETENTION_FRONTIER_GRANULARITY_MS) *
       HISTORY_SYNC_RETENTION_FRONTIER_GRANULARITY_MS;
-    const boundary = allVisits.length > HISTORY_SYNC_MAX_VISITS
-      ? allVisits[HISTORY_SYNC_MAX_VISITS - 1]
-      : undefined;
     await this.persistHistorySyncRetentionFrontier(store, accountUid, {
       cutoffAt: roundedCutoff,
       boundaryVisitedAt: boundary?.visitedAt ?? 0,
