@@ -23,6 +23,7 @@ import {
   HuaweiSpaceBookmarkChunkRepository
 } from './HuaweiSpaceBookmarkChunkRepository';
 import { AiraSyncJankProbe } from '../../common/debug/AiraSyncJankProbe';
+import { AiraHuaweiSpaceBookmarkComputeExecutor } from '../../services/sync/AiraHuaweiSpaceBookmarkComputeExecutor';
 import { HuaweiSpaceCloudSyncCoordinator } from './HuaweiSpaceCloudSyncCoordinator';
 import { HuaweiSpaceRdbStoreOwner } from './HuaweiSpaceRdbStoreOwner';
 
@@ -83,6 +84,7 @@ export class AiraHuaweiSpaceRemoteStore implements AiraSyncRemoteStore {
       this.uid,
       this.snapshotValidationService
     );
+    this.chunkRepository.setProjectionOffload(new AiraHuaweiSpaceBookmarkComputeExecutor());
   }
 
   async readState(): Promise<AiraSyncRemoteState> {

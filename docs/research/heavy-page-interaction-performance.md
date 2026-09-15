@@ -498,23 +498,32 @@ Aira 唯一运行在渲染进程里的代码是**注入的 document-start 脚本
 
 **移除探针遗留。** `measureSnapshotPayloadBytes` 每次同步把整个书签快照 `JSON.stringify` **两遍**只为拼一条日志，其自身注释即写明随 `[DEBUG-sync-jank-9f3c]` 一并删除，已删。
 
+### 已做：华为空间书签专有编解码层的写路径分片（本次）
+
+初次盘点时，华为空间书签的**专有编解码层不在 TaskPool 上**。书签的**合并与快照构建**由 `AiraBookmarkComputeExecutor` 的 `@Concurrent` 承担，对所有 provider 一视同仁，华为空间也在用；未搬走的是华为**专有的分块编解码层**——`HuaweiSpaceBookmarkChunkRepository` 的 manifest/index/chunk 解析、校验、物化，以及 `HuaweiSpaceConditionalSnapshotStore`。
+
+它**不能复用 Aira Cloud / 自建服务器那边的代码**：两者存储格式根本不同。云端（含自建）是**单个 JSON 快照文档**、服务端原样存；华为空间是**分块 + 清单 + 索引**、散在 head/block 多张 RDB 表，含分桶、存储纪元、index→chunk 引用与 GC 计划。合并层共享，编解码层无法共享。
+
+本次完成**写路径**的分片。做法是先确认一条此前未写明的约束：本仓库所有 `@Concurrent` 文件的**传递**依赖图里都没有 `relationalStore`（`AiraBookmarkComputeExecutor`、`AiraSyncComputeExecutor` 均如此，用脚本遍历 import 图核对）。因此不能把 worker 的入口指向 `HuaweiSpaceBookmarkChunkRepository`——它 `import { relationalStore }`，会把 RDB 拉进 worker 的加载图。历史路径当初也是这样解决的：把纯编解码抽成 `HuaweiSpaceHistorySnapshotCodec`，由 RDB store 与 worker 共用。
+
+于是按同一模板拆出 `HuaweiSpaceBookmarkBlockCodec`（**不 import relationalStore**）：规范记录构造、分桶、lane/段切页、逐 chunk SHA-256、index 分片、manifest 编解码与校验，全部纯计算；`HuaweiSpaceBookmarkChunkRepository` 只留需要 store 的一半——存储纪元解析、存在性探测、批量插入、catalog 读取、物理 GC，并把 `writeSnapshotBlocks` 里原来的 `this.buildProjection(...)` 换成 `buildWriteProjection(...)`：注入了 executor 就走 `taskpool.execute(..., Priority.LOW)`（16 MB 传输预算 + `setTransferList`），未注入或 worker 抛错则**回退到调用线程的同一份 codec**，行为与改动前一致。
+
+关键约束仍是**投影必须逐字节可复现**：它决定内容寻址布局、必须跨设备一致。因此没有改写任何算法，只搬位置；等价性用转译真实 codec 源码的 Node 脚本验证——同线程结果 vs 请求/结果各过一次 JSON（即 TaskPool 的实际传输差）逐字段、逐 chunk、逐 index 比对，并要求 chunk/index id 仍等于其 payload 的 SHA-256、且写出的 manifest 能被读路径的 `parseManifest` 回解，两个分区形态（含/不含 appPrivate）都覆盖。
+
+读路径（`readCatalog` 的三级依赖读取）仍未搬：解析 manifest 后才知道要读哪些 index，解析 index 后才知道要读哪些 chunk，而 RDB 只能在主线程访问，不能把整份数据交给 worker 自行递归读取。可行的拆分是「主线程收集原始字符串 → worker 解析/校验/物化」，模板同上，但成本明显高于写路径，留待后续。
+
 ### 未修，按性价比排序（供后续决定）
 
-1. **华为空间书签路径的专有编解码层不在 TaskPool 上**（修正初稿的表述：先前写成「完全没有 TaskPool」，不准确）。书签的**合并与快照构建**由 `AiraBookmarkComputeExecutor` 的 `@Concurrent` 承担，对所有 provider 一视同仁，华为空间也在用；未搬走的是华为**专有的分块编解码层**——`HuaweiSpaceBookmarkChunkRepository` 的 manifest/index/chunk 解析、校验、物化，以及 `HuaweiSpaceConditionalSnapshotStore`。该文件的 `@Concurrent` 计数为 0。
+1. **华为空间书签读路径的解析/校验/物化**仍未上 TaskPool（写路径本次已完成，见上）。`readCatalog` 是三级依赖读取，只能在主线程按层取数据，再交给 worker 做纯解析与物化。
+2. **`HuaweiSpaceConditionalSnapshotStore`**（小说书架等服务共用）的解析路径同样在调用线程上，`@Concurrent` 计数为 0。
+3. `resolveBucketIndex` 对每条记录算一次 SHA-256（`cryptoFramework` MD 每记录新建）只为决定分桶；它在写路径分桶与读路径校验两趟中各调一次，是同一批记录的两遍处理，若要优化需先确认两者能否共享一次结果。分桶现已随 codec 进入 worker，主线程不再承担这部分。
+4. **WebDAV `ensureRemoteLayout` 每次写入重发 MKCOL**（`AiraWebdavRemoteStore.ets:385`），无「已确保」缓存；WebDAV 延迟本就高，属纯开销。
+5. **WebDAV 无条件 GET 之外的重复下载**：`writeState` 内部又读一次（`:152`），尽管调用方刚读过；`readHead` 为拿几个计数下载并解析整个文件。
+6. **`lastMirror` 是死代码**：`HuaweiSpaceHistoryRemoteStore.ets:66` 只在 `:139/:593/:597` 被赋 `undefined`，从未赋实值，因此 `canReuseMirror` 恒为 false、`planWriteFromMirror` 不可达——设计中的镜像复用**从未生效**。需要决定是补上赋值还是删掉这条路径。
+7. **切换 provider 时的若干无上限读**：`readHistorySyncCanonicalVisitsUpdatedAfter`（`BrowserDatabase.ets:5050`）、`readHistorySyncTombstones`（`:5268`）、`readHistorySyncDeleteRanges`（`:5292`）无 `LIMIT` 也无廉价探测守卫，仅受 `HISTORY_SYNC_MAX_VISITS` 约束。仅在切换 provider 时触发，非常规路径。
+8. **多轮往返**：历史交换最多 200 轮 `/exchange` + 200 轮 `/bootstrap`（硬上限，非无界重试）；书签一次合并 3 次完整往返，其中写后确认是最贵的一次。
 
-   它**不能复用 Aira Cloud / 自建服务器那边的代码**：两者存储格式根本不同。云端（含自建）是**单个 JSON 快照文档**、服务端原样存；华为空间是**分块 + 清单 + 索引**、散在 head/block 多张 RDB 表，含分桶、存储纪元、index→chunk 引用与 GC 计划。合并层共享，编解码层无法共享。
-
-   难点在于 `readCatalog` 是**三级依赖读取**：解析 manifest 后才知道要读哪些 index，解析 index 后才知道要读哪些 chunk。而 RDB 只能在主线程访问，不能把整份数据交给 worker 自行递归读取。因此只能拆成「主线程收集原始字符串 → worker 解析/校验/物化」两段；该拆分模式在历史路径已有现成模板（`AiraSyncComputeExecutor`），但要对 2010 行的文件动刀，属中大型改动。
-
-   `resolveBucketIndex`（`:1642`）对每条记录算一次 SHA-256（`cryptoFramework` MD 每记录新建）只为决定分桶；它在写路径分桶与读路径校验两趟中各调一次，是同一批记录的两遍处理，若要优化需先确认两者能否共享一次结果。
-
-   本次已先摘掉其中不需要线程的那部分：三处排序原先在**每次比较里重建两个 key**，n 条记录耗 O(n log n) 次模板字符串构造（实测 1 万条约 13.3 万次），已改为装饰-排序-还原（n 次），比较仍用同一个 `localeCompare`，故顺序逐字节不变——这一点是硬要求，因为该顺序决定内容寻址布局、必须跨设备一致。
-2. **WebDAV `ensureRemoteLayout` 每次写入重发 MKCOL**（`AiraWebdavRemoteStore.ets:385`），无「已确保」缓存；WebDAV 延迟本就高，属纯开销。
-3. **WebDAV 无条件 GET 之外的重复下载**：`writeState` 内部又读一次（`:152`），尽管调用方刚读过；`readHead` 为拿几个计数下载并解析整个文件。
-4. **`lastMirror` 是死代码**：`HuaweiSpaceHistoryRemoteStore.ets:66` 只在 `:139/:593/:597` 被赋 `undefined`，从未赋实值，因此 `canReuseMirror` 恒为 false、`planWriteFromMirror` 不可达——设计中的镜像复用**从未生效**。需要决定是补上赋值还是删掉这条路径。
-5. **切换 provider 时的若干无上限读**：`readHistorySyncCanonicalVisitsUpdatedAfter`（`BrowserDatabase.ets:5050`）、`readHistorySyncTombstones`（`:5268`）、`readHistorySyncDeleteRanges`（`:5292`）无 `LIMIT` 也无廉价探测守卫，仅受 `HISTORY_SYNC_MAX_VISITS` 约束。仅在切换 provider 时触发，非常规路径。
-6. **多轮往返**：历史交换最多 200 轮 `/exchange` + 200 轮 `/bootstrap`（硬上限，非无界重试）；书签一次合并 3 次完整往返，其中写后确认是最贵的一次。
-
+> 早先另记过一条：书签排序原先在**每次比较里重建两个 key**，n 条记录耗 O(n log n) 次模板字符串构造（实测 1 万条约 13.3 万次），已改为装饰-排序-还原（n 次），比较仍用同一个 `localeCompare`，故顺序逐字节不变——这一点是硬要求。该优化随本次拆分一起进入 codec。
 
 ## 来源
 

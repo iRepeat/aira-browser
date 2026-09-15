@@ -85,6 +85,9 @@ AIRA_STORE_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraCloudBookmarkRe
 WEBDAV_STORE_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraWebdavRemoteStore.ets"
 HUAWEI_STORE_REL="AiraBrowser/entry/src/main/ets/data/sync/AiraHuaweiSpaceRemoteStore.ets"
 HUAWEI_REPOSITORY_REL="AiraBrowser/entry/src/main/ets/data/sync/HuaweiSpaceBookmarkChunkRepository.ets"
+HUAWEI_BLOCK_CODEC_REL="AiraBrowser/entry/src/main/ets/data/sync/HuaweiSpaceBookmarkBlockCodec.ets"
+HUAWEI_BLOCK_COMPUTE_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraHuaweiSpaceBookmarkComputeExecutor.ets"
+HUAWEI_BLOCK_TRANSFER_REL="AiraBrowser/entry/src/main/ets/services/sync/AiraHuaweiSpaceBookmarkTaskpoolTransferCodec.ets"
 HUAWEI_RDB_OWNER_REL="AiraBrowser/entry/src/main/ets/data/sync/HuaweiSpaceRdbStoreOwner.ets"
 RETIRED_HUAWEI_EPOCH_REL="AiraBrowser/entry/src/main/ets/data/sync/HuaweiSpaceBookmarkEpochStore.ets"
 ADR_REL="docs/adr/0049-bookmark-sync-uses-one-snapshot-commit-path.md"
@@ -95,6 +98,7 @@ for rel_path in "${MODELS_REL}" "${SNAPSHOT_REL}" "${SNAPSHOT_COMPUTE_REL}" \
   "${COMPUTE_REL}" "${TRANSFER_REL}" "${DECISION_REL}" "${VALIDATION_REL}" "${MERGE_REL}" \
   "${LIFECYCLE_REL}" "${SYNC_REL}" "${BASELINE_REL}" "${DATABASE_REL}" \
   "${AIRA_STORE_REL}" "${WEBDAV_STORE_REL}" "${HUAWEI_STORE_REL}" "${HUAWEI_REPOSITORY_REL}" \
+  "${HUAWEI_BLOCK_CODEC_REL}" "${HUAWEI_BLOCK_COMPUTE_REL}" "${HUAWEI_BLOCK_TRANSFER_REL}" \
   "${HUAWEI_RDB_OWNER_REL}" "${ADR_REL}" "${RETENTION_ADR_REL}"; do
   if [ ! -f "${REPO_ROOT}/${rel_path}" ]; then
     fail "missing ${rel_path}"
@@ -263,9 +267,39 @@ if [ "${failures}" -eq 0 ]; then
   if [ -e "${REPO_ROOT}/${RETIRED_HUAWEI_EPOCH_REL}" ]; then
     fail "retired Huawei tombstone epoch store must remain deleted"
   fi
+  require_pattern "${HUAWEI_BLOCK_CODEC_REL}" \
+    'HUAWEI_SPACE_BOOKMARK_FORMAT_VERSION: number = 1[\s\S]*HUAWEI_SPACE_BOOKMARK_BUCKET_COUNT: number = 64[\s\S]*HUAWEI_SPACE_BOOKMARK_MAX_PAGE_JSON_BYTES: number = 10 \* 1024[\s\S]*HUAWEI_SPACE_BOOKMARK_LANES' \
+    "Huawei G8 must materialize 64-shard lane-separated pages from one pure block codec"
+  forbid_pattern "${HUAWEI_BLOCK_CODEC_REL}" \
+    "import[^;]*relationalStore[^;]*from '@kit.ArkData'|@Concurrent" \
+    "the Huawei G8 block codec must stay free of relationalStore and @Concurrent so a worker can load it"
   require_pattern "${HUAWEI_REPOSITORY_REL}" \
-    'HUAWEI_SPACE_BOOKMARK_FORMAT_VERSION: number = 1[\s\S]*HUAWEI_SPACE_BOOKMARK_BUCKET_COUNT: number = 64[\s\S]*HUAWEI_SPACE_BOOKMARK_MAX_PAGE_JSON_BYTES: number = 10 \* 1024[\s\S]*HUAWEI_SPACE_BOOKMARK_LANES[\s\S]*selectCurrentHistoryManifests[\s\S]*newestRetainedFrom[\s\S]*Date\.parse\(manifest\.history\.retainedFrom\) === newestRetainedFrom' \
-    "Huawei G8 must materialize 64-shard lane-separated pages only at the newest frontier"
+    'selectCurrentHistoryManifests[\s\S]*newestRetainedFrom[\s\S]*Date\.parse\(manifest\.history\.retainedFrom\) === newestRetainedFrom' \
+    "Huawei G8 must materialize pages only at the newest frontier"
+  require_pattern "${HUAWEI_REPOSITORY_REL}" \
+    'writeSnapshotBlocks[\s\S]*resolveWriteStorageEpoch[\s\S]*buildWriteProjection[\s\S]*readStoredDataByLogicalIds' \
+    "Huawei G8 writes must keep epoch resolution, projection and the existence probe in that order"
+  require_pattern "${HUAWEI_REPOSITORY_REL}" \
+    'this\.projectionOffload === undefined[\s\S]*this\.blockCodec\.buildWriteProjection\(request\)[\s\S]*await this\.projectionOffload\.buildWriteProjection\(request\)[\s\S]*catch \(error\)[\s\S]*this\.blockCodec\.buildWriteProjection\(request\)' \
+    "Huawei G8 writes must fall back to the on-thread block codec when the TaskPool executor is absent or fails"
+  require_pattern "${HUAWEI_BLOCK_COMPUTE_REL}" \
+    '@Concurrent[\s\S]*function buildHuaweiBookmarkProjectionPacked\([\s\S]*new HuaweiSpaceBookmarkBlockCodec\(\)\.buildWriteProjection\(request\)' \
+    "Huawei G8 TaskPool work must reuse the pure block codec"
+  require_pattern "${HUAWEI_BLOCK_COMPUTE_REL}" \
+    'taskpool\.execute\(task, taskpool\.Priority\.LOW\)' \
+    "Huawei G8 TaskPool work must remain low priority"
+  require_pattern "${HUAWEI_BLOCK_COMPUTE_REL}" \
+    'AIRA_HUAWEI_BOOKMARK_TASKPOOL_BUDGET_BYTES: number = 16 \* 1024 \* 1024[\s\S]*task\.setTransferList\(\[requestBuffer\]\)' \
+    "Huawei G8 TaskPool work must preflight and transfer the bounded request payload"
+  forbid_pattern "${HUAWEI_BLOCK_COMPUTE_REL}" \
+    "HuaweiSpaceBookmarkChunkRepository" \
+    "the Huawei G8 block worker must not import the RDB repository"
+  require_pattern "${HUAWEI_STORE_REL}" \
+    'new HuaweiSpaceBookmarkChunkRepository\([\s\S]*setProjectionOffload\(new AiraHuaweiSpaceBookmarkComputeExecutor\(\)\)' \
+    "Huawei Space must wire the G8 write projection onto TaskPool"
+  require_pattern "${HUAWEI_BLOCK_TRANSFER_REL}" \
+    'buildWriteProjection\(request: HuaweiBookmarkProjectionRequest\): Promise<HuaweiBookmarkProjectionWire>' \
+    "Huawei G8 projection transfers must round-trip through one narrow wire codec"
   require_pattern "${HUAWEI_REPOSITORY_REL}" \
     'HUAWEI_SPACE_BOOKMARK_STORAGE_EPOCH_MS: number = 7 \* 24 \* 60 \* 60 \* 1000[\s\S]*HUAWEI_SPACE_BOOKMARK_STORAGE_EPOCH_QUARANTINE_MS: number = 7 \* 24 \* 60 \* 60 \* 1000[\s\S]*storageEpoch: manifest\.storageEpoch[\s\S]*rowStorageEpoch !== manifest\.storageEpoch' \
     "Huawei G8 Heads and Blocks must carry a canonical seven-day storage epoch with a seven-day quarantine"
