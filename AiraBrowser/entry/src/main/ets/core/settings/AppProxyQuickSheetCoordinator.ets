@@ -51,14 +51,21 @@ export class AppProxyQuickSheetCoordinator {
 
   refresh(): void {
     const coordinatorState = this.appProxySettingsCoordinator.buildState();
-    const toolbarActive = this.state.switchingGlobalEnabled
+    const switchingGlobalEnabled = this.state.switchingGlobalEnabled;
+    // Keep the in-flight optimistic value across a refresh that lands mid-write; the persisted
+    // value would otherwise bounce the controlled sheet switch back to its pre-tap position.
+    const globalEnabled = switchingGlobalEnabled
+      ? this.state.globalEnabled
+      : coordinatorState.pageState.globalEnabled;
+    const toolbarActive = switchingGlobalEnabled
       ? this.state.toolbarActive
       : coordinatorState.pageState.globalEnabled;
     this.publishState(this.buildStateFromCoordinatorState(
       coordinatorState,
-      this.state.switchingGlobalEnabled,
+      switchingGlobalEnabled,
       this.state.switchingProfileId,
-      toolbarActive
+      toolbarActive,
+      globalEnabled
     ));
   }
 
@@ -115,8 +122,11 @@ export class AppProxyQuickSheetCoordinator {
     }
     const runGeneration = this.surfaceGeneration;
     const fallbackToolbarActive = this.state.toolbarActive;
+    // The row is a controlled switch: it keeps the position the user just tapped only while the
+    // bound value matches that tap. Publishing the stale value here (with the busy flag disabling
+    // the row) makes the switch bounce back and settle again once the write resolves.
     this.publishState({
-      globalEnabled: this.state.globalEnabled,
+      globalEnabled: enabled,
       hasProfiles: this.state.hasProfiles,
       profiles: this.state.profiles,
       switchingGlobalEnabled: true,
@@ -188,10 +198,11 @@ export class AppProxyQuickSheetCoordinator {
     state: AppProxySettingsCoordinatorState,
     switchingGlobalEnabled: boolean = false,
     switchingProfileId: string = '',
-    toolbarActive: boolean = state.pageState.globalEnabled
+    toolbarActive: boolean = state.pageState.globalEnabled,
+    globalEnabled: boolean = state.pageState.globalEnabled
   ): AppProxyQuickSheetState {
     return {
-      globalEnabled: state.pageState.globalEnabled,
+      globalEnabled: globalEnabled,
       hasProfiles: state.pageState.hasProfiles,
       profiles: state.pageState.profileItems,
       switchingGlobalEnabled: switchingGlobalEnabled,
