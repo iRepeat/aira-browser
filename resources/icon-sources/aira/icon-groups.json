@@ -60,7 +60,7 @@
         },
         {
           "actionId": "sendToDesktop",
-          "title": "推送到电脑",
+          "title": "推送",
           "resourceFamily": "app_toolbar_send_to_desktop"
         },
         {
@@ -175,12 +175,12 @@
         },
         {
           "actionId": "addToDesktop",
-          "title": "作为应用安装",
+          "title": "安装网页",
           "resourceFamily": "app_toolbar_add_to_desktop"
         },
         {
           "actionId": "offline",
-          "title": "保存离线网页",
+          "title": "保存网页",
           "resourceFamily": "app_toolbar_offline"
         },
         {
@@ -195,7 +195,7 @@
         },
         {
           "actionId": "savedPages",
-          "title": "已保存页面",
+          "title": "我的网页",
           "resourceFamily": "app_toolbar_saved_pages"
         }
       ]

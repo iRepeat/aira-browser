@@ -403,7 +403,7 @@ export struct DesktopShortcutNameDialog {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
 
-      Text('作为应用安装')
+      Text('安装网页')
         .width('100%')
         .fontSize(20)
         .fontWeight(FontWeight.Bold)

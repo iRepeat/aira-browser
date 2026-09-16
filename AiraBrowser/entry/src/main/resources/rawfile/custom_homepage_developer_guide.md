@@ -237,7 +237,7 @@ AiraHome.openBookmarks();             // 书签
 AiraHome.openHistory();               // 历史记录
 AiraHome.openTabs();                  // 标签后台
 AiraHome.openDownloads();             // 下载管理
-AiraHome.openSavedPages();            // 已保存页面
+AiraHome.openSavedPages();            // 我的网页
 AiraHome.openSync();                  // 同步
 AiraHome.openAiraPro();               // Aira Pro
 AiraHome.openSearchSettings();        // 搜索设置
@@ -463,7 +463,7 @@ window.addEventListener("aira-home-shortcuts-changed", function (event) {
 | 书签 | `browser.shortcut.bookmarks` |
 | 历史记录 | `browser.shortcut.history` |
 | 下载管理 | `browser.shortcut.downloads` |
-| 已保存页面 | `browser.toolbar.savedPages` |
+| 我的网页 | `browser.toolbar.savedPages` |
 | 标签页 | `browser.toolbar.tabs` |
 | 用户脚本 | `browser.shortcut.scripts` |
 | 广告拦截 | `settings.adBlocker` |
