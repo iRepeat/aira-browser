@@ -14,10 +14,16 @@ import {
 } from './SettingsLayout';
 import {
   SettingsOptionRow,
-  SettingsRowPosition
+  SettingsRowPosition,
+  SettingsSwitchRow
 } from './SettingsRows';
+import {
+  SettingsDesktopGroup,
+  SettingsDesktopSwitchRow
+} from './SettingsDesktopRows';
 
 const SECURE_DNS_RADIO_GROUP: string = 'secure-dns-provider';
+const SECURE_DNS_STRICT_MODE_TITLE: string = '强制 DoH';
 
 @Component
 export struct SecureDnsSettingsContent {
@@ -87,6 +93,18 @@ export struct SecureDnsSettingsContent {
       }
 
       SettingsSection({
+        title: '解析策略',
+        secondaryTextColor: this.secondaryTextColor
+      }) {
+        this.buildStrictModeSurface()
+
+        SettingsFooterText({
+          text: '开启后不回退系统 DNS，DoH 服务器不可用时网页将无法加载；关闭后会自动回退，域名解析可能是明文。选择系统 DNS 时此开关不生效。',
+          secondaryTextColor: this.secondaryTextColor
+        })
+      }
+
+      SettingsSection({
         title: '自定义 DNS',
         secondaryTextColor: this.secondaryTextColor
       }) {
@@ -127,7 +145,7 @@ export struct SecureDnsSettingsContent {
           }
         } else {
           SettingsFooterText({
-            text: '暂无自定义 DNS。',
+            text: '还没有自定义 DNS，可从右上角添加。',
             secondaryTextColor: this.secondaryTextColor
           })
         }
@@ -135,6 +153,48 @@ export struct SecureDnsSettingsContent {
 
     }
     .width('100%')
+  }
+
+  @Builder
+  private buildStrictModeSurface() {
+    if (this.desktopPresentation) {
+      SettingsDesktopGroup({ surfaceColor: this.surfaceBackground }) {
+        SettingsDesktopSwitchRow({
+          title: SECURE_DNS_STRICT_MODE_TITLE,
+          checked: this.state.settings.strictMode,
+          isEnabled: !this.state.saving,
+          primaryTextColor: this.primaryTextColor,
+          secondaryTextColor: this.secondaryTextColor,
+          hoverBackgroundColor: this.pressedBackground,
+          focusColor: this.accentColor,
+          onChange: (enabled: boolean): void => {
+            this.changeStrictMode(enabled);
+          }
+        })
+      }
+    } else {
+      SettingsGroupCard({
+        surfaceColor: this.surfaceBackground,
+        desktopPresentation: this.desktopPresentation
+      }) {
+        SettingsSwitchRow({
+          title: SECURE_DNS_STRICT_MODE_TITLE,
+          checked: this.state.settings.strictMode,
+          rowPosition: 'single',
+          isEnabled: !this.state.saving,
+          primaryTextColor: this.primaryTextColor,
+          secondaryTextColor: this.secondaryTextColor,
+          pressedBackgroundColor: this.pressedBackground,
+          onChange: (enabled: boolean): void => {
+            this.changeStrictMode(enabled);
+          }
+        })
+      }
+    }
+  }
+
+  private changeStrictMode(enabled: boolean): void {
+    sharedSecureDnsSettingsCoordinator.handleStrictModeChanged(enabled, this.buildBoundaryInput());
   }
 
   private resolveRowPosition(index: number, count: number): SettingsRowPosition {

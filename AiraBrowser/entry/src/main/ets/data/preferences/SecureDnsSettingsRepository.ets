@@ -85,7 +85,8 @@ export class SecureDnsSettingsRepository {
     return {
       selectionId: settings.selectionId,
       activeCustomProfileId: customProfiles.length > 0 ? LEGACY_CUSTOM_PROFILE_ID : '',
-      customProfiles: customProfiles
+      customProfiles: customProfiles,
+      strictMode: settings.strictMode === true
     };
   }
 

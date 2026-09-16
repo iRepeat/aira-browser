@@ -130,7 +130,6 @@ export class SecureDnsSettingsCoordinator {
     if (selectionId === this.state.settings.selectionId) {
       return;
     }
-    const previousState = this.copyState(this.state);
     const mutation = this.settingsModel.apply(this.state.settings, {
       kind: 'select_provider',
       selectionId: selectionId
@@ -138,23 +137,7 @@ export class SecureDnsSettingsCoordinator {
     if (!mutation.success) {
       return;
     }
-    const nextSettings = mutation.settings;
-    if (!this.canWriteDevicePreference(boundaryInput)) {
-      return;
-    }
-    const restartRequired = this.runtimeSettingsDiffer(nextSettings, this.state.settings);
-    const savingState = this.copyState(this.state);
-    savingState.saving = true;
-    this.state = savingState;
-    this.publish(false);
-    this.repository.save(nextSettings)
-      .then((settings: SecureDnsSettings): void => {
-        this.handleSettingsPersisted(settings, restartRequired);
-      })
-      .catch((_error: Error): void => {
-        this.state = previousState;
-        this.publish(false);
-      });
+    this.persistRuntimeSettings(mutation.settings, boundaryInput);
   }
 
   handleCustomProfileSelected(
@@ -173,7 +156,33 @@ export class SecureDnsSettingsCoordinator {
         this.state.settings.activeCustomProfileId === profileId)) {
       return;
     }
-    const nextSettings = mutation.settings;
+    this.persistRuntimeSettings(mutation.settings, boundaryInput);
+  }
+
+  handleStrictModeChanged(
+    strictMode: boolean,
+    boundaryInput: BrowserDataBoundaryInput
+  ): void {
+    if (this.state.saving) {
+      return;
+    }
+    if (strictMode === this.state.settings.strictMode) {
+      return;
+    }
+    const mutation = this.settingsModel.apply(this.state.settings, {
+      kind: 'set_strict_mode',
+      strictMode: strictMode
+    });
+    if (!mutation.success) {
+      return;
+    }
+    this.persistRuntimeSettings(mutation.settings, boundaryInput);
+  }
+
+  private persistRuntimeSettings(
+    nextSettings: SecureDnsSettings,
+    boundaryInput: BrowserDataBoundaryInput
+  ): void {
     if (!this.canWriteDevicePreference(boundaryInput)) {
       return;
     }
@@ -362,7 +371,8 @@ export class SecureDnsSettingsCoordinator {
               endpoint: profile.endpoint
             };
           }
-        )
+        ),
+        strictMode: source.settings.strictMode
       },
       options: source.options.map((option: SecureDnsSettingsOptionState): SecureDnsSettingsOptionState => {
         return {
@@ -396,6 +406,7 @@ export class SecureDnsSettingsCoordinator {
 
   private runtimeSettingsDiffer(left: SecureDnsSettings, right: SecureDnsSettings): boolean {
     return left.selectionId !== right.selectionId ||
+      left.strictMode !== right.strictMode ||
       this.service.resolveEndpoint(left) !== this.service.resolveEndpoint(right);
   }
 
