@@ -544,6 +544,60 @@ Aira 唯一运行在渲染进程里的代码是**注入的 document-start 脚本
 
 > 早先另记过一条：书签排序原先在**每次比较里重建两个 key**，n 条记录耗 O(n log n) 次模板字符串构造（实测 1 万条约 13.3 万次），已改为装饰-排序-还原（n 次），比较仍用同一个 `localeCompare`，故顺序逐字节不变——这一点是硬要求。该优化随本次拆分一起进入 codec。
 
+## 十一、胶囊收起/展开的那一下卡：已定位到动画本身（已修复）
+
+用户反馈：「滑动网页时底部悬浮收起成小胶囊、以及胶囊展开回正常，那一瞬间滑动网页就卡」。
+
+第八节确认的自动同步突发是**启动后约 25 秒**那个卡顿点的根因，但它解释不了这一条：后者的触发条件
+不是时间，而是**滑动方向**，且第八节已证伪「底部面板影响 Web 视口」。本节给出这一条的独立根因。
+
+### 根因：收起不是位移，是逐帧重建整组胶囊的布局几何
+
+`scroll-compact` 在修复前**改写的是布局属性而非 transform**。`BrowserBottomChromePresentationViewModel`
+的紧凑帧会一次性改掉：中间胶囊宽 `244→96`、高 `48→32`、圆角 `24→16`、`translateY 0→16`；左右外圈胶囊
+宽 `48→0`、间距 `2→0`、不透明度 `1→0`；内边距 `2→10`（横向）与 `0→4`（纵向）；文字缩放 `1→14/15`。
+
+渲染器把这些值直接接到 `.width()/.height()/.borderRadius()/.translate()/.scale()`、材质板尺寸、
+以及两个 `Text` 的 `.width()/.position()` 上。于是 180 ms（`BROWSER_BOTTOM_PANEL_MOTION_DURATION_MS`，
+曲线 `curves.springMotion(0.5, 0.72)`）的每一帧都要走一次完整 measure/layout，并顺带：
+
+1. 对三块 `HdsImmersiveMaterialSurface` / `backgroundBlurStyle(COMPONENT_THIN, ALWAYS_ACTIVE)` 按新区域重新采样玻璃材质；
+2. 对三块 `radius: 40` 的阴影按新尺寸重算 alpha 模糊；
+3. 因圆角在动，每帧重建一次 `.clip(true)` 的圆角裁剪遮罩。
+
+**触发时机是最坏的一种**：`presentationChangeAllowed` 只在触摸进行中或刚触摸过时为真
+（`BrowserWebScrollInteractionCoordinator`），所以收起/展开**永远**发生在手指还在滑动或惯性还在跑的时候，
+不存在空闲窗口来承担这份开销。用户感知到的"滑动卡"就是这几帧 UI 线程被占住、Web 画面该帧被推迟提交。
+
+### 修复：改成两条固定几何轨道的纯透明度交叉淡化
+
+不再动画几何，而是**同时挂载**两条轨道，各自按固定尺寸只排版一次：
+
+- 展开轨道保持 resting 几何并**在整个收起过程中不动**，`opacity = 1 − progress`；
+- 折叠胶囊是独立的 `buildCompactRail()`，几何由 presentation 新暴露的 `compactFrame` 固定给出
+  （96×32、圆角 16、`translateY 16`、不透明度 0），`opacity = progress`。
+
+`scrollCompactProgress` 由 presentation 拥有（`scroll-compact` 为 1，其余为 0），在**同一个 `animateTo` 事务**里
+推进，所以收起/展开只剩一次透明度插值：一帧内没有布局、没有材质重采样、没有阴影重算。
+
+随之调整的三处，都是为了这次拆分仍保持既有语义：
+
+| 关注点 | 修复前 | 修复后 |
+|---|---|---|
+| 收起时的中心点击 | `centerBodyTarget` = 恢复工具栏 | 移到 `compactBodyTarget`；展开轨道的 `centerBodyTarget` 在 `scroll-compact` 下为空，避免两条轨道对同一次触摸都响应 |
+| 手势归属判定 | `resolveGestureSource` 用展开几何，收起后外圈宽度已为 0 | `scrollCompactProgress >= 0.5` 时改用 `compactFrame` 判定，触摸落到胶囊 |
+| 面板交互区 | 读 `frame.centerWidth/Height/TranslateY` | 改读 `compactFrame.*`（展开轨道现在恒为 resting 几何，不能再当紧凑几何用） |
+
+新增静态契约 `checkCollapseIsAnOpacityCrossFade`（`scripts/check-aira-home-chrome-scroll-contract.cjs`）
+与 `check-architecture-guardrails.sh` 中的对应规则，把「收起不得移动展开轨道几何」「胶囊几何必须跨模式固定」
+「恢复点击只存在于当前呈现的轨道」三条锁住；面板与渲染器各自的紧凑几何读取也一并固定。
+
+### 尚缺真机验证
+
+上面各条已通过 `AIRA_ALLOW_UNSIGNED_BUILD=1 SKIP_INSTALL=1` 的 Community 构建与四个受影响的契约脚本，
+但**修复的收益尚未在真机上量化**。要闭环需要一次授权后的真机 trace，对比修复前后收起/展开那几帧的
+主线程占用与材质重采样耗时。按仓库 `AGENTS.md`，设备抓取需用户明确授权。
+
 ## 来源
 
 ### 本机官方 SDK 声明（逐条核对签名与版本）

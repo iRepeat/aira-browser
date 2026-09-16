@@ -167,8 +167,11 @@ interface BrowserBottomChromePresentationValues {
   mode: BrowserBottomChromePresentationMode;
   panelWidth: number;
   floatingSurfaceTranslateY: number;
+  scrollCompactProgress: number;
   frame: BrowserBottomChromeFrame;
+  compactFrame: BrowserBottomChromeFrame;
   leadingOuterTarget: BrowserBottomChromeTapTarget;
+  compactBodyTarget: BrowserBottomChromeTapTarget;
   centerBodyTarget: BrowserBottomChromeTapTarget;
   centerLeadingTarget: BrowserBottomChromeTapTarget;
   centerPrimaryTarget: BrowserBottomChromeTapTarget;
@@ -210,6 +213,9 @@ const BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y: number = 16;
 const BROWSER_BOTTOM_CHROME_COMPACT_DISPLAY_SCALE: number = 14 / 15;
 const BROWSER_BOTTOM_CHROME_COMPACT_HORIZONTAL_PADDING: number = 10;
 const BROWSER_BOTTOM_CHROME_COMPACT_VERTICAL_PADDING: number = 4;
+// At or above this progress the chrome reads as collapsed, so gesture resolution and hit testing
+// must address the compact capsule rather than the expanded clusters behind it.
+const BROWSER_BOTTOM_CHROME_COMPACT_GESTURE_PROGRESS: number = 0.5;
 const BROWSER_BOTTOM_CHROME_RETURN_HOME_ACTIVE_OFFSET_Y: number = 8;
 const BROWSER_BOTTOM_CHROME_RETURN_HOME_RELEASE_OFFSET_Y: number = 44;
 const BROWSER_BOTTOM_CHROME_DEFAULT_GESTURE_PROMPT: string = '松手打开主页';
@@ -397,8 +403,16 @@ export class BrowserBottomChromePresentation {
   mode: BrowserBottomChromePresentationMode;
   panelWidth: number;
   floatingSurfaceTranslateY: number;
+  /**
+   * Scroll-Compact lives in its own always-mounted layer, so the renderer cross-fades by opacity
+   * instead of animating the expanded rail's width, height, padding and radius.
+   */
+  scrollCompactProgress: number;
   frame: BrowserBottomChromeFrame;
+  /** Fixed geometry of the collapsed capsule. Never animated; the layer fades onto it. */
+  compactFrame: BrowserBottomChromeFrame;
   leadingOuterTarget: BrowserBottomChromeTapTarget;
+  compactBodyTarget: BrowserBottomChromeTapTarget;
   centerBodyTarget: BrowserBottomChromeTapTarget;
   centerLeadingTarget: BrowserBottomChromeTapTarget;
   centerPrimaryTarget: BrowserBottomChromeTapTarget;
@@ -433,8 +447,11 @@ export class BrowserBottomChromePresentation {
     this.mode = values.mode;
     this.panelWidth = Math.max(1, values.panelWidth);
     this.floatingSurfaceTranslateY = sanitizeFinite(values.floatingSurfaceTranslateY);
+    this.scrollCompactProgress = clampUnit(values.scrollCompactProgress);
     this.frame = values.frame;
+    this.compactFrame = values.compactFrame;
     this.leadingOuterTarget = values.leadingOuterTarget;
+    this.compactBodyTarget = values.compactBodyTarget;
     this.centerBodyTarget = values.centerBodyTarget;
     this.centerLeadingTarget = values.centerLeadingTarget;
     this.centerPrimaryTarget = values.centerPrimaryTarget;
@@ -465,21 +482,25 @@ export class BrowserBottomChromePresentation {
     if (!Number.isFinite(localX)) {
       return 'none';
     }
-    const totalWidth = this.frame.leadingOuterWidth + this.frame.leadingGap + this.frame.centerWidth +
-      this.frame.trailingGap + this.frame.trailingOuterWidth;
+    // While collapsed the outer clusters are only a faded-out expanded layer, so every touch has to
+    // resolve to the compact capsule rather than to the blocks still laid out behind it.
+    const frame = this.scrollCompactProgress >= BROWSER_BOTTOM_CHROME_COMPACT_GESTURE_PROGRESS ?
+      this.compactFrame : this.frame;
+    const totalWidth = frame.leadingOuterWidth + frame.leadingGap + frame.centerWidth +
+      frame.trailingGap + frame.trailingOuterWidth;
     const contentLeft = Math.max(0, (this.panelWidth - totalWidth) / 2);
-    const leadingRight = contentLeft + this.frame.leadingOuterWidth;
-    if (this.frame.leadingOuterWidth > 0 && localX >= contentLeft && localX <= leadingRight) {
+    const leadingRight = contentLeft + frame.leadingOuterWidth;
+    if (frame.leadingOuterWidth > 0 && localX >= contentLeft && localX <= leadingRight) {
       return 'leading-outer';
     }
-    const centerLeft = leadingRight + this.frame.leadingGap;
-    const centerRight = centerLeft + this.frame.centerWidth;
+    const centerLeft = leadingRight + frame.leadingGap;
+    const centerRight = centerLeft + frame.centerWidth;
     if (localX >= centerLeft && localX <= centerRight) {
       return 'center-capsule';
     }
-    const trailingLeft = centerRight + this.frame.trailingGap;
-    const trailingRight = trailingLeft + this.frame.trailingOuterWidth;
-    if (this.frame.trailingOuterWidth > 0 && localX >= trailingLeft && localX <= trailingRight) {
+    const trailingLeft = centerRight + frame.trailingGap;
+    const trailingRight = trailingLeft + frame.trailingOuterWidth;
+    if (frame.trailingOuterWidth > 0 && localX >= trailingLeft && localX <= trailingRight) {
       return 'trailing-outer';
     }
     return 'none';
@@ -551,8 +572,11 @@ export class BrowserBottomChromePresentationViewModel {
       panelWidth: facts.panelWidth,
       floatingSurfaceTranslateY: mode === 'scroll-compact' ?
         BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y : 0,
+      scrollCompactProgress: mode === 'scroll-compact' ? 1 : 0,
       frame,
+      compactFrame: this.buildCompactFrame(facts),
       leadingOuterTarget,
+      compactBodyTarget: this.buildCompactBodyTarget(mode),
       centerBodyTarget: this.buildCenterBodyTarget(facts, mode),
       centerLeadingTarget,
       centerPrimaryTarget,
@@ -623,17 +647,13 @@ export class BrowserBottomChromePresentationViewModel {
     facts: BrowserBottomChromePresentationFacts,
     mode: BrowserBottomChromePresentationMode
   ): BrowserBottomChromeFrame {
-    const floatingHeaderHorizontalPadding = sanitizeSize(
-      facts.floatingHeaderHorizontalPadding ?? BROWSER_BOTTOM_ADDRESS_PANEL_PHONE_HEADER_HORIZONTAL_PADDING
-    );
+    const availableWidth = this.resolveAvailableChromeWidth(facts);
     const restingChromeOuterSize = sanitizeSize(
       facts.restingChromeOuterSize ?? BROWSER_BOTTOM_CHROME_PHONE_OUTER_SIZE
     );
     const restingChromeOuterGap = sanitizeSize(
       facts.restingChromeOuterGap ?? BROWSER_BOTTOM_CHROME_PHONE_OUTER_GAP
     );
-    const availableWidth = Math.max(1,
-      facts.panelWidth - floatingHeaderHorizontalPadding * 2);
     const restingCenterWidth = Math.max(1,
       availableWidth - restingChromeOuterSize * 2 - restingChromeOuterGap * 2);
     const requestedWideCenterWidth = sanitizeSize(facts.expandedChromeWidth ?? availableWidth);
@@ -641,18 +661,19 @@ export class BrowserBottomChromePresentationViewModel {
       availableWidth,
       requestedWideCenterWidth > 0 ? requestedWideCenterWidth : availableWidth
     ));
-    const compactCenterWidth = Math.max(1, Math.min(BROWSER_BOTTOM_CHROME_COMPACT_WIDTH, availableWidth));
     if (mode === 'scroll-compact') {
-      return this.buildFrameValues({
-        centerWidth: compactCenterWidth,
-        centerHeight: BROWSER_BOTTOM_CHROME_COMPACT_HEIGHT,
-        centerRadius: BROWSER_BOTTOM_CHROME_COMPACT_RADIUS,
-        centerTranslateY: BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y,
-        centerDisplayScale: BROWSER_BOTTOM_CHROME_COMPACT_DISPLAY_SCALE,
-        centerHorizontalPadding: BROWSER_BOTTOM_CHROME_COMPACT_HORIZONTAL_PADDING,
-        centerVerticalPadding: BROWSER_BOTTOM_CHROME_COMPACT_VERTICAL_PADDING,
-        displayOpacity: 1
-      });
+      // The collapsed capsule is its own fixed-geometry layer that fades in on top, so the expanded
+      // layer must stay at resting geometry for the whole collapse. Animating its width, height,
+      // padding and radius is what re-laid-out the rail and re-sampled three glass materials plus
+      // three large shadows on every frame of an in-gesture collapse.
+      return this.buildRestingOrToolsFrame(
+        facts,
+        restingCenterWidth,
+        1,
+        0,
+        restingChromeOuterSize,
+        restingChromeOuterGap
+      );
     }
     if (mode === 'center-active-editing') {
       const webEditing = facts.scene === 'web';
@@ -698,6 +719,42 @@ export class BrowserBottomChromePresentationViewModel {
       0,
       restingChromeOuterSize,
       restingChromeOuterGap
+    );
+  }
+
+  private resolveAvailableChromeWidth(facts: BrowserBottomChromePresentationFacts): number {
+    const floatingHeaderHorizontalPadding = sanitizeSize(
+      facts.floatingHeaderHorizontalPadding ?? BROWSER_BOTTOM_ADDRESS_PANEL_PHONE_HEADER_HORIZONTAL_PADDING
+    );
+    return Math.max(1, facts.panelWidth - floatingHeaderHorizontalPadding * 2);
+  }
+
+  /**
+   * Fixed geometry of the collapsed capsule. It never depends on the current mode, so the renderer
+   * can mount it once, lay it out once, and drive the collapse as a pure opacity cross-fade.
+   */
+  private buildCompactFrame(facts: BrowserBottomChromePresentationFacts): BrowserBottomChromeFrame {
+    const availableWidth = this.resolveAvailableChromeWidth(facts);
+    return this.buildFrameValues({
+      centerWidth: Math.max(1, Math.min(BROWSER_BOTTOM_CHROME_COMPACT_WIDTH, availableWidth)),
+      centerHeight: BROWSER_BOTTOM_CHROME_COMPACT_HEIGHT,
+      centerRadius: BROWSER_BOTTOM_CHROME_COMPACT_RADIUS,
+      centerTranslateY: BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y,
+      centerDisplayScale: BROWSER_BOTTOM_CHROME_COMPACT_DISPLAY_SCALE,
+      centerHorizontalPadding: BROWSER_BOTTOM_CHROME_COMPACT_HORIZONTAL_PADDING,
+      centerVerticalPadding: BROWSER_BOTTOM_CHROME_COMPACT_VERTICAL_PADDING,
+      displayOpacity: 1
+    });
+  }
+
+  private buildCompactBodyTarget(mode: BrowserBottomChromePresentationMode): BrowserBottomChromeTapTarget {
+    if (mode !== 'scroll-compact') {
+      return EMPTY_TAP_TARGET;
+    }
+    return new BrowserBottomChromeTapTarget(
+      new BrowserBottomChromeTapIntent('dispatch-header-action', 'bottomChromeRestore'),
+      true,
+      '恢复工具栏'
     );
   }
 
@@ -853,12 +910,10 @@ export class BrowserBottomChromePresentationViewModel {
     facts: BrowserBottomChromePresentationFacts,
     mode: BrowserBottomChromePresentationMode
   ): BrowserBottomChromeTapTarget {
+    // Scroll-Compact is served by the dedicated collapsed layer, which carries its own
+    // restore target. Leaving one here would put a live hit target on the faded-out rail.
     if (mode === 'scroll-compact') {
-      return new BrowserBottomChromeTapTarget(
-        new BrowserBottomChromeTapIntent('dispatch-header-action', 'bottomChromeRestore'),
-        true,
-        '恢复工具栏'
-      );
+      return EMPTY_TAP_TARGET;
     }
     if (mode === 'return-home-drag' || mode === 'center-active-editing') {
       return EMPTY_TAP_TARGET;

@@ -3315,14 +3315,14 @@ export struct BrowserBottomAddressPanel {
     if (this.liveBottomChromePresentation.mode !== 'scroll-compact') {
       return 0;
     }
-    return Math.max(1, this.liveBottomChromePresentation.frame.centerWidth);
+    return Math.max(1, this.liveBottomChromePresentation.compactFrame.centerWidth);
   }
 
   private resolveFloatingHeaderInteractionHeight(): number {
     if (this.liveBottomChromePresentation.mode !== 'scroll-compact') {
       return 0;
     }
-    return Math.max(1, this.liveBottomChromePresentation.frame.centerHeight);
+    return Math.max(1, this.liveBottomChromePresentation.compactFrame.centerHeight);
   }
 
   private resolveFloatingHeaderInteractionOffsetY(): number {
@@ -3330,7 +3330,7 @@ export struct BrowserBottomAddressPanel {
       return 0;
     }
     return BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING +
-      Math.max(0, this.liveBottomChromePresentation.frame.centerTranslateY);
+      Math.max(0, this.liveBottomChromePresentation.compactFrame.centerTranslateY);
   }
 
   private resolveBottomChromeGestureSource(

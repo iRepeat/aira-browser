@@ -50,6 +50,11 @@ const BROWSER_BOTTOM_CHROME_SHADOW_RADIUS: number = 40;
 const BROWSER_BOTTOM_CHROME_ENABLED_OPACITY: number = 1;
 const BROWSER_BOTTOM_CHROME_DISABLED_OPACITY: number = 0.42;
 const BROWSER_BOTTOM_CHROME_PROGRESS_EPSILON: number = 0.001;
+// Above this collapse progress the expanded rail is visually gone, so its nodes must stop taking
+// touches and leave the compact capsule as the only live surface.
+const BROWSER_BOTTOM_CHROME_COMPACT_HIT_TEST_PROGRESS: number = 0.5;
+const EMPTY_BROWSER_BOTTOM_CHROME_TAP_TARGET: BrowserBottomChromeTapTarget =
+  new BrowserBottomChromeTapTarget(new BrowserBottomChromeTapIntent('none'), false, '');
 const BROWSER_BOTTOM_CHROME_DOWNLOAD_RING_SIZE: number = BROWSER_BOTTOM_CHROME_ICON_SIZE + 6;
 const BROWSER_BOTTOM_CHROME_DOWNLOAD_RING_STROKE_WIDTH: number = 2;
 const BROWSER_SEARCH_ENGINE_POPUP_WIDTH: number = 224;
@@ -75,6 +80,14 @@ const PROTECTION_DEBUG_PREFIX: string = '[DEBUG-protection-count-20260808]';
 @Component
 export struct BrowserBottomChromeRenderer {
   @State private animatedFrame: BrowserBottomChromeFrame = DEFAULT_BROWSER_BOTTOM_CHROME_PRESENTATION.frame;
+  /**
+   * Collapse of the floating chrome into the compact capsule is a pure opacity cross-fade between
+   * two rails that are both laid out once at fixed geometry. Animating the expanded rail's width,
+   * height, padding, radius and text metrics instead re-measured the whole bottom-chrome subtree,
+   * re-sampled three glass materials and re-blurred three 40vp shadows on every frame of a
+   * gesture-driven collapse.
+   */
+  @State private animatedScrollCompactProgress: number = 0;
   @State private outgoingDisplayText: string = DEFAULT_BROWSER_BOTTOM_CHROME_PRESENTATION.centerContent.displayText;
   @State private incomingDisplayText: string = DEFAULT_BROWSER_BOTTOM_CHROME_PRESENTATION.centerContent.displayText;
   @State private outgoingDisplayUsesSecondaryTone: boolean =
@@ -105,6 +118,12 @@ export struct BrowserBottomChromeRenderer {
   @State private trailingOuterVisualEnabled: boolean = false;
   private currentPresentation: BrowserBottomChromePresentation = DEFAULT_BROWSER_BOTTOM_CHROME_PRESENTATION;
   private targetFrame: BrowserBottomChromeFrame = DEFAULT_BROWSER_BOTTOM_CHROME_PRESENTATION.frame;
+  /**
+   * Fixed geometry of the collapsed capsule. It is read by build() rather than animated, which is
+   * what lets the compact rail stay laid out for the whole lifetime of this component.
+   */
+  private compactFrame: BrowserBottomChromeFrame = DEFAULT_BROWSER_BOTTOM_CHROME_PRESENTATION.compactFrame;
+  private targetScrollCompactProgress: number = 0;
   private motionVersion: number = 0;
   private focusReadyDispatched: boolean = false;
   private focusReadyTimer: number = -1;
@@ -151,6 +170,9 @@ export struct BrowserBottomChromeRenderer {
     this.currentPresentation = this.presentation;
     this.targetFrame = this.presentation.frame;
     this.animatedFrame = this.presentation.frame;
+    this.compactFrame = this.presentation.compactFrame;
+    this.targetScrollCompactProgress = this.presentation.scrollCompactProgress;
+    this.animatedScrollCompactProgress = this.presentation.scrollCompactProgress;
     this.initializeDisplayContent(this.presentation);
     this.applyPresentationMetadata(this.presentation);
     this.webProtectionFeedbackCrossfadeProgress =
@@ -170,6 +192,17 @@ export struct BrowserBottomChromeRenderer {
   }
 
   build() {
+    Stack({ alignContent: Alignment.Center }) {
+      this.buildExpandedRail()
+      this.buildCompactRail()
+    }
+    .width('100%')
+    .height(BROWSER_BOTTOM_CHROME_RENDER_HEIGHT)
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  @Builder
+  private buildExpandedRail() {
     Row({ space: 0 }) {
       this.buildLeadingOuterMaterial()
       Blank()
@@ -187,7 +220,109 @@ export struct BrowserBottomChromeRenderer {
     .height(BROWSER_BOTTOM_CHROME_RENDER_HEIGHT)
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Top)
+    .opacity(1 - this.resolveScrollCompactProgress())
     .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /**
+   * The collapsed capsule. Both this rail and the expanded rail are always mounted and already laid
+   * out, so collapsing and revealing them only changes opacity: no re-layout, no material re-sample,
+   * no shadow re-blur on the frames where the finger is still on the page.
+   */
+  @Builder
+  private buildCompactRail() {
+    Stack({ alignContent: Alignment.Center }) {
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.shouldUseHdsMaterialPlate()) {
+          HdsImmersiveMaterialSurface({
+            plateWidth: this.compactFrame.centerWidth,
+            plateHeight: this.compactFrame.centerHeight,
+            plateRadius: this.compactFrame.centerRadius
+          })
+        }
+        BrowserBottomChromeImmersiveMaterialSurface({
+          surfaceWidth: '100%',
+          surfaceHeight: this.compactFrame.centerHeight,
+          surfaceRadius: this.compactFrame.centerRadius,
+          materialTint: this.materialTint,
+          hostMaterialActive: this.shouldUseHdsMaterialPlate(),
+          materialShadowEnabled: false,
+          edgeHighlightWidth: BROWSER_BOTTOM_CHROME_EDGE_HIGHLIGHT_WIDTH,
+          edgeHighlightColor: this.edgeHighlightColor
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            Text(this.presentation.centerContent.displayText)
+              .width(this.compactFrame.centerViewportWidth)
+              .height(BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT)
+              .fontSize(BROWSER_BOTTOM_CHROME_TEXT_SIZE)
+              .lineHeight(BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT)
+              .halfLeading(true)
+              .textVerticalAlign(TextVerticalAlign.CENTER)
+              .fontColor(this.presentation.centerContent.displayUsesSecondaryTone ?
+                this.resolveSecondaryTextForeground() : this.resolvePrimaryTextForeground())
+              .fontWeight(FontWeight.Regular)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .textAlign(TextAlign.Center)
+              .scale({
+                x: this.compactFrame.centerDisplayScale,
+                y: this.compactFrame.centerDisplayScale
+              })
+              .hitTestBehavior(HitTestMode.None)
+            this.buildCompactTapSurface()
+          }
+          .width('100%')
+          .height('100%')
+          .padding({
+            left: this.compactFrame.centerHorizontalPadding,
+            right: this.compactFrame.centerHorizontalPadding,
+            top: this.compactFrame.centerVerticalPadding,
+            bottom: this.compactFrame.centerVerticalPadding
+          })
+        }
+      }
+      .width(this.compactFrame.centerWidth)
+      .height(this.compactFrame.centerHeight)
+      .backgroundColor(this.resolvePressedBackground('compact-body'))
+      .borderRadius(this.compactFrame.centerRadius)
+      .shadow(this.resolveMaterialShadow())
+      .scale({
+        x: this.resolveCompactBodyScaleX(),
+        y: this.resolveCompactBodyScaleY()
+      })
+    }
+    .width(this.compactFrame.centerWidth)
+    .height(BROWSER_BOTTOM_CHROME_RENDER_HEIGHT)
+    .translate({ y: this.compactFrame.centerTranslateY })
+    .opacity(this.resolveScrollCompactProgress())
+    .hitTestBehavior(this.isCompactChromePresented() ? HitTestMode.Transparent : HitTestMode.None)
+  }
+
+  @Builder
+  private buildCompactTapSurface() {
+    Button()
+      .width('100%')
+      .height('100%')
+      .type(ButtonType.Normal)
+      .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
+      .stateEffect(false)
+      .focusable(false)
+      .focusOnTouch(false)
+      .enabled(this.isPhysicalTargetInteractive('compact-body'))
+      .accessibilityText(this.resolveLiveTapTarget('compact-body').accessibilityText)
+      .hitTestBehavior(this.isPhysicalTargetInteractive('compact-body') ?
+        HitTestMode.Default : HitTestMode.None)
+      .onTouch((event: TouchEvent) => {
+        if (event.type === TouchType.Down) {
+          this.capturePressedTargetIntent('compact-body');
+        } else if (event.type === TouchType.Cancel) {
+          this.clearPressedTargetIntent();
+        }
+        this.updatePressedTarget('compact-body', this.resolveLiveTapTarget('compact-body'), event.type);
+      })
+      .onClick(() => {
+        this.handleTap('compact-body');
+      })
   }
 
   @Builder
@@ -905,8 +1040,10 @@ export struct BrowserBottomChromeRenderer {
     const previous = this.currentPresentation;
     const previousProtectionFeedbackVisible = this.shouldPresentWebProtectionFeedback(previous);
     const frameChanged = !this.targetFrame.isEquivalent(this.presentation.frame);
+    const compactChanged = !this.isCompactProgressSettled();
     const displaySwapNeeded = this.shouldSwapDisplayContent(previous, this.presentation);
     this.currentPresentation = this.presentation;
+    this.compactFrame = this.presentation.compactFrame;
     this.applyPresentationMetadata(this.presentation);
     this.syncWebProtectionFeedbackCrossfade(
       previousProtectionFeedbackVisible,
@@ -925,14 +1062,16 @@ export struct BrowserBottomChromeRenderer {
     if (displaySwapNeeded) {
       this.prepareDisplaySwap(this.presentation);
     }
-    if (!frameChanged && !displaySwapNeeded) {
+    if (!frameChanged && !compactChanged && !displaySwapNeeded) {
       return;
     }
     this.targetFrame = this.presentation.frame;
+    this.targetScrollCompactProgress = this.presentation.scrollCompactProgress;
     const directive = this.presentation.resolveMotionFrom(previous);
     if (directive.kind !== 'animated' || directive.durationMs <= 0 || directive.curve === undefined) {
       this.invalidateActiveMotion();
       this.animatedFrame = this.presentation.frame;
+      this.animatedScrollCompactProgress = this.targetScrollCompactProgress;
       if (displaySwapNeeded) {
         this.commitDisplayContent(this.presentation);
       } else {
@@ -942,6 +1081,11 @@ export struct BrowserBottomChromeRenderer {
       return;
     }
     this.startMotion(directive);
+  }
+
+  private isCompactProgressSettled(): boolean {
+    return Math.abs(this.targetScrollCompactProgress - this.presentation.scrollCompactProgress) <=
+      BROWSER_BOTTOM_CHROME_PROGRESS_EPSILON;
   }
 
   private applyPresentationMetadata(presentation: BrowserBottomChromePresentation): void {
@@ -975,6 +1119,7 @@ export struct BrowserBottomChromeRenderer {
     this.invalidateActiveMotion();
     const version = this.motionVersion;
     const targetFrame = this.presentation.frame;
+    const targetScrollCompactProgress = this.targetScrollCompactProgress;
     const curve = directive.curve as ICurve;
     this.scheduleFocusReady(directive, version);
     animateTo({
@@ -991,6 +1136,7 @@ export struct BrowserBottomChromeRenderer {
         return;
       }
       this.animatedFrame = targetFrame;
+      this.animatedScrollCompactProgress = targetScrollCompactProgress;
       this.displaySwapProgress = 1;
     });
   }
@@ -1185,7 +1331,7 @@ export struct BrowserBottomChromeRenderer {
       if (this.pressedTargetMotionVersion !== version) {
         return;
       }
-      if (targetKey === 'center-body') {
+      if (targetKey === 'center-body' || targetKey === 'compact-body') {
         this.pressedTargetScale = 1;
         this.centerBodyPressedProgress = 1;
         return;
@@ -1214,7 +1360,7 @@ export struct BrowserBottomChromeRenderer {
       if (this.pressedTargetMotionVersion !== version) {
         return;
       }
-      if (targetKey === 'center-body') {
+      if (targetKey === 'center-body' || targetKey === 'compact-body') {
         this.centerBodyPressedProgress = 0;
         return;
       }
@@ -1302,11 +1448,27 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private isPhysicalTargetInteractive(targetKey: string): boolean {
+    // The expanded rail stays mounted behind the collapsed capsule. Once the compact capsule is the
+    // presented chrome it must not swallow touches aimed at the expanded clusters, and vice versa:
+    // keying this off the restore target rather than opacity alone keeps taps alive mid-transition.
+    if (targetKey !== 'compact-body' && this.isCompactChromePresented()) {
+      return false;
+    }
     if (!this.shouldUseToolbarInteractionGesture(targetKey)) {
       return this.isTargetEnabled(this.resolveLiveTapTarget(targetKey));
     }
     return this.isTargetPresent(this.resolveLiveTapTarget(targetKey)) ||
       this.isTargetPresent(this.resolveLiveLongPressTarget(targetKey));
+  }
+
+  /**
+   * True while the collapsed capsule is the chrome the user is actually looking at. The restore
+   * target only exists for Scroll-Compact, so this is false for the whole reveal direction and the
+   * expanded clusters keep receiving taps until they are the presented state again.
+   */
+  private isCompactChromePresented(): boolean {
+    return this.resolveScrollCompactProgress() >= BROWSER_BOTTOM_CHROME_COMPACT_HIT_TEST_PROGRESS &&
+      this.isTargetPresent(this.presentation.compactBodyTarget);
   }
 
   private shouldUseToolbarInteractionGesture(targetKey: string): boolean {
@@ -1323,6 +1485,9 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private resolveLiveLongPressTarget(targetKey: string): BrowserBottomChromeTapTarget {
+    if (targetKey === 'compact-body') {
+      return EMPTY_BROWSER_BOTTOM_CHROME_TAP_TARGET;
+    }
     if (targetKey === 'leading-outer') {
       return this.presentation.leadingOuterLongPressTarget;
     }
@@ -1341,6 +1506,9 @@ export struct BrowserBottomChromeRenderer {
   private resolveLiveTapTarget(targetKey: string): BrowserBottomChromeTapTarget {
     if (targetKey === 'leading-outer') {
       return this.presentation.leadingOuterTarget;
+    }
+    if (targetKey === 'compact-body') {
+      return this.presentation.compactBodyTarget;
     }
     if (targetKey === 'center-body') {
       return this.presentation.centerBodyTarget;
@@ -1401,6 +1569,30 @@ export struct BrowserBottomChromeRenderer {
       BROWSER_BOTTOM_CHROME_CENTER_PRESSED_VERTICAL_INSET,
       BROWSER_BOTTOM_CHROME_CENTER_PRESSED_MIN_VERTICAL_SCALE
     );
+  }
+
+  private resolveCompactBodyScaleX(): number {
+    return this.resolveCenterBodyAnimatedScale(
+      this.compactFrame.centerWidth,
+      BROWSER_BOTTOM_CHROME_CENTER_PRESSED_HORIZONTAL_INSET,
+      BROWSER_BOTTOM_CHROME_CENTER_PRESSED_MIN_HORIZONTAL_SCALE
+    );
+  }
+
+  private resolveCompactBodyScaleY(): number {
+    return this.resolveCenterBodyAnimatedScale(
+      this.compactFrame.centerHeight,
+      BROWSER_BOTTOM_CHROME_CENTER_PRESSED_VERTICAL_INSET,
+      BROWSER_BOTTOM_CHROME_CENTER_PRESSED_MIN_VERTICAL_SCALE
+    );
+  }
+
+  /**
+   * Collapse progress drives opacity only, so no geometry, material plate or shadow has to be
+   * rebuilt while the finger is still on the page.
+   */
+  private resolveScrollCompactProgress(): number {
+    return Math.max(0, Math.min(1, this.animatedScrollCompactProgress));
   }
 
   private resolveCenterBodyAnimatedScale(size: number, inset: number, minimumScale: number): number {

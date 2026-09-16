@@ -488,30 +488,7 @@ function checkFixedSearchAnchorAndStableGeometry() {
     ),
   'address-input Copy must delegate focus exit until the root owner starts backdrop collapse');
 
-  class SearchEnginePresentation {
-    constructor(selectedSearchEngine, searchEngines, placeholder) {
-      this.selectedSearchEngine = selectedSearchEngine;
-      this.searchEngines = searchEngines;
-      this.placeholder = placeholder;
-    }
-  }
-  const chromeModule = evaluateCommonJs(chromePresentationPath, (request) => {
-    if (request === './BrowserBottomAddressPanelMetrics') {
-      return { BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING: 10 };
-    }
-    if (request === './BrowserBottomPanelMotionTokens') {
-      return {
-        BROWSER_BOTTOM_PANEL_MIDDLE_SNAP_DURATION_MS: 220,
-        BROWSER_BOTTOM_PANEL_MOTION_DURATION_MS: 180,
-        resolveBrowserBottomPanelMiddleSnapCurve: () => ({}),
-        resolveBrowserBottomPanelMotionCurve: () => ({})
-      };
-    }
-    if (request === './BrowserSearchEnginePresentationViewModel') {
-      return { BrowserSearchEngineChromePresentation: SearchEnginePresentation };
-    }
-    return {};
-  });
+  const chromeModule = evaluateChromePresentationModule();
   const viewModel = new chromeModule.BrowserBottomChromePresentationViewModel();
   const resting = viewModel.buildPresentation(buildChromePresentationFacts('low'));
   const tools = viewModel.buildPresentation(buildChromePresentationFacts('middle'));
@@ -529,6 +506,90 @@ function checkFixedSearchAnchorAndStableGeometry() {
   assert(tools.leadingOuterTarget.enabled === resting.leadingOuterTarget.enabled &&
     tools.trailingOuterTarget.enabled === resting.trailingOuterTarget.enabled,
   'floating Search side-button semantics changed during tool expansion');
+}
+
+function evaluateChromePresentationModule() {
+  class SearchEnginePresentation {
+    constructor(selectedSearchEngine, searchEngines, placeholder) {
+      this.selectedSearchEngine = selectedSearchEngine;
+      this.searchEngines = searchEngines;
+      this.placeholder = placeholder;
+    }
+  }
+  return evaluateCommonJs(chromePresentationPath, (request) => {
+    if (request === './BrowserBottomAddressPanelMetrics') {
+      return {
+        BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING: 10,
+        BROWSER_BOTTOM_ADDRESS_PANEL_PHONE_HEADER_HORIZONTAL_PADDING: 0,
+        BROWSER_BOTTOM_CHROME_PHONE_OUTER_SIZE: 48,
+        BROWSER_BOTTOM_CHROME_PHONE_OUTER_GAP: 4
+      };
+    }
+    if (request === './BrowserBottomPanelMotionTokens') {
+      return {
+        BROWSER_BOTTOM_PANEL_MIDDLE_SNAP_DURATION_MS: 220,
+        BROWSER_BOTTOM_PANEL_MOTION_DURATION_MS: 180,
+        resolveBrowserBottomPanelMiddleSnapCurve: () => ({}),
+        resolveBrowserBottomPanelMotionCurve: () => ({})
+      };
+    }
+    if (request === './BrowserSearchEnginePresentationViewModel') {
+      return { BrowserSearchEngineChromePresentation: SearchEnginePresentation };
+    }
+    return {};
+  });
+}
+
+function checkCollapseIsAnOpacityCrossFade() {
+  const chromeModule = evaluateChromePresentationModule();
+  const viewModel = new chromeModule.BrowserBottomChromePresentationViewModel();
+  const resting = viewModel.buildPresentation(buildChromePresentationFacts('low'));
+  const compact = viewModel.buildPresentation(
+    Object.assign(buildChromePresentationFacts('low'), { scrollPresentation: 'compact' })
+  );
+
+  // The whole point of the fix: Scroll-Compact must NOT move the expanded rail, because animating
+  // its width/height/padding/radius re-laid-out the rail and re-sampled three glass materials plus
+  // three large shadows on every frame of an in-gesture collapse.
+  assert(compact.frame.isEquivalent(resting.frame),
+    'Scroll-Compact must leave the expanded rail at resting geometry so the collapse animates opacity only');
+  assert(compact.scrollCompactProgress === 1 && resting.scrollCompactProgress === 0,
+    'Scroll-Compact must drive the capsule cross-fade through presentation-owned progress');
+  assert(compact.floatingSurfaceTranslateY === resting.floatingSurfaceTranslateY + 16,
+    'Scroll-Compact must still translate the floating surface with the collapsed capsule');
+
+  // The collapsed capsule is its own fixed-geometry layer, so its geometry may not vary with mode.
+  for (const sameModeFacts of [buildChromePresentationFacts('low'), buildChromePresentationFacts('middle')]) {
+    const other = viewModel.buildPresentation(sameModeFacts);
+    assert(other.compactFrame.isEquivalent(compact.compactFrame),
+      'the collapsed capsule geometry must stay fixed across modes so it can be laid out once');
+  }
+  assert(compact.compactFrame.centerWidth === 96 &&
+    compact.compactFrame.centerHeight === 32 &&
+    compact.compactFrame.centerRadius === 16 &&
+    compact.compactFrame.centerTranslateY === 16,
+  'the collapsed capsule must keep its refined 96x32 capsule bottom-aligned in the 48vp rail');
+  assert(compact.compactFrame.leadingOuterWidth === 0 &&
+    compact.compactFrame.trailingOuterWidth === 0 &&
+    compact.compactFrame.outerOpacity === 0,
+  'the collapsed capsule must not carry the expanded outer clusters');
+
+  // Restore tap must live on the collapsed layer, and the faded-out expanded rail must not also
+  // expose a center restore target or both layers would answer the same touch.
+  assert(compact.compactBodyTarget.intent.actionId === 'bottomChromeRestore' &&
+    compact.compactBodyTarget.enabled === true,
+  'the collapsed capsule must own the restore-toolbar tap');
+  assert(resting.compactBodyTarget.intent.kind === 'none' &&
+    compact.centerBodyTarget.intent.kind === 'none',
+  'only the presented layer may expose the center tap target');
+
+  // Gesture arbitration has to follow the visible capsule, not the faded-out expanded clusters.
+  const panelCenterX = compact.panelWidth / 2;
+  assert(compact.resolveGestureSource(panelCenterX) === 'center-capsule',
+    'a touch on the collapsed capsule must resolve to the capsule rather than an expanded outer cluster');
+  assert(resting.resolveGestureSource(panelCenterX) === 'center-capsule' &&
+    resting.resolveGestureSource(0) === 'leading-outer',
+  'the expanded rail must keep resolving its outer clusters from resting geometry');
 }
 
 function checkExpansionHintContract() {
@@ -756,6 +817,7 @@ const checks = [
   checkCollapsedOverlayPanOwnership,
   checkHiddenFloatingHeaderHitTesting,
   checkFixedSearchAnchorAndStableGeometry,
+  checkCollapseIsAnOpacityCrossFade,
   checkExpansionHintContract,
   checkToolbarResponsiveGridContract,
   checkUnifiedToolbarPageContract,

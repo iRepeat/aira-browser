@@ -1043,6 +1043,19 @@ check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CH
 check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
   'BROWSER_BOTTOM_CHROME_COMPACT_DISPLAY_SCALE: number = 14 / 15' \
   "Scroll-Compact must reduce display text visually without animating paragraph metrics."
+check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
+  'compactFrame: BrowserBottomChromeFrame;' \
+  "Scroll-Compact must expose the collapsed capsule as presentation-owned fixed geometry."
+check_file_contains_rule "${BOTTOM_CHROME_RENDERER}" "${BOTTOM_CHROME_RENDERER_REL}" \
+  'animatedScrollCompactProgress' \
+  "collapse and reveal must run through presentation-owned cross-fade progress."
+check_file_contains_rule "${BOTTOM_CHROME_RENDERER}" "${BOTTOM_CHROME_RENDERER_REL}" \
+  'private buildCompactRail\(\)' \
+  "the collapsed capsule must stay mounted as its own layer so collapsing never re-lays-out the rail."
+check_file_not_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" \
+  "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
+  'compactCenterWidth' \
+  "Scroll-Compact must not re-derive expanded-rail geometry from the compact capsule; the expanded rail stays at resting geometry while the collapsed layer fades in."
 check_file_not_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
   'centerTextTranslateY|TEXT_OPTICAL_OFFSET_Y' \
   "Bottom Chrome presentation must not restore device-specific text offsets."
