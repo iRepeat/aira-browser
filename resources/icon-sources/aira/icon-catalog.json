@@ -1635,7 +1635,7 @@
         },
         {
           "actionId": "sendToDesktop",
-          "title": "推送到电脑",
+          "title": "推送",
           "iconId": "browser.toolbar.sendToDesktop"
         },
         {
@@ -1750,12 +1750,12 @@
         },
         {
           "actionId": "addToDesktop",
-          "title": "作为应用安装",
+          "title": "安装网页",
           "iconId": "browser.toolbar.addToDesktop"
         },
         {
           "actionId": "offline",
-          "title": "保存离线网页",
+          "title": "保存网页",
           "iconId": "browser.toolbar.offline"
         },
         {
@@ -1770,7 +1770,7 @@
         },
         {
           "actionId": "savedPages",
-          "title": "已保存页面",
+          "title": "我的网页",
           "iconId": "browser.toolbar.savedPages"
         }
       ]

@@ -27,7 +27,7 @@ const HOME_SYSTEM_SHORTCUT_DEFINITIONS: HomeSystemShortcutDefinition[] = [
   { target: 'bookmarks', title: '书签', url: 'aira://system/bookmarks', iconId: 'browser.shortcut.bookmarks' },
   { target: 'history', title: '历史记录', url: 'aira://system/history', iconId: 'browser.shortcut.history' },
   { target: 'downloads', title: '下载管理', url: 'aira://system/downloads', iconId: 'browser.shortcut.downloads' },
-  { target: 'saved_pages', title: '已保存页面', url: 'aira://system/saved_pages', iconId: 'browser.toolbar.savedPages' },
+  { target: 'saved_pages', title: '我的网页', url: 'aira://system/saved_pages', iconId: 'browser.toolbar.savedPages' },
   { target: 'tabs', title: '标签页', url: 'aira://system/tabs', iconId: 'browser.toolbar.tabs' },
   { target: 'user_scripts', title: '用户脚本', url: 'aira://system/user_scripts', iconId: 'browser.shortcut.scripts' },
   { target: 'ad_block', title: '广告拦截', url: 'aira://system/ad_block', iconId: 'settings.adBlocker' },
