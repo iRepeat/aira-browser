@@ -16,6 +16,7 @@ import {
   BrowserWebTopSafeAreaColorSampleResult
 } from '../../services/browser/BrowserWebTopSafeAreaColorSampler';
 import { buildBrowserTabPreviewComponentSnapshotId } from '../../services/web/BrowserTabPreviewCaptureService';
+import { AiraLoadScrollJankProbe } from '../../common/debug/AiraLoadScrollJankProbe';
 
 type BrowserPageChromeThemeSamplingTaskKind = 'script_probe' | 'visual_top_strip';
 
@@ -127,6 +128,17 @@ export class BrowserPageChromeThemeSamplingCoordinator {
 
   scheduleScriptProbe(tabId: string): void {
     this.scheduleScriptProbeWithDelay(tabId, DEFERRED_SCRIPT_PROBE_DELAY_MS);
+    // Temporary [DEBUG-load-scroll-jank-7c4d] probe: this is the load-finished / page-end entry
+    // point, so it is where the "page appeared, then the first swipe stutters" window opens.
+    this.startLoadScrollJankWindow();
+  }
+
+  private startLoadScrollJankWindow(): void {
+    try {
+      AiraLoadScrollJankProbe.markLoadFinished();
+      AiraLoadScrollJankProbe.startFrameCadence(this.host.resolveVisualSamplingContext().uiContext);
+    } catch (_error) {
+    }
   }
 
   scheduleVisualSample(tabId: string): void {
@@ -238,20 +250,29 @@ export class BrowserPageChromeThemeSamplingCoordinator {
       if (!run.shouldRun) {
         return;
       }
+      // Temporary [DEBUG-load-scroll-jank-7c4d] probe: the theme probe runs a WebviewController
+      // script round-trip on the UI thread, so measure its cost against the load-finished mark.
+      const probeStartedAt = AiraLoadScrollJankProbe.startTimed();
       this.probe.runPageChromeThemeProbe(tabId, this.buildProbeDispatchHost());
+      AiraLoadScrollJankProbe.endTimed('theme_script_probe_dispatch', probeStartedAt);
     }, schedule.delayMs);
   }
 
   private samplePageChromeVisualTopColor(tabId: string): void {
     const context = this.host.resolveVisualSamplingContext();
+    // Temporary [DEBUG-load-scroll-jank-7c4d] probe: the component snapshot + pixel readback is a
+    // candidate for the post-load hitch, so its cost is measured per sample.
+    const probeStartedAt = AiraLoadScrollJankProbe.startTimed();
     void this.dependencies.colorSampler.sample({
       uiContext: context.uiContext,
       componentSnapshotId: buildBrowserTabPreviewComponentSnapshotId(tabId),
       systemTopInsetPx: context.systemTopInsetPx,
       contentGapPx: context.contentGapPx
     }).then((result: BrowserWebTopSafeAreaColorSampleResult) => {
+      AiraLoadScrollJankProbe.endTimed('visual_color_sample', probeStartedAt, `color=${result.color}`);
       this.handleVisualSampleResult(tabId, result);
     }).catch((_error: Error) => {
+      AiraLoadScrollJankProbe.endTimed('visual_color_sample_failed', probeStartedAt);
     });
   }
 

@@ -598,6 +598,154 @@ Aira 唯一运行在渲染进程里的代码是**注入的 document-start 脚本
 但**修复的收益尚未在真机上量化**。要闭环需要一次授权后的真机 trace，对比修复前后收起/展开那几帧的
 主线程占用与材质重采样耗时。按仓库 `AGENTS.md`，设备抓取需用户明确授权。
 
+## 十二、进网页头几秒的卡顿：历史读取与网格重建已修复，第一下未定位
+
+用户反馈：「打开一个网页，等加载完成出现画面后第一时间滑动，前面一两秒有几个明显的卡顿点」，
+以及「大概第 3 秒左右那个卡顿点还在」。第八、十一节的结论都解释不了这一条：它的触发条件是
+**打开网页后的时间**，与滑动方向、与底部悬浮都无关（用户自己隐藏底部悬浮后卡顿照旧）。
+
+本节用埋点日志（`AiraLoadScrollJankProbe` 的 `frame_gap`、`postFrameCallback` 帧节奏探针、
+`SqliteSharedResultSet: FillBlock`、`BrowserDatabase` 的 `Loaded history visits`）逐条排查。
+**已修复并验证两处**：历史子系统的冗余全表读，以及一次图标更新导致整个网格重建。
+**仍未解释一处**：`load + 189/226ms` 那两个卡顿点（详见下文）。
+
+### 历史读取：先纠正一个推断
+
+用户推测「打开网页马上新增了一条历史记录，是这条写入导致的卡顿」。方向对（确实是历史子系统），
+但机制不对：**卡顿来自写入前后伴随的读，不是这条插入本身**。日志里真正与卡顿点重合的是：
+
+```
+57:29.602  BrowserDatabase: Loaded history visits count=100 limit=100 offset=0 durationMs=49
+57:29.653  frame_gap gap=67ms sinceLoadFinished=84ms
+57:29.742  BrowserDatabase: Loaded history visits count=1 limit=1 offset=0 durationMs=38
+57:29.753  frame_gap gap=58ms sinceLoadFinished=184ms
+```
+
+`count=100` 那次是 `RdbHistoryRepository.initialize()` 顺带做的预览预热，`count=1` 那次是
+`addVisit()` 写完后的回读。另外还有一个与「打开网页」无关、按启动步调跑的：
+
+```
+57:34.513  SqliteSharedResultSet: FillBlock:blockRowNum=9853, requiredPos= 5016 ...
+57:34.565  SqliteSharedResultSet: FillBlock:blockRowNum=9853, requiredPos= 8361 ...
+57:34.589  Startup step sync_experience_history_account_lifecycle completed in 168ms
+57:34.590  ProcessJank: jank >= threshold
+57:34.598  frame_gap gap=167ms sinceLoadFinished=5029ms
+```
+
+这是启动步骤 `sync_experience_history_account_lifecycle`，它调
+`reconcileHistoryAccountLifecycle()` → `detachHistorySyncRemoteProjectionsExcept()`，
+目的是**移除**过期的远程投影，不新增任何记录。
+
+上面那两对是同一进程内的连续事件：`count=100` 读取结束到掉帧只隔 51ms，`count=1` 那次只隔 11ms。
+也就是说「刚进网页第一时间滑动」那一下，确实是这条读取顶在滑动帧上。
+
+### 历史读取的三个根因
+
+| # | 位置 | 问题 | 代价 |
+|---|---|---|---|
+| 1 | `BrowserDatabase.hydrateHistoryVisits` | 批量水合超过 80 条时**退化成读取整张 `history_urls` 表**（报告用的账号有 9853 行） | 预热 100 条 = 读全表，实测 49ms |
+| 2 | `RdbHistoryRepository.addVisit` | 写完立刻 `listHistoryVisits(1)` 回读同一行 | 每次页面提交 +38~67ms |
+| 3 | `BrowserDatabase.detachHistorySyncRemoteProjectionsExcept` | `sync_origin='remote'` 查询**无 LIMIT**，把全部远程行 `mapHistoryVisitEventRows` 成对象，再在内存里 `filter` 掉当前账号 | 启动后一次 168ms 停顿 |
+
+第 3 条与第九节记录的 `retention_prune` 是同一个反模式（「读 1 万行只为取一个值」）换了位置：
+过滤条件本来可以下推给 SQLite，却先物化再筛选。
+
+### 历史读取的修复
+
+1. `hydrateHistoryVisits` 删掉「整表回退」分支，统一走按 `id` 的 `IN` 查询，并按
+   `HISTORY_HYDRATE_URL_ID_BATCH_SIZE = 400` 分块（保持在 SQLite 默认 999 宿主参数上限内）。
+   读取量从「访问过的 URL 总数」变成「这一页要显示的条数」。
+2. `upsertHistoryVisit` / `upsertHistoryVisitInStore` 改为**返回**写入后的记录（它本来就用
+   `urlRecord` 拼好了完整对象），`addVisit` 直接用它，删掉回读。
+   附带修正一个潜在缺陷：原先回读的是 `ORDER BY visited_at DESC LIMIT 1`，即**最新**那条，
+   若写入的访问时间不是最新（例如导入旧数据），返回值和缓存里会变成另一条记录；现在返回的就是刚写的这条。
+3. `detachHistorySyncRemoteProjectionsExcept` 把过滤下推成
+   `WHERE sync_origin = 'remote' AND TRIM(sync_account_uid) <> ?`，且只 `SELECT id, url_id`
+   （新增 `HistoryVisitDeleteRef` 轻量映射，删除流程只需要这两列）。返回集合从「全部远程行」
+   变成「真正要删的行」（通常 0 行）。
+
+三处都不改变对外语义：`TRIM()` 与被替换掉的 JS `.trim()` 一致（该列写入时本就已 trim），
+水合结果、删除集合、写入返回值与修复前相同。
+
+### 第二族：一次图标更新导致整个网格重建
+
+`HomeShortcutSurface` 的格子重建键原先取列表级 `iconsVersion`：
+
+```ts
+private resolveShortcutContentRenderKey(): string {
+  const iconVersion = this.frozenIconsVersion >= 0 ? this.frozenIconsVersion : this.iconsVersion;
+  return `${iconVersion}:${this.storedResolvedThemeMode}:` +
+    `${this.storedShowShortcutNames ? 'names' : 'icons'}`;
+}
+```
+
+`iconsVersion` 在水合快照每次发布时递增（`HomeShortcutStateCoordinator.applyIconHydrationSnapshot()`）。
+于是**一个**图标更新就会给全部 17 个格子换上新键，整块网格销毁重建。首页为了「进标签管理页要快」是常驻的，
+所以这次重建会落在**正在滑动网页**的那一帧上。
+
+与之叠加的是 `SiteIconService` 在网络图标写入时调 `invalidateIconUri(result.uri)`，把已预热好的
+72px 像素图丢掉；重建时缓存落空，`SiteIconView` 就会落到 `Image(<本地文件路径>)`，
+由 ArkUI 重新按全尺寸（`dSize:(0,0)`，含一张 512×512）解码。日志里能看到紧邻的一串：
+
+```
+57:46.799  CreatePixelMap dSize:(0,0) srcSize:(32,32)   cost 205us
+57:46.800  CreatePixelMap dSize:(0,0) srcSize:(120,120) cost 491us
+... （同一毫秒内 13 条）
+57:46.804  CreatePixelMap dSize:(0,0) srcSize:(512,512) memType:4 cost 3964us
+57:46.802  frame_gap gap=109ms sinceLoadFinished=2611ms
+```
+
+修复分两处：
+
+1. `SiteIconView` 的像素图解析改为**缓存优先**：`resolveShortcutIconPixelMap()` 在
+   `icon.pixelMap === undefined` 时不再直接返回 `undefined`，改为按 `icon.path`（或持久化存储 URI）
+   查 `SiteIconPixelMapCacheService.getCachedPixelMap()`；新增 `readCachedShortcutPixelMap()` 处理
+   `file://` 前缀与裸路径两种写法；仍然取不到才回退文件解码，行为不变。实测同一抓包窗口内
+   `Image()` 全尺寸解码 **165 → 49 次**。
+2. 重建键从列表级 `iconsVersion` 换成**该图标自身**的 `revision`。`HomeShortcutIconHydrationCoordinator`
+   已经做到了「只有该图标的 `path` 或 `pixelMap` 真的变了才 `revision += 1`」，正是格子需要的粒度；
+   拖拽期间仍用冻结的列表级版本，保证手指下那排格子全程不动。
+
+### 仍未解释的第一下：按页面稳定复现，与网格重建无关
+
+第 2 条修复后，用同一批页面各重复加载 2–3 次复现，`load + 2526ms`（150ms）与 `load + 2594ms`（117ms）
+两个卡顿点**消失**，`gap ≥ 100ms` 从 6 个降到 2 个。但 `load + 189ms`（75ms）与 `load + 226ms`（108ms）
+仍在，且这 4 个会卡的页面每次复现的毫秒数完全一致。
+
+对这一下的排查否掉了几个候选，记录下来避免重复走：
+
+| 候选 | 反证 |
+|---|---|
+| 首页网格重建 | 83 次重建里只有 5 次后面跟着卡顿；`tiles=17` 的整块重建引发 3 次、未引发 47 次 |
+| `iconsVersion` 那条路径 | 已在第 2 条修复中改掉，且改后这一下仍在（毫秒数不变） |
+| ArkTS 主线程被占 | 108ms 那个区间内（`33.919→34.031`）主线程在 `33.932/33.948/33.973` 都有日志，UI 线程并未被占 |
+| 历史读取 | 已修复并验证（本节末），且时间点不符 |
+| 平台判定为纯 Web 侧 | `SCROLL_ARKWEB_FLING_JANK`，`max_app_frame_time` 174–241ms |
+
+关键对照是**同一批页面里有的卡有的不卡，重建次数相同**（11 次会话卡 / 19 次不卡），
+所以更像是这些页面**首次绘制的渲染/合成开销**（主线程活着但帧没提交出去），
+不在 ArkTS 侧。**这一下尚未定位，也没有对应的修复。**
+
+### 一次归因方法的教训
+
+排查这一下时我先用了「卡顿点前 N 毫秒内是否有事件 X」的正向统计，得到「7/7 卡顿前都有网格重建」，
+据此差点认定重建是原因；反向一算才发现重建共发生 83 次，绝大多数（78 次）后面并没有卡顿。
+**对高频事件做正向共现统计会系统性高估因果**，必须同时算反向发生率（或基准概率）才能用。
+
+另有一处更正：最初把紧邻卡顿的那批 `CreatePixelMap` 说成「阻塞主线程」是错的——那些解码的
+tid 是 12232–12476，在**后台线程**，主线程 tid 是 11942。它们是同一触发源（图标更新 → 缓存失效 →
+整块重建）的伴随现象，不是主线程停顿本身。
+
+### 验证
+
+`AIRA_ALLOW_UNSIGNED_BUILD=1 SKIP_INSTALL=1 ./scripts/build-aira-browser.sh` 构建通过；
+`check-architecture-guardrails.sh`、`check-aira-history-sync-contract.sh`、
+`check-aira-sync-provider-switch-contract.sh`、`check-aira-sync-first-activation-contract.sh`、
+`check-open-source-source-tree.sh` 五个契约脚本全部通过。
+
+历史三条与图标重建键两处修复都已在真机上复现确认。`load + 189/226ms` 那一下没有修复，
+埋点保留在源码中（`common/debug/AiraLoadScrollJankProbe.ets`），便于下一轮从 Web 首绘方向继续。
+
 ## 来源
 
 ### 本机官方 SDK 声明（逐条核对签名与版本）

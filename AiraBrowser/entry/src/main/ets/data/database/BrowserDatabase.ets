@@ -70,6 +70,15 @@ interface HistorySyncProjectionVictims {
   victims: HistoryVisit[];
 }
 
+// What the projection deletions inside a retention/detach transaction actually need from a visit:
+// its row id and, when present, the url aggregate that has to be recalculated afterwards. Reading
+// only these two columns instead of hydrating whole visit records keeps those scans proportional to
+// the rows they touch rather than to every visit in the table.
+interface HistoryVisitDeleteRef {
+  id: string;
+  urlId?: string;
+}
+
 const DOMAIN = 0x0000;
 const TAG = 'BrowserDatabase';
 const DATABASE_NAME = 'aira_browser.db';
@@ -460,7 +469,9 @@ const SEARCH_QUERY_HISTORY_SCHEMA_SQL: string[] = [
 const HISTORY_STRESS_URL_ID_PREFIX = 'history-stress-url-';
 const HISTORY_STRESS_VISIT_ID_PREFIX = 'history-stress-visit-';
 const HISTORY_STRESS_INSERT_BATCH_SIZE = 200;
-const HISTORY_HYDRATE_BATCH_URL_THRESHOLD = 80;
+// Keeps each hydration IN-list inside the SQLite default host-parameter budget (999) while still
+// covering a whole page of visits in one round trip.
+const HISTORY_HYDRATE_URL_ID_BATCH_SIZE = 400;
 const OFFLINE_PAGES_TABLE = 'offline_pages';
 const OFFLINE_PAGE_COLUMNS: string[] = [
   'id',
@@ -1421,7 +1432,7 @@ export class BrowserDatabase {
     }
   }
 
-  async upsertHistoryVisit(visit: HistoryVisit, syncContext?: HistorySyncOutboxContext): Promise<void> {
+  async upsertHistoryVisit(visit: HistoryVisit, syncContext?: HistorySyncOutboxContext): Promise<HistoryVisit> {
     let store: relationalStore.RdbStore | undefined = undefined;
     let transactionStarted = false;
     try {
@@ -1430,7 +1441,7 @@ export class BrowserDatabase {
         store.beginTransaction();
         transactionStarted = true;
       }
-      await this.upsertHistoryVisitInStore(store, visit);
+      const stored = await this.upsertHistoryVisitInStore(store, visit);
       if (syncContext !== undefined && syncContext.origin === 'local_capture') {
         await this.enqueueHistoryVisitUpsert(store, visit, syncContext);
       }
@@ -1438,6 +1449,7 @@ export class BrowserDatabase {
         store.commit();
         transactionStarted = false;
       }
+      return stored;
     } catch (error) {
       this.rollbackHistoryTransaction(store, transactionStarted);
       hilog.error(DOMAIN, TAG, 'Failed to upsert history visit: %{public}s', JSON.stringify(error));
@@ -2393,11 +2405,12 @@ export class BrowserDatabase {
     try {
       store.beginTransaction();
       transactionStarted = true;
-      const predicates = new relationalStore.RdbPredicates(HISTORY_VISITS_TABLE);
-      predicates.equalTo('sync_origin', 'remote');
-      const resultSet = await store.query(predicates, HISTORY_VISIT_COLUMNS);
-      const detachedVisits = this.mapHistoryVisitEventRows(resultSet)
-        .filter((visit: HistoryVisit): boolean => (visit.syncAccountUid ?? '').trim() !== normalizedUid);
+      const resultSet = await store.querySql(
+        `SELECT id, url_id FROM ${HISTORY_VISITS_TABLE} ` +
+          `WHERE sync_origin = 'remote' AND TRIM(sync_account_uid) <> ?`,
+        [normalizedUid]
+      );
+      const detachedVisits = this.mapHistoryVisitDeleteRefs(resultSet);
       const removed = await this.deleteHydratedHistoryVisitEvents(store, detachedVisits);
       store.commit();
       transactionStarted = false;
@@ -4250,6 +4263,30 @@ export class BrowserDatabase {
     return visits;
   }
 
+  private mapHistoryVisitDeleteRefs(resultSet: relationalStore.ResultSet): HistoryVisitDeleteRef[] {
+    const refs: HistoryVisitDeleteRef[] = [];
+    try {
+      const idIndex = resultSet.getColumnIndex('id');
+      const urlIdIndex = resultSet.getColumnIndex('url_id');
+      while (resultSet.goToNextRow()) {
+        refs.push({
+          id: resultSet.getString(idIndex),
+          urlId: resultSet.getString(urlIdIndex)
+        });
+      }
+    } catch (error) {
+      hilog.error(DOMAIN, TAG, 'Failed to map history delete refs: %{public}s', JSON.stringify(error));
+      return [];
+    } finally {
+      try {
+        resultSet.close();
+      } catch (closeError) {
+        hilog.warn(DOMAIN, TAG, 'Failed to close history result set: %{public}s', JSON.stringify(closeError));
+      }
+    }
+    return refs;
+  }
+
   private mapHistoryUrlRows(resultSet: relationalStore.ResultSet): HistoryUrlRecord[] {
     const urls: HistoryUrlRecord[] = [];
     try {
@@ -4440,21 +4477,10 @@ export class BrowserDatabase {
     }
     const urls: Record<string, HistoryUrlRecord> = {};
     const store = await this.getStore();
-    if (visits.length > HISTORY_HYDRATE_BATCH_URL_THRESHOLD) {
-      const urlRows = await store.query(new relationalStore.RdbPredicates(HISTORY_URLS_TABLE), HISTORY_URL_COLUMNS);
-      this.mapHistoryUrlRows(urlRows).forEach((urlRecord: HistoryUrlRecord) => {
-        urls[urlRecord.id] = urlRecord;
-      });
-      return visits.map((visit: HistoryVisit) => {
-        const urlRecord = urls[visit.urlId ?? ''];
-        if (urlRecord === undefined) {
-          return visit;
-        }
-        return this.mergeHistoryVisitWithUrlRecord(visit, urlRecord);
-      });
-    }
-    // One IN-query instead of a lookup per visit: this branch is the small-batch path, and a range
-    // delete of a few dozen visits used to issue a separate round trip for each distinct URL.
+    // Only ever fetch the url rows the requested visits point at. A batch above the threshold used
+    // to fall back to reading the whole `history_urls` table, so listing 100 recent visits cost one
+    // scan of every url ever visited (9853 rows in the reported profile) on the caller's critical
+    // path. Chunking the IN list keeps that cost proportional to the page being hydrated instead.
     const missingUrlIds: Set<string> = new Set<string>();
     visits.forEach((visit: HistoryVisit): void => {
       const urlId = visit.urlId ?? '';
@@ -4462,9 +4488,9 @@ export class BrowserDatabase {
         missingUrlIds.add(urlId);
       }
     });
-    if (missingUrlIds.size > 0) {
+    for (const batch of this.chunkHistoryUrlIds(Array.from(missingUrlIds))) {
       const urlPredicates = new relationalStore.RdbPredicates(HISTORY_URLS_TABLE);
-      urlPredicates.in('id', Array.from(missingUrlIds));
+      urlPredicates.in('id', batch);
       const urlRows = await store.query(urlPredicates, HISTORY_URL_COLUMNS);
       this.mapHistoryUrlRows(urlRows).forEach((urlRecord: HistoryUrlRecord): void => {
         urls[urlRecord.id] = urlRecord;
@@ -4477,6 +4503,14 @@ export class BrowserDatabase {
       }
       return this.mergeHistoryVisitWithUrlRecord(visit, urlRecord);
     });
+  }
+
+  private chunkHistoryUrlIds(urlIds: string[]): string[][] {
+    const batches: string[][] = [];
+    for (let index = 0; index < urlIds.length; index += HISTORY_HYDRATE_URL_ID_BATCH_SIZE) {
+      batches.push(urlIds.slice(index, index + HISTORY_HYDRATE_URL_ID_BATCH_SIZE));
+    }
+    return batches;
   }
 
   private mergeHistoryVisitWithUrlRecord(visit: HistoryVisit, urlRecord: HistoryUrlRecord): HistoryVisit {
@@ -4510,7 +4544,7 @@ export class BrowserDatabase {
   private async upsertHistoryVisitInStore(
     store: relationalStore.RdbStore,
     visit: HistoryVisit
-  ): Promise<void> {
+  ): Promise<HistoryVisit> {
     const urlRecord = await this.upsertHistoryUrlRecord(store, visit);
     const visitWithUrlId: HistoryVisit = {
       id: visit.id,
@@ -4542,6 +4576,7 @@ export class BrowserDatabase {
     if (count === 0) {
       await store.insert(HISTORY_VISITS_TABLE, this.toHistoryVisitValues(visitWithUrlId));
     }
+    return visitWithUrlId;
   }
 
   private async enqueueHistoryVisitUpsert(
@@ -5879,7 +5914,7 @@ export class BrowserDatabase {
 
   private async deleteHydratedHistoryVisitEvents(
     store: relationalStore.RdbStore,
-    visits: HistoryVisit[]
+    visits: HistoryVisitDeleteRef[]
   ): Promise<number> {
     let removed = 0;
     const affectedUrlIds = new Set<string>();

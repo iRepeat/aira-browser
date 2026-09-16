@@ -2076,11 +2076,14 @@ export class RdbHistoryRepository implements HistoryRepository {
       syncAccountUid: syncContext?.accountUid,
       syncOrigin: syncContext === undefined ? undefined : 'local'
     };
-    await this.database.upsertHistoryVisit(visit, syncContext);
-    const refreshed = await this.database.listHistoryVisits(1);
-    this.visitsCache = refreshed.concat(this.visitsCache.filter((item: HistoryVisit) => item.id !== visit.id));
+    // The upsert already returns the persisted visit hydrated against its url aggregate, so this
+    // used to issue a redundant read-back of the same row. That read cost tens of milliseconds on
+    // a large history table and ran on the critical path of every page commit, while the visit was
+    // already in hand.
+    const persisted = await this.database.upsertHistoryVisit(visit, syncContext);
+    this.visitsCache = [persisted].concat(this.visitsCache.filter((item: HistoryVisit) => item.id !== persisted.id));
     this.notifySyncChange(syncContext);
-    return refreshed[0] ?? visit;
+    return persisted;
   }
 
   async deleteVisit(id: string, origin: HistorySyncMutationOrigin = 'user_deletion'): Promise<boolean> {

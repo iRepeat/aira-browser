@@ -41,6 +41,8 @@ import { HOME_PAGE_PRESENTATION_SHOW_SHORTCUT_NAMES_KEY } from
   '../../../common/constants/HomePagePresentationStorageKeys';
 import { HOME_CONTEXT_MENU_RADIUS } from '../../../features/newtab/HomeContextMenuTokens';
 import { BrowserDesktopContextMenu, BrowserDesktopContextMenuItem } from './BrowserDesktopContextMenu';
+import { SiteIconPixelMapCacheService } from '../../../services/siteicons/SiteIconPixelMapCacheService';
+import { AiraLoadScrollJankProbe } from '../../../common/debug/AiraLoadScrollJankProbe';
 
 const HOME_SHORTCUT_ICON_BORDER_WIDTH: number = 0;
 const HOME_FIXED_SHORTCUT_ICON_SIZE_VP: number = 24;
@@ -96,6 +98,7 @@ export struct HomeShortcutSurface {
   @Link shortcutDragActive: boolean;
 
   private viewModel: HomeShortcutViewModel = new HomeShortcutViewModel();
+  private siteIconPixelMapCache: SiteIconPixelMapCacheService = new SiteIconPixelMapCacheService();
   @State
   private pressedShortcutId: string = '';
   @State
@@ -128,7 +131,7 @@ export struct HomeShortcutSurface {
           ForEach(this.liveShortcuts, (shortcut: ShortcutRecord) => {
             ListItem() {
               Row() {
-                ForEach([this.resolveShortcutContentRenderKey()], (_renderKey: string) => {
+                ForEach([this.resolveShortcutContentRenderKey(shortcut)], (_renderKey: string) => {
                   this.buildShortcutCard(shortcut)
                 }, (renderKey: string) => `${shortcut.id}|${renderKey}`)
               }
@@ -631,8 +634,38 @@ export struct HomeShortcutSurface {
   }
 
   private resolveShortcutIconPixelMap(shortcut: ShortcutRecord): image.PixelMap | undefined {
+    const pixelMap = this.resolveShortcutIconPixelMapInternal(shortcut);
+    AiraLoadScrollJankProbe.noteShortcutTileBuild(pixelMap !== undefined);
+    return pixelMap;
+  }
+
+  private resolveShortcutIconPixelMapInternal(shortcut: ShortcutRecord): image.PixelMap | undefined {
     const icon = this.getResolvedIcon(shortcut);
-    return icon?.pixelMap;
+    if (icon?.pixelMap !== undefined) {
+      return icon.pixelMap;
+    }
+    // Cache-first. While a shortcut has no hydration entry yet this used to return undefined, which
+    // made SiteIconView fall through to `Image(<local icon file>)`; ArkUI then decoded the file
+    // again at full resolution for every tile of every list rebuild. Prewarming has usually already
+    // decoded that same file, so reuse it when it is there.
+    const candidatePath = icon !== undefined ? icon.path : this.resolveStoredShortcutIconUri(shortcut);
+    return this.readCachedShortcutPixelMap(candidatePath);
+  }
+
+  private readCachedShortcutPixelMap(path: string): image.PixelMap | undefined {
+    const normalized = path.trim();
+    if (normalized.length === 0 || !this.shouldRequirePreparedPixelMap(normalized)) {
+      return undefined;
+    }
+    const cached = this.siteIconPixelMapCache.getCachedPixelMap(normalized);
+    if (cached !== undefined) {
+      return cached;
+    }
+    // The prepared-icon store hands back `file://` URIs, while a shortcut may persist a bare path.
+    if (normalized.startsWith('file://')) {
+      return this.siteIconPixelMapCache.getCachedPixelMap(normalized.substring('file://'.length));
+    }
+    return this.siteIconPixelMapCache.getCachedPixelMap(`file://${normalized}`);
   }
 
   private resolveShortcutIconSourceRevision(shortcut: ShortcutRecord): number {
@@ -640,9 +673,25 @@ export struct HomeShortcutSurface {
     return icon?.revision ?? 0;
   }
 
-  private resolveShortcutContentRenderKey(): string {
-    const iconVersion = this.frozenIconsVersion >= 0 ? this.frozenIconsVersion : this.iconsVersion;
-    return `${iconVersion}:${this.storedResolvedThemeMode}:` +
+  /**
+   * Key for the per-tile rebuild trigger.
+   *
+   * It keys on the icon's own `revision`, not on the list-wide `iconsVersion`. `iconsVersion`
+   * advances on every hydration snapshot, so one updated icon used to hand all 17 tiles a new key
+   * and rebuild the whole grid. The home grid stays mounted behind the tab list by design, so that
+   * rebuild landed on the UI thread while a page was being scrolled.
+   *
+   * `HomeShortcutIconHydrationCoordinator` already advances `revision` only for the icon whose
+   * `path` or `pixelMap` actually changed, which is exactly the granularity a tile needs.
+   *
+   * While a native drag is in flight the tiles must stay put underneath the gesture, so the frozen
+   * list-wide version keeps every key stable for the duration of the drag.
+   */
+  private resolveShortcutContentRenderKey(shortcut: ShortcutRecord): string {
+    const iconKey = this.frozenIconsVersion >= 0
+      ? this.frozenIconsVersion
+      : this.resolveShortcutIconSourceRevision(shortcut);
+    return `${iconKey}:${this.storedResolvedThemeMode}:` +
       `${this.storedShowShortcutNames ? 'names' : 'icons'}`;
   }
 

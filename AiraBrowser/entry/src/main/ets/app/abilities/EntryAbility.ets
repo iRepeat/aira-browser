@@ -30,6 +30,7 @@ import {
   sharedTabSessionRepository,
   sharedUserScriptInstallSessionCoordinator
 } from '../bootstrap/BrowserAppRuntime';
+import { AiraLoadScrollJankProbe } from '../../common/debug/AiraLoadScrollJankProbe';
 import { AppRuntimeContext } from '../runtime/AppRuntimeContext';
 import { BROWSER_SHELL_ROUTE, STARTUP_WELCOME_INTRO_ROUTE } from '../router/AppRoutes';
 import { BrowserTabSessionRuntime } from '../runtime/BrowserTabSessionRuntime';
@@ -209,6 +210,9 @@ export default class EntryAbility extends UIAbility {
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     AppRuntimeContext.setUIAbilityContext(this.context);
+    // Temporary [DEBUG-load-scroll-jank-7c4d] probe: subscribe to the platform's own scroll and
+    // main-thread jank events before the first Web is created.
+    AiraLoadScrollJankProbe.installPlatformJankWatchers();
     sharedSitePolicyService.acquirePermissionSession();
     this.permissionSessionAcquired = true;
     sharedAppCrashDiagnosticsService.initialize(this.context, launchParam);
