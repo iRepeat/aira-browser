@@ -102,20 +102,19 @@ assertContract(/private shouldRenderLegacyFloatingActionSurface\(\): boolean\s*\
 assertContract(/private shouldMountFloatingActionSurface\(\): boolean\s*\{\s*return this\.shouldRenderLegacyFloatingActionSurface\(\) &&/s.test(addressPanel) &&
   /private shouldMountFloatingActionContent\(\): boolean\s*\{\s*return this\.shouldRenderLegacyFloatingActionSurface\(\) &&/s.test(addressPanel),
   'Legacy floating toolbar content must not be mounted indirectly by the search surface state.');
-const toolbarGestureHelperStart = addressPanel.indexOf('private shouldOpenToolbarSystemSheetFromGesture(');
-const toolbarGestureHelperEnd = addressPanel.indexOf('\n  }', toolbarGestureHelperStart);
-const toolbarGestureHelper = toolbarGestureHelperStart >= 0 && toolbarGestureHelperEnd > toolbarGestureHelperStart ?
-  addressPanel.slice(toolbarGestureHelperStart, toolbarGestureHelperEnd) : '';
-assertContract(addressPanel.includes('private shouldOpenToolbarSystemSheetFromGesture(') &&
-  /this\.openToolbarSystemSheet\(/.test(addressPanel) &&
+// The bar's upward pull used to open the Sheet. It is directionally identical to scrolling the
+// page, and a finger landing on the capsule mid-scroll was repeatedly read as "open the toolbar",
+// so the Sheet appeared and was dismissed again (the reported flash). The menu button is now the
+// only opener, and a pull that starts on the collapsed bar is consumed instead of reaching the
+// legacy panel intercept, which would expand the persistent panel over the page.
+assertContract(!addressPanel.includes('private shouldOpenToolbarSystemSheetFromGesture('),
+  'An upward pull on the bottom bar must not open the toolbar Sheet; only the menu button opens it.');
+assertContract(addressPanel.includes('barOwned && (source === \'center-capsule\' || source === \'none\')') &&
   addressPanel.includes("return 'low';") &&
-  toolbarGestureHelper.includes("'center-capsule'") &&
-  toolbarGestureHelper.includes('this.hasQuickActionSlotsAvailable()') &&
-  toolbarGestureHelper.includes('startedOnVisibleChrome') &&
-  toolbarGestureHelper.includes('BROWSER_TOOLBAR_SHEET_OPEN_MIN_PULL_VP') &&
-  !toolbarGestureHelper.includes('this.isWebContentMode()'),
-  'Home and Web center upward gestures must open the native Sheet and leave the legacy panel at low, ' +
-  'and must only fire for a deliberate pull that began on the visible chrome.');
+  !addressPanel.includes('this.openToolbarSystemSheet(\'gesture_center_capsule\')'),
+  'A pull that starts on the collapsed bar must be consumed at low instead of expanding the legacy panel.');
+assertContract(addressPanel.includes('this.openToolbarSystemSheet('),
+  'Toolbar menu clicks must still open the native Sheet.');
 assertContract(!addressPanel.includes('private resolveToolbarGestureRelease('),
   'The old toolbar stage gesture-release state machine must not remain in the address panel.');
 assertContract(addressPanel.includes("intent.actionId === 'bottomChromeMenu'"),
