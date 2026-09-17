@@ -62,6 +62,7 @@ import {
   BrowserBottomToolbarSurfaceTransitionState
 } from '../../../core/browser/BrowserBottomToolbarExpansionViewModel';
 import { BrowserBottomChromeRenderer } from './BrowserBottomChromeRenderer';
+import { logToolbarPopupReopen } from '../../../common/debug/AiraToolbarPopupReopenProbe';
 import {
   resolveBrowserBottomChromeEdgeHighlightColor,
   resolveBrowserBottomChromeMaterialTintForMode
@@ -532,6 +533,9 @@ export struct BrowserBottomAddressPanel {
     this.preserveExpandedBackdropForActiveToolbarGesture = false;
     this.suppressBackdropForActiveToolbarSheetGesture = false;
     this.floatingActionSurfacePrepared = false;
+    logToolbarPopupReopen('panel_appear', `token=${this.toolbarSystemSheetInstanceToken} ` +
+      `sheetVisibleBefore=${this.toolbarSystemSheetVisible} requested=${this.toolbarSystemSheetRequested} ` +
+      `requestVersion=${this.toolbarSystemSheetRequestVersion}`);
     this.toolbarSystemSheetVisible = false;
     this.toolbarSystemSheetDetentSelection = 0;
     this.pendingToolbarSystemSheetAction = undefined;
@@ -595,6 +599,16 @@ export struct BrowserBottomAddressPanel {
               this.toolbarExpansionViewModel.shouldPreserveExpandedBackdropDuringGesture(this.toolbarExpansionStage);
             this.activeChromeGestureSource = this.isExpandedPanelDetent(this.panelDetent) ? 'none' :
               this.resolveBottomChromeGestureSource(frame.startX, frame.panelWidth);
+            logToolbarPopupReopen('gesture_start', `startX=${frame.startX} panelWidth=${frame.panelWidth} ` +
+              `source=${this.activeChromeGestureSource} detent=${this.panelDetent} ` +
+              `mode=${this.liveBottomChromePresentation.mode} expanded=${this.isExpandedPanelDetent(this.panelDetent)} ` +
+              `hitW=${this.resolveFloatingHeaderInteractionWidth()} ` +
+              `hitH=${this.resolveFloatingHeaderInteractionHeight()} ` +
+              `hitOffY=${this.resolveFloatingHeaderInteractionOffsetY()} ` +
+              `headerH=${this.resolveFloatingHeaderSurfaceHeight()} ` +
+              `layoutMode=${this.resolveFloatingLayoutMode()} ` +
+              `threeBlock=${this.shouldUseThreeBlockBottomChrome()} ` +
+              `headerOpacity=${this.resolveFloatingHeaderPresentationOpacity()}`);
             this.suppressBackdropForActiveToolbarSheetGesture =
               this.shouldSuppressBackdropForToolbarSystemSheetGesture(this.activeChromeGestureSource);
             this.floatingHeaderTracksPanelMotion =
@@ -664,8 +678,10 @@ export struct BrowserBottomAddressPanel {
           }
           const source = this.activeChromeGestureSource;
           this.activeChromeGestureSource = 'none';
+          logToolbarPopupReopen('sheet_gesture_end', `detent=${targetDetent} offsetY=${offsetY} ` +
+            `source=${source} intercept=${this.shouldOpenToolbarSystemSheetFromGesture(targetDetent, offsetY, source)}`);
           if (this.shouldOpenToolbarSystemSheetFromGesture(targetDetent, offsetY, source)) {
-            this.openToolbarSystemSheet();
+            this.openToolbarSystemSheet('gesture_center_capsule');
             return 'low';
           }
           return this.onPanelDragEndIntercept(panelHeight, targetDetent, offsetY, source);
@@ -2260,6 +2276,7 @@ export struct BrowserBottomAddressPanel {
     );
     if (this.onShouldDispatchSheetActionImmediately(item.id)) {
       this.pendingToolbarSystemSheetAction = undefined;
+      logToolbarPopupReopen('sheet_close_action_immediate', `id=${item.id}`);
       this.toolbarSystemSheetVisible = false;
       hilog.info(
         ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN,
@@ -2273,10 +2290,14 @@ export struct BrowserBottomAddressPanel {
       return;
     }
     this.pendingToolbarSystemSheetAction = item;
+    logToolbarPopupReopen('sheet_close_action_deferred', `id=${item.id}`);
     this.toolbarSystemSheetVisible = false;
   }
 
-  private openToolbarSystemSheet(): boolean {
+  private openToolbarSystemSheet(reason: string = 'unspecified'): boolean {
+    logToolbarPopupReopen('sheet_open_request', `reason=${reason} ` +
+      `alreadyVisible=${this.toolbarSystemSheetVisible} hasSlots=${this.hasQuickActionSlotsAvailable()} ` +
+      `mode=${this.liveBottomChromePresentation.mode} detent=${this.panelDetent} token=${this.toolbarSystemSheetInstanceToken}`);
     if (this.toolbarSystemSheetVisible) {
       return true;
     }
@@ -2292,11 +2313,14 @@ export struct BrowserBottomAddressPanel {
       this.resolveToolbarRenderSnapshot().layoutState
     );
     this.toolbarSystemSheetVisible = true;
+    logToolbarPopupReopen('sheet_open_commit', `reason=${reason} token=${this.toolbarSystemSheetInstanceToken}`);
     this.onToolbarSystemSheetOpened(this.toolbarSystemSheetInstanceToken);
     return true;
   }
 
   private handleToolbarSystemSheetDisappear(): void {
+    logToolbarPopupReopen('sheet_disappear', `token=${this.toolbarSystemSheetInstanceToken} ` +
+      `visibleBefore=${this.toolbarSystemSheetVisible} pending=${this.pendingToolbarSystemSheetAction !== undefined}`);
     this.toolbarSystemSheetVisible = false;
     this.toolbarSystemSheetDetentSelection = 0;
     const pendingAction = this.pendingToolbarSystemSheetAction;
@@ -2406,7 +2430,7 @@ export struct BrowserBottomAddressPanel {
       return;
     }
     if (intent.actionId === 'bottomChromeMenu') {
-      this.openToolbarSystemSheet();
+      this.openToolbarSystemSheet('chrome_intent');
       return;
     }
     const item = this.findLiveHeaderAction(intent.actionId);
@@ -2672,6 +2696,7 @@ export struct BrowserBottomAddressPanel {
     }
     if (!this.toolbarSystemSheetRequested) {
       if (this.toolbarSystemSheetVisible) {
+        logToolbarPopupReopen('sheet_close_by_request_flag', `version=${requestVersion}`);
         this.toolbarSystemSheetVisible = false;
       }
       return;
@@ -2688,7 +2713,7 @@ export struct BrowserBottomAddressPanel {
       this.onToolbarSystemSheetUnavailable();
       return;
     }
-    this.openToolbarSystemSheet();
+    this.openToolbarSystemSheet(isNewRequest ? 'shell_request_version' : 'shell_request_remount');
   }
 
   private applyLivePanelMotionState(state: BrowserBottomPanelMotionState): void {

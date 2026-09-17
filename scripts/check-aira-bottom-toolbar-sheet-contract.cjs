@@ -107,7 +107,7 @@ const toolbarGestureHelperEnd = addressPanel.indexOf('\n  }', toolbarGestureHelp
 const toolbarGestureHelper = toolbarGestureHelperStart >= 0 && toolbarGestureHelperEnd > toolbarGestureHelperStart ?
   addressPanel.slice(toolbarGestureHelperStart, toolbarGestureHelperEnd) : '';
 assertContract(addressPanel.includes('private shouldOpenToolbarSystemSheetFromGesture(') &&
-  addressPanel.includes('this.openToolbarSystemSheet();') &&
+  /this\.openToolbarSystemSheet\(/.test(addressPanel) &&
   addressPanel.includes("return 'low';") &&
   toolbarGestureHelper.includes("source === 'center-capsule'") &&
   toolbarGestureHelper.includes('this.hasQuickActionSlotsAvailable()') &&

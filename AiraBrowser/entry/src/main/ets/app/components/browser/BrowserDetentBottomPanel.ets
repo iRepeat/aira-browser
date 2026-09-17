@@ -1,4 +1,5 @@
 import { curves, FrameCallback } from '@kit.ArkUI';
+import { logToolbarPopupReopen } from '../../../common/debug/AiraToolbarPopupReopenProbe';
 import {
   HomeSearchPanelDetent,
   HomeSearchPanelDetentMetrics,
@@ -347,7 +348,7 @@ export struct BrowserDetentBottomPanel {
             if (!this.floatingOverlayPanEnabled) {
               return;
             }
-            this.rememberPanelGestureStart(event);
+            this.rememberPanelGestureStart(event, 'overlay_fullscreen');
             this.beginPanelDrag();
           })
           .onActionUpdate((event: GestureEvent) => {
@@ -492,7 +493,7 @@ export struct BrowserDetentBottomPanel {
           if (!this.floatingHeaderPanEnabled) {
             return;
           }
-          this.rememberPanelGestureStart(event);
+          this.rememberPanelGestureStart(event, 'floating_header');
           this.beginPanelDrag();
         })
         .onActionUpdate((event: GestureEvent) => {
@@ -669,7 +670,7 @@ export struct BrowserDetentBottomPanel {
     .gesture(
       PanGesture({ direction: PanDirection.Vertical, distance: BROWSER_DETENT_PAN_START_DISTANCE })
         .onActionStart((event: GestureEvent) => {
-          this.rememberPanelGestureStart(event);
+          this.rememberPanelGestureStart(event, 'sheet_panel_header');
           this.beginPanelDrag();
         })
         .onActionUpdate((event: GestureEvent) => {
@@ -1802,17 +1803,28 @@ export struct BrowserDetentBottomPanel {
       this.panelDetent === 'middle';
   }
 
-  private rememberPanelGestureStart(event: GestureEvent): void {
+  private rememberPanelGestureStart(event: GestureEvent, surface: string = 'unknown'): void {
     const fingerInfos = event.fingerInfos;
     if (fingerInfos !== undefined && fingerInfos.length > 0) {
       this.dragStartLocalX = Number(fingerInfos[0].localX) - Number(event.offsetX);
+      logToolbarPopupReopen('gesture_touch_origin',
+        `surface=${surface} localY=${fingerInfos[0].localY} globalY=${fingerInfos[0].globalY} ` +
+        `localX=${fingerInfos[0].localX} globalX=${fingerInfos[0].globalX} ` +
+        `hostH=${this.motionState.overlayHostHeight} bottomInset=${this.motionState.bottomInset} ` +
+        `panelH=${this.getPanelHeight()} hostW=${this.dragGestureWidth}`);
       return;
     }
     if (event.fingerList.length > 0) {
       this.dragStartLocalX = Number(event.fingerList[0].localX) - Number(event.offsetX);
+      logToolbarPopupReopen('gesture_touch_origin',
+        `surface=${surface} localY=${event.fingerList[0].localY} globalY=${event.fingerList[0].globalY} ` +
+        `localX=${event.fingerList[0].localX} globalX=${event.fingerList[0].globalX} ` +
+        `hostH=${this.motionState.overlayHostHeight} bottomInset=${this.motionState.bottomInset} ` +
+        `panelH=${this.getPanelHeight()} hostW=${this.dragGestureWidth}`);
       return;
     }
     this.dragStartLocalX = -1;
+    logToolbarPopupReopen('gesture_touch_origin', `surface=${surface} unavailable fingerList/fingerInfos empty`);
   }
 
   private clearPanelGestureTouchState(): void {

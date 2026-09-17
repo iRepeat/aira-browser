@@ -11,6 +11,7 @@ import {
   HomeSearchReleasePlan
 } from './HomeSearchOverlayViewModel';
 import { BrowserThemeMode } from '../../common/models/BrowserModels';
+import { logToolbarPopupReopen } from '../../common/debug/AiraToolbarPopupReopenProbe';
 import {
   BrowserBottomAddressPanelHeaderAction,
   BrowserBottomPanelMotionState
@@ -1989,14 +1990,19 @@ export class BrowserRootBottomPanelSessionCoordinator {
   // are deliberately ignored rather than queued, so a fast close-then-reopen
   // cannot fight the in-flight dismissal and flap.
   noteToolbarSystemSheetOpened(token: number): void {
+    logToolbarPopupReopen('owner_note_opened', `token=${token} previousOwner=${this.toolbarSheetOwnerToken} ` +
+      `closing=${this.toolbarSystemSheetClosing}`);
     this.toolbarSheetOwnerToken = token;
     this.cancelToolbarSystemSheetClosing();
   }
 
   noteToolbarSystemSheetDismissed(token: number, release: () => void): void {
     if (token !== this.toolbarSheetOwnerToken) {
+      logToolbarPopupReopen('owner_ignore_dismiss', `token=${token} owner=${this.toolbarSheetOwnerToken} ` +
+        'reason=stale_instance_remount_artifact');
       return;
     }
+    logToolbarPopupReopen('owner_accept_dismiss', `token=${token}`);
     this.toolbarSheetOwnerToken = 0;
     release();
     this.beginToolbarSystemSheetClosing();
@@ -2009,9 +2015,12 @@ export class BrowserRootBottomPanelSessionCoordinator {
   private beginToolbarSystemSheetClosing(): void {
     this.cancelToolbarSystemSheetClosing();
     this.toolbarSystemSheetClosing = true;
+    logToolbarPopupReopen('owner_begin_closing_window',
+      `debounceMs=${BROWSER_ROOT_BOTTOM_PANEL_TOOLBAR_SHEET_DISMISS_DEBOUNCE_MS}`);
     this.toolbarSystemSheetDismissTimer = setTimeout((): void => {
       this.toolbarSystemSheetDismissTimer = -1;
       this.toolbarSystemSheetClosing = false;
+      logToolbarPopupReopen('owner_closing_window_end', '');
     }, BROWSER_ROOT_BOTTOM_PANEL_TOOLBAR_SHEET_DISMISS_DEBOUNCE_MS);
   }
 
