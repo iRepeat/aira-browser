@@ -43,7 +43,6 @@ import {
   BROWSER_BOTTOM_QUICK_ACTION_VERTICAL_GAP,
   BROWSER_BOTTOM_TOOLBAR_EXPANSION_HINT_BOTTOM_GAP,
   BROWSER_BOTTOM_TOOLBAR_EXPANSION_HINT_ICON_SIZE,
-  BROWSER_BOTTOM_CHROME_PHONE_OUTER_SIZE,
   BROWSER_BOTTOM_TOOLBAR_SYSTEM_SHEET_DRAG_BAR_HEIGHT
 } from '../../../core/browser/BrowserBottomAddressPanelMetrics';
 import {
@@ -63,7 +62,6 @@ import {
   BrowserBottomToolbarSurfaceTransitionState
 } from '../../../core/browser/BrowserBottomToolbarExpansionViewModel';
 import { BrowserBottomChromeRenderer } from './BrowserBottomChromeRenderer';
-import { logToolbarPopupReopen } from '../../../common/debug/AiraToolbarPopupReopenProbe';
 import {
   resolveBrowserBottomChromeEdgeHighlightColor,
   resolveBrowserBottomChromeMaterialTintForMode
@@ -218,18 +216,6 @@ const WEB_BOTTOM_READING_CONTINUATION_ICON_SIZE: number = 22;
 const WEB_BOTTOM_READING_CONTINUATION_TRAILING_ICON_SIZE: number = 16;
 const WEB_BOTTOM_READING_CONTINUATION_HORIZONTAL_PADDING: number = 16;
 const WEB_BOTTOM_TOOLBAR_SHEET_ACTION_CORNER_RADIUS: number = 16;
-/**
- * Minimum upward travel before a center-capsule pull counts as "open the toolbar" instead of an
- * incidental drift that belongs to the page scroll. Matches the release distance the Return-Home
- * gesture already uses for its own upward pull, so both chrome swipes feel the same.
- */
-const BROWSER_TOOLBAR_SHEET_OPEN_MIN_PULL_VP: number = 44;
-/**
- * Window after a dismissal in which an upward gesture will not reopen the Sheet. A close and a
- * reopen are usually one continuous motion, so this stops the tail of the dismissing gesture from
- * undoing it.
- */
-const BROWSER_TOOLBAR_SHEET_REOPEN_COOLDOWN_MS: number = 400;
 function buildDefaultBrowserBottomAddressPanelActionInput(): BrowserBottomAddressPanelBuildInput {
   return {
     chromeIconTone: 'light',
@@ -368,15 +354,7 @@ export struct BrowserBottomAddressPanel {
   private pendingPanelDetentNotification: HomeSearchPanelDetent | undefined = undefined;
   private homeDismissAfterLowSettlePending: boolean = false;
   private activeChromeGestureSource: BrowserBottomChromeGestureSource = 'none';
-  private activeChromeGestureStartedOnVisibleChrome: boolean = false;
-  /**
-   * True when this gesture began on the collapsed bottom bar of the three-block chrome. Such a
-   * gesture belongs to the bar's own trigger (open the toolbar, or nothing), never to the panel
-   * detent machine that would expand the persistent panel behind an opaque scrim.
-   */
-  private activeChromeGestureOwnedByToolbarBar: boolean = false;
   private activeChromeGestureMiddlePanelHeight: number = 0;
-  private toolbarSystemSheetDismissedAtMs: number = 0;
   private pendingToolbarSystemSheetAction: BrowserBottomAddressPanelAction | undefined = undefined;
   private handledImmediateLowDetentRequestVersion: number = 0;
   private handledToolbarSystemSheetRequestVersion: number = 0;
@@ -554,9 +532,6 @@ export struct BrowserBottomAddressPanel {
     this.preserveExpandedBackdropForActiveToolbarGesture = false;
     this.suppressBackdropForActiveToolbarSheetGesture = false;
     this.floatingActionSurfacePrepared = false;
-    logToolbarPopupReopen('panel_appear', `token=${this.toolbarSystemSheetInstanceToken} ` +
-      `sheetVisibleBefore=${this.toolbarSystemSheetVisible} requested=${this.toolbarSystemSheetRequested} ` +
-      `requestVersion=${this.toolbarSystemSheetRequestVersion}`);
     this.toolbarSystemSheetVisible = false;
     this.toolbarSystemSheetDetentSelection = 0;
     this.pendingToolbarSystemSheetAction = undefined;
@@ -620,21 +595,6 @@ export struct BrowserBottomAddressPanel {
               this.toolbarExpansionViewModel.shouldPreserveExpandedBackdropDuringGesture(this.toolbarExpansionStage);
             this.activeChromeGestureSource = this.isExpandedPanelDetent(this.panelDetent) ? 'none' :
               this.resolveBottomChromeGestureSource(frame.startX, frame.panelWidth);
-            this.activeChromeGestureStartedOnVisibleChrome = frame.startedOnVisibleChrome;
-            this.activeChromeGestureOwnedByToolbarBar =
-              !this.isExpandedPanelDetent(this.panelDetent) && this.shouldUseThreeBlockBottomChrome();
-            logToolbarPopupReopen('gesture_start', `startX=${frame.startX} panelWidth=${frame.panelWidth} ` +
-              `source=${this.activeChromeGestureSource} detent=${this.panelDetent} ` +
-              `onVisibleChrome=${frame.startedOnVisibleChrome} ` +
-              `barOwned=${this.activeChromeGestureOwnedByToolbarBar} ` +
-              `mode=${this.liveBottomChromePresentation.mode} expanded=${this.isExpandedPanelDetent(this.panelDetent)} ` +
-              `hitW=${this.resolveFloatingHeaderInteractionWidth()} ` +
-              `hitH=${this.resolveFloatingHeaderInteractionHeight()} ` +
-              `hitOffY=${this.resolveFloatingHeaderInteractionOffsetY()} ` +
-              `headerH=${this.resolveFloatingHeaderSurfaceHeight()} ` +
-              `layoutMode=${this.resolveFloatingLayoutMode()} ` +
-              `threeBlock=${this.shouldUseThreeBlockBottomChrome()} ` +
-              `headerOpacity=${this.resolveFloatingHeaderPresentationOpacity()}`);
             this.suppressBackdropForActiveToolbarSheetGesture =
               this.shouldSuppressBackdropForToolbarSystemSheetGesture(this.activeChromeGestureSource);
             this.floatingHeaderTracksPanelMotion =
@@ -703,28 +663,9 @@ export struct BrowserBottomAddressPanel {
             return undefined;
           }
           const source = this.activeChromeGestureSource;
-          const startedOnVisibleChrome = this.activeChromeGestureStartedOnVisibleChrome;
-          const barOwned = this.activeChromeGestureOwnedByToolbarBar;
           this.activeChromeGestureSource = 'none';
-          this.activeChromeGestureStartedOnVisibleChrome = false;
-          this.activeChromeGestureOwnedByToolbarBar = false;
-          const opensSheet = this.shouldOpenToolbarSystemSheetFromGesture(
-            targetDetent, offsetY, source, startedOnVisibleChrome);
-          logToolbarPopupReopen('sheet_gesture_end', `detent=${targetDetent} offsetY=${offsetY} ` +
-            `source=${source} onVisibleChrome=${startedOnVisibleChrome} barOwned=${barOwned} ` +
-            `sinceDismissMs=${this.toolbarSystemSheetDismissedAtMs > 0 ?
-              Date.now() - this.toolbarSystemSheetDismissedAtMs : -1} ` +
-            `intercept=${opensSheet}`);
-          if (opensSheet) {
-            this.openToolbarSystemSheet('gesture_center_capsule');
-            return 'low';
-          }
-          // An upward pull on the collapsed bar must not reach the legacy panel intercept: that
-          // expands the persistent panel to 'middle' with nothing inside it, an opaque scrim over
-          // the page. A downward pull is the opposite gesture and must keep its existing meaning
-          // (hide the search panel / Return-Home on the outer clusters), so only upward pulls are
-          // consumed here.
-          if (barOwned && (source === 'center-capsule' || source === 'none') && offsetY < 0) {
+          if (this.shouldOpenToolbarSystemSheetFromGesture(targetDetent, offsetY, source)) {
+            this.openToolbarSystemSheet();
             return 'low';
           }
           return this.onPanelDragEndIntercept(panelHeight, targetDetent, offsetY, source);
@@ -2319,7 +2260,6 @@ export struct BrowserBottomAddressPanel {
     );
     if (this.onShouldDispatchSheetActionImmediately(item.id)) {
       this.pendingToolbarSystemSheetAction = undefined;
-      logToolbarPopupReopen('sheet_close_action_immediate', `id=${item.id}`);
       this.toolbarSystemSheetVisible = false;
       hilog.info(
         ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN,
@@ -2333,14 +2273,10 @@ export struct BrowserBottomAddressPanel {
       return;
     }
     this.pendingToolbarSystemSheetAction = item;
-    logToolbarPopupReopen('sheet_close_action_deferred', `id=${item.id}`);
     this.toolbarSystemSheetVisible = false;
   }
 
-  private openToolbarSystemSheet(reason: string = 'unspecified'): boolean {
-    logToolbarPopupReopen('sheet_open_request', `reason=${reason} ` +
-      `alreadyVisible=${this.toolbarSystemSheetVisible} hasSlots=${this.hasQuickActionSlotsAvailable()} ` +
-      `mode=${this.liveBottomChromePresentation.mode} detent=${this.panelDetent} token=${this.toolbarSystemSheetInstanceToken}`);
+  private openToolbarSystemSheet(): boolean {
     if (this.toolbarSystemSheetVisible) {
       return true;
     }
@@ -2356,17 +2292,11 @@ export struct BrowserBottomAddressPanel {
       this.resolveToolbarRenderSnapshot().layoutState
     );
     this.toolbarSystemSheetVisible = true;
-    logToolbarPopupReopen('sheet_open_commit', `reason=${reason} token=${this.toolbarSystemSheetInstanceToken}`);
     this.onToolbarSystemSheetOpened(this.toolbarSystemSheetInstanceToken);
     return true;
   }
 
   private handleToolbarSystemSheetDisappear(): void {
-    logToolbarPopupReopen('sheet_disappear', `token=${this.toolbarSystemSheetInstanceToken} ` +
-      `visibleBefore=${this.toolbarSystemSheetVisible} pending=${this.pendingToolbarSystemSheetAction !== undefined}`);
-    if (this.toolbarSystemSheetVisible) {
-      this.toolbarSystemSheetDismissedAtMs = Date.now();
-    }
     this.toolbarSystemSheetVisible = false;
     this.toolbarSystemSheetDetentSelection = 0;
     const pendingAction = this.pendingToolbarSystemSheetAction;
@@ -2476,7 +2406,7 @@ export struct BrowserBottomAddressPanel {
       return;
     }
     if (intent.actionId === 'bottomChromeMenu') {
-      this.openToolbarSystemSheet('chrome_intent');
+      this.openToolbarSystemSheet();
       return;
     }
     const item = this.findLiveHeaderAction(intent.actionId);
@@ -2742,7 +2672,6 @@ export struct BrowserBottomAddressPanel {
     }
     if (!this.toolbarSystemSheetRequested) {
       if (this.toolbarSystemSheetVisible) {
-        logToolbarPopupReopen('sheet_close_by_request_flag', `version=${requestVersion}`);
         this.toolbarSystemSheetVisible = false;
       }
       return;
@@ -2759,7 +2688,7 @@ export struct BrowserBottomAddressPanel {
       this.onToolbarSystemSheetUnavailable();
       return;
     }
-    this.openToolbarSystemSheet(isNewRequest ? 'shell_request_version' : 'shell_request_remount');
+    this.openToolbarSystemSheet();
   }
 
   private applyLivePanelMotionState(state: BrowserBottomPanelMotionState): void {
@@ -3390,29 +3319,18 @@ export struct BrowserBottomAddressPanel {
   }
 
   private resolveFloatingHeaderInteractionHeight(): number {
-    const mode = this.liveBottomChromePresentation.mode;
-    if (mode === 'scroll-compact') {
-      return Math.max(1, this.liveBottomChromePresentation.compactFrame.centerHeight);
+    if (this.liveBottomChromePresentation.mode !== 'scroll-compact') {
+      return 0;
     }
-    // The three-block rail is drawn as 48vp clusters centred in a 68vp header, so the 10vp above
-    // and below them is transparent. Excluding it keeps a scroll that starts there with the page
-    // instead of letting the bar swallow it and turn it into a chrome gesture.
-    if (this.shouldUseThreeBlockBottomChrome()) {
-      return BROWSER_BOTTOM_CHROME_PHONE_OUTER_SIZE;
-    }
-    return 0;
+    return Math.max(1, this.liveBottomChromePresentation.compactFrame.centerHeight);
   }
 
   private resolveFloatingHeaderInteractionOffsetY(): number {
-    const mode = this.liveBottomChromePresentation.mode;
-    if (mode === 'scroll-compact') {
-      return BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING +
-        Math.max(0, this.liveBottomChromePresentation.compactFrame.centerTranslateY);
+    if (this.liveBottomChromePresentation.mode !== 'scroll-compact') {
+      return 0;
     }
-    if (this.shouldUseThreeBlockBottomChrome()) {
-      return BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING;
-    }
-    return 0;
+    return BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING +
+      Math.max(0, this.liveBottomChromePresentation.compactFrame.centerTranslateY);
   }
 
   private resolveBottomChromeGestureSource(
@@ -3429,33 +3347,14 @@ export struct BrowserBottomAddressPanel {
   private shouldOpenToolbarSystemSheetFromGesture(
     targetDetent: HomeSearchPanelDetent,
     offsetY: number,
-    source: BrowserBottomChromeGestureSource,
-    startedOnVisibleChrome: boolean = true
+    source: BrowserBottomChromeGestureSource
   ): boolean {
     void targetDetent;
-    if (source !== 'center-capsule' ||
-      !this.hasQuickActionSlotsAvailable() ||
-      this.isAddressInputPresentationActive() ||
-      !Number.isFinite(offsetY)) {
-      return false;
-    }
-    // The gesture surface spans the whole floating bar, including the transparent padding above
-    // and below the visible capsule. A swipe that starts in that padding reads as the page, so it
-    // must not raise the toolbar; only a pull that began on the capsule itself expands chrome.
-    if (!startedOnVisibleChrome) {
-      return false;
-    }
-    // A deliberate pull rather than an incidental few-vp upward drift while scrolling the page.
-    if (offsetY > -BROWSER_TOOLBAR_SHEET_OPEN_MIN_PULL_VP) {
-      return false;
-    }
-    // Just after a dismissal the same upward motion can still be travelling; refuse to reopen
-    // until that window has passed so a close cannot be undone by the tail of one gesture.
-    if (this.toolbarSystemSheetDismissedAtMs > 0 &&
-      Date.now() - this.toolbarSystemSheetDismissedAtMs < BROWSER_TOOLBAR_SHEET_REOPEN_COOLDOWN_MS) {
-      return false;
-    }
-    return true;
+    return source === 'center-capsule' &&
+      this.hasQuickActionSlotsAvailable() &&
+      !this.isAddressInputPresentationActive() &&
+      Number.isFinite(offsetY) &&
+      offsetY < 0;
   }
 
   private shouldSuppressBackdropForToolbarSystemSheetGesture(
