@@ -43,6 +43,7 @@ import {
   BROWSER_BOTTOM_QUICK_ACTION_VERTICAL_GAP,
   BROWSER_BOTTOM_TOOLBAR_EXPANSION_HINT_BOTTOM_GAP,
   BROWSER_BOTTOM_TOOLBAR_EXPANSION_HINT_ICON_SIZE,
+  BROWSER_BOTTOM_CHROME_PHONE_OUTER_SIZE,
   BROWSER_BOTTOM_TOOLBAR_SYSTEM_SHEET_DRAG_BAR_HEIGHT
 } from '../../../core/browser/BrowserBottomAddressPanelMetrics';
 import {
@@ -705,6 +706,12 @@ export struct BrowserBottomAddressPanel {
             `intercept=${opensSheet}`);
           if (opensSheet) {
             this.openToolbarSystemSheet('gesture_center_capsule');
+            return 'low';
+          }
+          // A pull that did not qualify must not fall through to the legacy panel expansion: that
+          // contradicts the refusal, and on a web page it leaves the content covered by an empty
+          // expanded panel. Settle back to the resting bar instead.
+          if (source === 'center-capsule' && !startedOnVisibleChrome) {
             return 'low';
           }
           return this.onPanelDragEndIntercept(panelHeight, targetDetent, offsetY, source);
@@ -3370,18 +3377,29 @@ export struct BrowserBottomAddressPanel {
   }
 
   private resolveFloatingHeaderInteractionHeight(): number {
-    if (this.liveBottomChromePresentation.mode !== 'scroll-compact') {
-      return 0;
+    const mode = this.liveBottomChromePresentation.mode;
+    if (mode === 'scroll-compact') {
+      return Math.max(1, this.liveBottomChromePresentation.compactFrame.centerHeight);
     }
-    return Math.max(1, this.liveBottomChromePresentation.compactFrame.centerHeight);
+    // The three-block rail is drawn as 48vp clusters centred in a 68vp header, so the 10vp above
+    // and below them is transparent. Excluding it keeps a scroll that starts there with the page
+    // instead of letting the bar swallow it and turn it into a chrome gesture.
+    if (this.shouldUseThreeBlockBottomChrome()) {
+      return BROWSER_BOTTOM_CHROME_PHONE_OUTER_SIZE;
+    }
+    return 0;
   }
 
   private resolveFloatingHeaderInteractionOffsetY(): number {
-    if (this.liveBottomChromePresentation.mode !== 'scroll-compact') {
-      return 0;
+    const mode = this.liveBottomChromePresentation.mode;
+    if (mode === 'scroll-compact') {
+      return BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING +
+        Math.max(0, this.liveBottomChromePresentation.compactFrame.centerTranslateY);
     }
-    return BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING +
-      Math.max(0, this.liveBottomChromePresentation.compactFrame.centerTranslateY);
+    if (this.shouldUseThreeBlockBottomChrome()) {
+      return BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING;
+    }
+    return 0;
   }
 
   private resolveBottomChromeGestureSource(
