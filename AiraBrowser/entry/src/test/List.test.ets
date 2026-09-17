@@ -48,6 +48,7 @@ import huaweiIapProductCatalogTest from './HuaweiIapProductCatalog.test';
 import startupWelcomeIntroTest from './StartupWelcomeIntro.test';
 import browserWebTopSafeAreaColorTest from './BrowserWebTopSafeAreaColor.test';
 import browserSearchEnginePopupLayoutViewModelTest from './BrowserSearchEnginePopupLayoutViewModel.test';
+import browserTabsOverviewSwipeDismissPolicyTest from './BrowserTabsOverviewSwipeDismissPolicy.test';
 
 export default function tests(): void {
   userScriptValueStateStoreTest();
@@ -98,4 +99,5 @@ export default function tests(): void {
   startupWelcomeIntroTest();
   browserWebTopSafeAreaColorTest();
   browserSearchEnginePopupLayoutViewModelTest();
+  browserTabsOverviewSwipeDismissPolicyTest();
 }

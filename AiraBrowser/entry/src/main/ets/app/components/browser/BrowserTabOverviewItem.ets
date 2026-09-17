@@ -17,6 +17,9 @@ import {
 } from '../../../core/browser/BrowserTabsOverviewVisualTokens';
 import { SiteIconView } from '../common/SiteIconView';
 import { BrowserTabOverviewCard, BrowserTabOverviewCardSelectRect } from './BrowserTabOverviewCard';
+import {
+  BrowserTabsOverviewSwipeDismissPolicy
+} from '../../../core/browser/tabsOverview/BrowserTabsOverviewSwipeDismissPolicy';
 
 const TAB_OVERVIEW_ITEM_PRESSED_SCALE: number = 0.965;
 const TAB_OVERVIEW_ITEM_PRESSED_ANIMATION_MS: number = 120;
@@ -85,6 +88,7 @@ export struct BrowserTabOverviewItem {
   private mountEntryTimer: number = 0;
   private closeSelectionSuppressionTimer: number = 0;
   private suppressNextSelection: boolean = false;
+  private swipeDismissPolicy: BrowserTabsOverviewSwipeDismissPolicy = new BrowserTabsOverviewSwipeDismissPolicy();
   private identityIconKey: string = '';
   private lastPreviewRect: BrowserTabOverviewCardSelectRect | undefined = undefined;
 
@@ -508,7 +512,7 @@ export struct BrowserTabOverviewItem {
     const swipeOffset = Number.isFinite(normalizedEventOffset) ?
       normalizedEventOffset : this.resolveActiveLocalSwipeOffset();
     const direction = swipeOffset < 0 ? -1 : 1;
-    if (this.hasReachedLocalSwipeDismissThreshold(swipeOffset)) {
+    if (this.shouldDismissLocalSwipeOnRelease(swipeOffset, this.resolveLocalSwipeReleaseVelocity(event))) {
       this.markLocalSwipeThresholdReached();
       this.dismissLocalSwipe(direction);
       this.onSwipeEnd(this.tab.id, swipeOffset, direction);
@@ -631,6 +635,23 @@ export struct BrowserTabOverviewItem {
       return offset <= -this.resolveLocalSwipeDismissThreshold();
     }
     return Math.abs(offset) >= this.resolveLocalSwipeDismissThreshold();
+  }
+
+  private resolveLocalSwipeReleaseVelocity(event: GestureEvent): number {
+    return Number(this.swipeDismissMode === 'upward' ? event.velocityY : event.velocityX);
+  }
+
+  /**
+   * A quick flick commits even when the finger stopped short of the threshold. Distance-only
+   * dismissal is what made the gesture feel heavy on long-travel cards.
+   */
+  private shouldDismissLocalSwipeOnRelease(offset: number, velocity: number): boolean {
+    return this.swipeDismissPolicy.shouldDismissOnRelease({
+      mode: this.swipeDismissMode === 'upward' ? 'upward' : 'horizontal',
+      offsetVp: offset,
+      velocityVpPerSecond: velocity,
+      thresholdVp: this.resolveLocalSwipeDismissThreshold()
+    });
   }
 
   private normalizeProgress(value: number, start: number, end: number): number {
