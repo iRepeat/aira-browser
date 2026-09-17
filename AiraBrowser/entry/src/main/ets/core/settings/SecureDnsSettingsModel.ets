@@ -12,6 +12,7 @@ export interface SecureDnsSettings {
   selectionId: SecureDnsSelectionId;
   activeCustomProfileId: string;
   customProfiles: SecureDnsCustomProfile[];
+  strictMode: boolean;
 }
 
 export interface SecureDnsSelectProviderCommand {
@@ -22,6 +23,11 @@ export interface SecureDnsSelectProviderCommand {
 export interface SecureDnsSelectCustomProfileCommand {
   kind: 'select_custom_profile';
   profileId: string;
+}
+
+export interface SecureDnsSetStrictModeCommand {
+  kind: 'set_strict_mode';
+  strictMode: boolean;
 }
 
 export interface SecureDnsSaveCustomProfileCommand {
@@ -39,6 +45,7 @@ export interface SecureDnsDeleteCustomProfileCommand {
 
 export type SecureDnsSettingsCommand = SecureDnsSelectProviderCommand |
   SecureDnsSelectCustomProfileCommand |
+  SecureDnsSetStrictModeCommand |
   SecureDnsSaveCustomProfileCommand |
   SecureDnsDeleteCustomProfileCommand;
 
@@ -66,7 +73,8 @@ interface SecureDnsCustomProfileValidation {
 export const DEFAULT_SECURE_DNS_SETTINGS: SecureDnsSettings = {
   selectionId: 'system',
   activeCustomProfileId: '',
-  customProfiles: []
+  customProfiles: [],
+  strictMode: false
 };
 
 const MAX_CUSTOM_DNS_PROFILES: number = 32;
@@ -83,7 +91,8 @@ export class SecureDnsSettingsModel {
     return {
       selectionId: requestedSelectionId === 'custom' && activeProfile === undefined ? 'system' : requestedSelectionId,
       activeCustomProfileId: activeProfile?.id ?? '',
-      customProfiles: customProfiles
+      customProfiles: customProfiles,
+      strictMode: settings.strictMode === true
     };
   }
 
@@ -94,6 +103,9 @@ export class SecureDnsSettingsModel {
     }
     if (command.kind === 'select_custom_profile') {
       return this.selectCustomProfile(normalized, command.profileId);
+    }
+    if (command.kind === 'set_strict_mode') {
+      return this.setStrictMode(normalized, command.strictMode);
     }
     if (command.kind === 'save_custom_profile') {
       return this.saveCustomProfile(
@@ -124,7 +136,20 @@ export class SecureDnsSettingsModel {
     return this.successfulMutation({
       selectionId: normalizedSelectionId,
       activeCustomProfileId: settings.activeCustomProfileId,
-      customProfiles: settings.customProfiles
+      customProfiles: settings.customProfiles,
+      strictMode: settings.strictMode
+    });
+  }
+
+  private setStrictMode(
+    settings: SecureDnsSettings,
+    strictMode: boolean
+  ): SecureDnsSettingsMutationResult {
+    return this.successfulMutation({
+      selectionId: settings.selectionId,
+      activeCustomProfileId: settings.activeCustomProfileId,
+      customProfiles: settings.customProfiles,
+      strictMode: strictMode === true
     });
   }
 
@@ -139,7 +164,8 @@ export class SecureDnsSettingsModel {
     return this.successfulMutation({
       selectionId: 'custom',
       activeCustomProfileId: profile.id,
-      customProfiles: settings.customProfiles
+      customProfiles: settings.customProfiles,
+      strictMode: settings.strictMode
     });
   }
 
@@ -184,7 +210,8 @@ export class SecureDnsSettingsModel {
     return this.successfulMutation({
       selectionId: activate ? 'custom' : settings.selectionId,
       activeCustomProfileId: activate ? resolvedProfileId : settings.activeCustomProfileId,
-      customProfiles: nextProfiles
+      customProfiles: nextProfiles,
+      strictMode: settings.strictMode
     });
   }
 
@@ -206,7 +233,8 @@ export class SecureDnsSettingsModel {
     return this.successfulMutation({
       selectionId: removedActiveProfile && settings.selectionId === 'custom' ? 'system' : settings.selectionId,
       activeCustomProfileId: removedActiveProfile ? '' : settings.activeCustomProfileId,
-      customProfiles: nextProfiles
+      customProfiles: nextProfiles,
+      strictMode: settings.strictMode
     });
   }
 
@@ -352,7 +380,8 @@ export class SecureDnsSettingsModel {
       activeCustomProfileId: settings.activeCustomProfileId,
       customProfiles: settings.customProfiles.map((profile: SecureDnsCustomProfile): SecureDnsCustomProfile => {
         return this.copyProfile(profile);
-      })
+      }),
+      strictMode: settings.strictMode
     };
   }
 

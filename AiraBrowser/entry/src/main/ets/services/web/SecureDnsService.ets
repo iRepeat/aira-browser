@@ -20,6 +20,7 @@ export interface SecureDnsApplyResult {
   activeSelectionId: SecureDnsSelectionId;
   endpoint: string;
   probeElapsedMs: number;
+  strictMode: boolean;
   message: string;
 }
 
@@ -87,12 +88,29 @@ export class SecureDnsService {
     }
     const probeResult = await this.probeService.selectFirstReachable(this.buildAutomaticProbeCandidates());
     if (probeResult === undefined) {
+      // Strict mode promises "no system-DNS fallback", so a failed startup probe must not quietly
+      // resolve in plaintext for the rest of the session. Keep the highest-priority candidate and
+      // let SECURE_ONLY surface the failure instead; DoH recovers on its own once the network is back.
+      const strictCandidate = normalized.strictMode === true ? this.buildAutomaticProbeCandidates()[0] : undefined;
+      if (strictCandidate !== undefined) {
+        return {
+          configuredSelectionId: normalized.selectionId,
+          activeSettings: {
+            selectionId: this.normalizeSelectionId(strictCandidate.id),
+            activeCustomProfileId: normalized.activeCustomProfileId,
+            customProfiles: normalized.customProfiles,
+            strictMode: true
+          },
+          probeElapsedMs: 0
+        };
+      }
       return {
         configuredSelectionId: normalized.selectionId,
         activeSettings: {
           selectionId: 'system',
           activeCustomProfileId: normalized.activeCustomProfileId,
-          customProfiles: normalized.customProfiles
+          customProfiles: normalized.customProfiles,
+          strictMode: normalized.strictMode
         },
         probeElapsedMs: 0
       };
@@ -102,7 +120,8 @@ export class SecureDnsService {
       activeSettings: {
         selectionId: this.normalizeSelectionId(probeResult.candidate.id),
         activeCustomProfileId: normalized.activeCustomProfileId,
-        customProfiles: normalized.customProfiles
+        customProfiles: normalized.customProfiles,
+        strictMode: normalized.strictMode
       },
       probeElapsedMs: probeResult.elapsedMs
     };
@@ -124,21 +143,32 @@ export class SecureDnsService {
           activeSelectionId: 'system',
           endpoint: '',
           probeElapsedMs: probeElapsedMs,
+          strictMode: false,
           message: configuredSelectionId === 'auto' ?
             'No reachable automatic Secure DNS candidate; using system DNS.' :
             'ArkWeb Secure DNS disabled; using system DNS.'
         };
       }
-      webview.WebviewController.setHttpDns(webview.SecureDnsMode.AUTO, endpoint);
+      // Strict mode skips the system-DNS fallback so a failing DoH server surfaces as a page load
+      // failure instead of silently resolving in plaintext. ArkWeb keeps this global, so the
+      // preference only takes effect through the existing restart path.
+      const strictMode = normalized.strictMode === true;
+      webview.WebviewController.setHttpDns(
+        strictMode ? webview.SecureDnsMode.SECURE_ONLY : webview.SecureDnsMode.AUTO,
+        endpoint
+      );
       return {
         applied: true,
         selectionId: configuredSelectionId,
         activeSelectionId: normalized.selectionId,
         endpoint: endpoint,
         probeElapsedMs: probeElapsedMs,
-        message: configuredSelectionId === 'auto' ?
-          'Automatic Secure DNS candidate applied with system-DNS fallback.' :
-          'ArkWeb Secure DNS applied with automatic system-DNS fallback.'
+        strictMode: strictMode,
+        message: strictMode ?
+          'ArkWeb Secure DNS applied without system-DNS fallback.' :
+          (configuredSelectionId === 'auto' ?
+            'Automatic Secure DNS candidate applied with system-DNS fallback.' :
+            'ArkWeb Secure DNS applied with automatic system-DNS fallback.')
       };
     } catch (_error) {
       return {
@@ -147,6 +177,7 @@ export class SecureDnsService {
         activeSelectionId: normalized.selectionId,
         endpoint: endpoint,
         probeElapsedMs: probeElapsedMs,
+        strictMode: normalized.strictMode === true,
         message: 'ArkWeb Secure DNS configuration failed.'
       };
     }
