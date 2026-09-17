@@ -155,6 +155,8 @@ export struct BrowserDetentBottomPanel {
   @State private floatingHeaderBackgroundGrayProgress: number = 0;
   private hostGlobalTop: number = 0;
   private hostHeight: number = 0;
+  /** Temporary drag-frame probe counter; see commitPanelDragUpdate. */
+  private panelDragProbeTick: number = 0;
   private floatingInputStableHostWidth: number = 0;
   private lastGeometrySyncHostWidth: number = 0;
   private lastGeometrySyncHostHeight: number = 0;
@@ -770,6 +772,19 @@ export struct BrowserDetentBottomPanel {
         metrics
       );
     }
+    // Temporary probe: which surfaces are actually painted mid-drag. A non-zero expanded-surface
+    // opacity/height with no content mounted is what would flash a glass panel over the page, so
+    // these three values name the culprit directly instead of leaving it to guesswork.
+    if (this.panelDragProbeTick % 4 === 0) {
+      logToolbarPopupReopen('drag_frame', `offsetY=${offsetY} panelH=${this.currentPanelHeight} ` +
+        `lowH=${this.getOverlayLowPanelHeight()} showExpanded=${this.shouldShowFloatingExpandedContent()} ` +
+        `expandedOpacity=${this.resolveFloatingExpandedSurfaceOpacity()} ` +
+        `expandedHeight=${this.resolveFloatingExpandedSurfaceHeight()} ` +
+        `bodyVisible=${this.floatingExpandedContentBodyVisible} ` +
+        `contentVisible=${this.floatingExpandedContentVisible} ` +
+        `headerOpacity=${this.resolveFloatingHeaderPresentationOpacity()} detent=${this.panelDetent}`);
+    }
+    this.panelDragProbeTick += 1;
     this.onPanelGestureFrame({
       phase: 'update',
       panelHeight: this.currentPanelHeight,
