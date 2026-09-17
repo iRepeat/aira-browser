@@ -28,6 +28,8 @@ import {
 import { AiraIcon } from '../common/AiraIcon';
 import { logToolbarPopupReopen } from '../../../common/debug/AiraToolbarPopupReopenProbe';
 import { SearchEngineIconResources } from '../search/SearchEngineIconResources';
+import { BrowserSearchEnginePopupLayoutViewModel } from
+  '../../../core/browser/BrowserSearchEnginePopupLayoutViewModel';
 import {
   DownloadToolbarIndicatorState,
   createHiddenDownloadToolbarIndicatorState
@@ -116,6 +118,15 @@ export struct BrowserBottomChromeRenderer {
    * down and click, and inverting the live value then reads as "open" again.
    */
   private searchEnginePopupVisibleAtPress: boolean = false;
+  /**
+   * Global top of the search-engine popup's anchor. The popup is capped to the space above it so
+   * the framework never flips the menu onto the keyboard. Deliberately not reactive: it is
+   * refreshed on layout and on touch-down, both of which run before the popup reads it, so it
+   * needs no render of its own.
+   */
+  private searchEnginePopupAnchorTopVp: number = 0;
+  private searchEnginePopupLayout: BrowserSearchEnginePopupLayoutViewModel =
+    new BrowserSearchEnginePopupLayoutViewModel();
   private pressedTargetIntent: BrowserBottomChromeTapIntent | undefined;
   private pressedTargetIntentKey: string = '';
   private pressedTargetMotionVersion: number = 0;
@@ -164,6 +175,8 @@ export struct BrowserBottomChromeRenderer {
   @Prop chromeIconTone: AppChromeIconTone = 'light';
   @Prop reliableActionsEnabled: boolean = true;
   @Prop addressContextMenuEnabled: boolean = false;
+  /** Window top safe inset, used to bound the search-engine popup to the space above its anchor. */
+  @Prop topSafeInsetVp: number = 0;
   @BuilderParam editingLayer: () => void = this.emptyBuilder;
   onIntent: (intent: BrowserBottomChromeTapIntent) => void = (_intent: BrowserBottomChromeTapIntent) => {};
   onLongPressIntent: (intent: BrowserBottomChromeTapIntent) => void =
@@ -582,9 +595,17 @@ export struct BrowserBottomChromeRenderer {
       .accessibilityText(this.resolveLiveTapTarget('center-leading').accessibilityText)
       .hitTestBehavior(this.isTargetEnabled(this.resolveLiveTapTarget('center-leading')) ?
         HitTestMode.Default : HitTestMode.None)
+      // The popup's own height is derived from this, so it must reflect the anchor's real
+      // on-screen top rather than its untransformed layout slot.
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        this.rememberSearchEnginePopupAnchorTop(this.parseAreaPosition(newArea.globalPosition.y));
+      })
       .onTouch((event: TouchEvent) => {
         if (event.type === TouchType.Down) {
           this.searchEnginePopupVisibleAtPress = this.searchEnginePopupVisible;
+          // The frame that opens the popup has to know the anchor's top already, and onAreaChange
+          // has not necessarily reported it for this mount yet, so take it from the press itself.
+          this.rememberSearchEnginePopupAnchorTop(this.parseAreaPosition(event.target.area.globalPosition.y));
           logToolbarPopupReopen('popup_anchor_down',
             `visible=${this.searchEnginePopupVisible} slotVisible=${this.isSearchEngineMenuVisible()}`);
         }
@@ -1657,13 +1678,51 @@ export struct BrowserBottomChromeRenderer {
     return this.presentation.searchEnginePresentation.selectedSearchEngine === engineId;
   }
 
+  /**
+   * The menu is capped to the space above its own anchor so `Placement.Top` stays satisfiable.
+   * Anything taller lets the framework flip the popup downwards onto the keyboard, which this
+   * window never treats as occupied. Rows that no longer fit stay reachable through the popup's
+   * Scroll.
+   */
   private resolveSearchEnginePopupHeight(): number {
-    const rowCount = Math.max(1, Math.min(
+    const preferredRowCount = Math.max(1, Math.min(
       BROWSER_SEARCH_ENGINE_POPUP_MAX_VISIBLE_ROWS,
       this.presentation.searchEnginePresentation.searchEngines.length
     ));
-    return rowCount * BROWSER_SEARCH_ENGINE_POPUP_ROW_HEIGHT +
-      BROWSER_SEARCH_ENGINE_POPUP_CONTENT_PADDING * 2;
+    return this.searchEnginePopupLayout.resolve({
+      anchorTopVp: this.searchEnginePopupAnchorTopVp,
+      topSafeInsetVp: this.topSafeInsetVp,
+      rowHeightVp: BROWSER_SEARCH_ENGINE_POPUP_ROW_HEIGHT,
+      contentPaddingVp: BROWSER_SEARCH_ENGINE_POPUP_CONTENT_PADDING,
+      preferredRowCount: preferredRowCount,
+      anchorGapVp: BROWSER_SEARCH_ENGINE_POPUP_TARGET_SPACE
+    }).heightVp;
+  }
+
+  private parseAreaDimension(value: Length): number {
+    if (typeof value === 'number') {
+      return value;
+    }
+    const parsed = Number.parseFloat(`${value}`);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private parseAreaPosition(value?: Length): number {
+    return value === undefined ? 0 : this.parseAreaDimension(value);
+  }
+
+  /**
+   * A zero or negative reading means the host has not measured the anchor; the popup policy keeps
+   * the full menu in that case rather than collapsing to a single row on a bad measurement.
+   */
+  private rememberSearchEnginePopupAnchorTop(anchorTop: number): void {
+    if (!Number.isFinite(anchorTop) || anchorTop <= 0) {
+      return;
+    }
+    if (Math.abs(anchorTop - this.searchEnginePopupAnchorTopVp) < 1) {
+      return;
+    }
+    this.searchEnginePopupAnchorTopVp = anchorTop;
   }
 
   private resolveSelectedSearchEngineIcon(): Resource | undefined {
