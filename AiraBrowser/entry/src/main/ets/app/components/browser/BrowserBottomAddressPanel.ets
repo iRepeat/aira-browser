@@ -217,6 +217,18 @@ const WEB_BOTTOM_READING_CONTINUATION_ICON_SIZE: number = 22;
 const WEB_BOTTOM_READING_CONTINUATION_TRAILING_ICON_SIZE: number = 16;
 const WEB_BOTTOM_READING_CONTINUATION_HORIZONTAL_PADDING: number = 16;
 const WEB_BOTTOM_TOOLBAR_SHEET_ACTION_CORNER_RADIUS: number = 16;
+/**
+ * Minimum upward travel before a center-capsule pull counts as "open the toolbar" instead of an
+ * incidental drift that belongs to the page scroll. Matches the release distance the Return-Home
+ * gesture already uses for its own upward pull, so both chrome swipes feel the same.
+ */
+const BROWSER_TOOLBAR_SHEET_OPEN_MIN_PULL_VP: number = 44;
+/**
+ * Window after a dismissal in which an upward gesture will not reopen the Sheet. A close and a
+ * reopen are usually one continuous motion, so this stops the tail of the dismissing gesture from
+ * undoing it.
+ */
+const BROWSER_TOOLBAR_SHEET_REOPEN_COOLDOWN_MS: number = 400;
 function buildDefaultBrowserBottomAddressPanelActionInput(): BrowserBottomAddressPanelBuildInput {
   return {
     chromeIconTone: 'light',
@@ -355,7 +367,9 @@ export struct BrowserBottomAddressPanel {
   private pendingPanelDetentNotification: HomeSearchPanelDetent | undefined = undefined;
   private homeDismissAfterLowSettlePending: boolean = false;
   private activeChromeGestureSource: BrowserBottomChromeGestureSource = 'none';
+  private activeChromeGestureStartedOnVisibleChrome: boolean = false;
   private activeChromeGestureMiddlePanelHeight: number = 0;
+  private toolbarSystemSheetDismissedAtMs: number = 0;
   private pendingToolbarSystemSheetAction: BrowserBottomAddressPanelAction | undefined = undefined;
   private handledImmediateLowDetentRequestVersion: number = 0;
   private handledToolbarSystemSheetRequestVersion: number = 0;
@@ -599,8 +613,10 @@ export struct BrowserBottomAddressPanel {
               this.toolbarExpansionViewModel.shouldPreserveExpandedBackdropDuringGesture(this.toolbarExpansionStage);
             this.activeChromeGestureSource = this.isExpandedPanelDetent(this.panelDetent) ? 'none' :
               this.resolveBottomChromeGestureSource(frame.startX, frame.panelWidth);
+            this.activeChromeGestureStartedOnVisibleChrome = frame.startedOnVisibleChrome;
             logToolbarPopupReopen('gesture_start', `startX=${frame.startX} panelWidth=${frame.panelWidth} ` +
               `source=${this.activeChromeGestureSource} detent=${this.panelDetent} ` +
+              `onVisibleChrome=${frame.startedOnVisibleChrome} ` +
               `mode=${this.liveBottomChromePresentation.mode} expanded=${this.isExpandedPanelDetent(this.panelDetent)} ` +
               `hitW=${this.resolveFloatingHeaderInteractionWidth()} ` +
               `hitH=${this.resolveFloatingHeaderInteractionHeight()} ` +
@@ -677,10 +693,17 @@ export struct BrowserBottomAddressPanel {
             return undefined;
           }
           const source = this.activeChromeGestureSource;
+          const startedOnVisibleChrome = this.activeChromeGestureStartedOnVisibleChrome;
           this.activeChromeGestureSource = 'none';
+          this.activeChromeGestureStartedOnVisibleChrome = false;
+          const opensSheet = this.shouldOpenToolbarSystemSheetFromGesture(
+            targetDetent, offsetY, source, startedOnVisibleChrome);
           logToolbarPopupReopen('sheet_gesture_end', `detent=${targetDetent} offsetY=${offsetY} ` +
-            `source=${source} intercept=${this.shouldOpenToolbarSystemSheetFromGesture(targetDetent, offsetY, source)}`);
-          if (this.shouldOpenToolbarSystemSheetFromGesture(targetDetent, offsetY, source)) {
+            `source=${source} onVisibleChrome=${startedOnVisibleChrome} ` +
+            `sinceDismissMs=${this.toolbarSystemSheetDismissedAtMs > 0 ?
+              Date.now() - this.toolbarSystemSheetDismissedAtMs : -1} ` +
+            `intercept=${opensSheet}`);
+          if (opensSheet) {
             this.openToolbarSystemSheet('gesture_center_capsule');
             return 'low';
           }
@@ -2321,6 +2344,9 @@ export struct BrowserBottomAddressPanel {
   private handleToolbarSystemSheetDisappear(): void {
     logToolbarPopupReopen('sheet_disappear', `token=${this.toolbarSystemSheetInstanceToken} ` +
       `visibleBefore=${this.toolbarSystemSheetVisible} pending=${this.pendingToolbarSystemSheetAction !== undefined}`);
+    if (this.toolbarSystemSheetVisible) {
+      this.toolbarSystemSheetDismissedAtMs = Date.now();
+    }
     this.toolbarSystemSheetVisible = false;
     this.toolbarSystemSheetDetentSelection = 0;
     const pendingAction = this.pendingToolbarSystemSheetAction;
@@ -3372,14 +3398,33 @@ export struct BrowserBottomAddressPanel {
   private shouldOpenToolbarSystemSheetFromGesture(
     targetDetent: HomeSearchPanelDetent,
     offsetY: number,
-    source: BrowserBottomChromeGestureSource
+    source: BrowserBottomChromeGestureSource,
+    startedOnVisibleChrome: boolean = true
   ): boolean {
     void targetDetent;
-    return source === 'center-capsule' &&
-      this.hasQuickActionSlotsAvailable() &&
-      !this.isAddressInputPresentationActive() &&
-      Number.isFinite(offsetY) &&
-      offsetY < 0;
+    if (source !== 'center-capsule' ||
+      !this.hasQuickActionSlotsAvailable() ||
+      this.isAddressInputPresentationActive() ||
+      !Number.isFinite(offsetY)) {
+      return false;
+    }
+    // The gesture surface spans the whole floating bar, including the transparent padding above
+    // and below the visible capsule. A swipe that starts in that padding reads as the page, so it
+    // must not raise the toolbar; only a pull that began on the capsule itself expands chrome.
+    if (!startedOnVisibleChrome) {
+      return false;
+    }
+    // A deliberate pull rather than an incidental few-vp upward drift while scrolling the page.
+    if (offsetY > -BROWSER_TOOLBAR_SHEET_OPEN_MIN_PULL_VP) {
+      return false;
+    }
+    // Just after a dismissal the same upward motion can still be travelling; refuse to reopen
+    // until that window has passed so a close cannot be undone by the tail of one gesture.
+    if (this.toolbarSystemSheetDismissedAtMs > 0 &&
+      Date.now() - this.toolbarSystemSheetDismissedAtMs < BROWSER_TOOLBAR_SHEET_REOPEN_COOLDOWN_MS) {
+      return false;
+    }
+    return true;
   }
 
   private shouldSuppressBackdropForToolbarSystemSheetGesture(

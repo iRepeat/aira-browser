@@ -58,6 +58,12 @@ export interface BrowserDetentBottomPanelGestureFrame {
   panelHeight: number;
   offsetY: number;
   startX: number;
+  /**
+   * Whether the gesture began on the visible chrome rather than in the transparent vertical
+   * padding around it. The padding belongs to this surface but reads as page to the user, so a
+   * caller that would move chrome on an upward swipe must exclude it.
+   */
+  startedOnVisibleChrome: boolean;
   panelWidth: number;
 }
 
@@ -154,6 +160,7 @@ export struct BrowserDetentBottomPanel {
   private lastGeometrySyncHostHeight: number = 0;
   private dragStartPanelHeight: number = BROWSER_DETENT_BOTTOM_PANEL_LOW_HEIGHT;
   private dragStartLocalX: number = -1;
+  private dragStartLocalY: number = -1;
   private dragGestureWidth: number = 0;
   private dragLastOffsetY: number = 0;
   private dragLastUpdateAtMs: number = 0;
@@ -714,6 +721,7 @@ export struct BrowserDetentBottomPanel {
       panelHeight: this.dragStartPanelHeight,
       offsetY: 0,
       startX: this.dragStartLocalX,
+      startedOnVisibleChrome: this.isGestureStartOnVisibleChrome(),
       panelWidth: this.dragGestureWidth
     });
   }
@@ -767,6 +775,7 @@ export struct BrowserDetentBottomPanel {
       panelHeight: this.currentPanelHeight,
       offsetY: offsetY,
       startX: this.dragStartLocalX,
+      startedOnVisibleChrome: this.isGestureStartOnVisibleChrome(),
       panelWidth: this.dragGestureWidth
     });
   }
@@ -1807,6 +1816,7 @@ export struct BrowserDetentBottomPanel {
     const fingerInfos = event.fingerInfos;
     if (fingerInfos !== undefined && fingerInfos.length > 0) {
       this.dragStartLocalX = Number(fingerInfos[0].localX) - Number(event.offsetX);
+      this.dragStartLocalY = Number(fingerInfos[0].localY);
       logToolbarPopupReopen('gesture_touch_origin',
         `surface=${surface} localY=${fingerInfos[0].localY} globalY=${fingerInfos[0].globalY} ` +
         `localX=${fingerInfos[0].localX} globalX=${fingerInfos[0].globalX} ` +
@@ -1816,6 +1826,7 @@ export struct BrowserDetentBottomPanel {
     }
     if (event.fingerList.length > 0) {
       this.dragStartLocalX = Number(event.fingerList[0].localX) - Number(event.offsetX);
+      this.dragStartLocalY = Number(event.fingerList[0].localY);
       logToolbarPopupReopen('gesture_touch_origin',
         `surface=${surface} localY=${event.fingerList[0].localY} globalY=${event.fingerList[0].globalY} ` +
         `localX=${event.fingerList[0].localX} globalX=${event.fingerList[0].globalX} ` +
@@ -1824,11 +1835,30 @@ export struct BrowserDetentBottomPanel {
       return;
     }
     this.dragStartLocalX = -1;
+    this.dragStartLocalY = -1;
     logToolbarPopupReopen('gesture_touch_origin', `surface=${surface} unavailable fingerList/fingerInfos empty`);
   }
 
   private clearPanelGestureTouchState(): void {
     this.dragStartLocalX = -1;
+    this.dragStartLocalY = -1;
+  }
+
+  /**
+   * Whether the active gesture began on the visible chrome rather than in the transparent
+   * vertical padding above or below it. The padding is part of the gesture surface but reads as
+   * page to the user, so callers that would move chrome on an upward swipe must exclude it.
+   */
+  private isGestureStartOnVisibleChrome(): boolean {
+    if (!Number.isFinite(this.dragStartLocalY) || this.dragStartLocalY < 0) {
+      return false;
+    }
+    const padding = BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING;
+    const surfaceHeight = Math.max(1, this.getFloatingHeaderHeight());
+    if (surfaceHeight <= padding * 2) {
+      return true;
+    }
+    return this.dragStartLocalY >= padding && this.dragStartLocalY <= surfaceHeight - padding;
   }
 
   private parseAreaDimension(value: Length): number {

@@ -109,10 +109,13 @@ const toolbarGestureHelper = toolbarGestureHelperStart >= 0 && toolbarGestureHel
 assertContract(addressPanel.includes('private shouldOpenToolbarSystemSheetFromGesture(') &&
   /this\.openToolbarSystemSheet\(/.test(addressPanel) &&
   addressPanel.includes("return 'low';") &&
-  toolbarGestureHelper.includes("source === 'center-capsule'") &&
+  toolbarGestureHelper.includes("'center-capsule'") &&
   toolbarGestureHelper.includes('this.hasQuickActionSlotsAvailable()') &&
+  toolbarGestureHelper.includes('startedOnVisibleChrome') &&
+  toolbarGestureHelper.includes('BROWSER_TOOLBAR_SHEET_OPEN_MIN_PULL_VP') &&
   !toolbarGestureHelper.includes('this.isWebContentMode()'),
-  'Home and Web center upward gestures must open the native Sheet and leave the legacy panel at low.');
+  'Home and Web center upward gestures must open the native Sheet and leave the legacy panel at low, ' +
+  'and must only fire for a deliberate pull that began on the visible chrome.');
 assertContract(!addressPanel.includes('private resolveToolbarGestureRelease('),
   'The old toolbar stage gesture-release state machine must not remain in the address panel.');
 assertContract(addressPanel.includes("intent.actionId === 'bottomChromeMenu'"),
