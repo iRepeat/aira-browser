@@ -18,6 +18,9 @@ import {
   WEB_VIDEO_FULLSCREEN_REQUEST_RESULT_EVENT,
   WEB_VIDEO_RUNTIME_ID_PROPERTY
 } from '../../services/video/WebVideoRuntimeProtocol';
+// Temporary [DEBUG-load-scroll-jank-7c4d] probe: brackets our own synchronous work in the Web
+// callbacks so a blocked frame can name the handler responsible instead of inferring it.
+import { AiraLoadScrollJankProbe } from '../../common/debug/AiraLoadScrollJankProbe';
 
 const HOSTED_WEB_NODE_LOG_DOMAIN: number = 0x0000;
 const HOSTED_WEB_NODE_LOG_TAG: string = 'HostedWebNode';
@@ -2329,19 +2332,26 @@ function HostedWebNodeBuilder(config: HostedWebNodeConfig) {
         );
       })
       .onControllerAttached(() => {
+        const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('web_controller_attached');
         applyHostedWebSafeBrowsing(config);
         configureHostedWebBackForwardCache(config.tabId, config.controller, 'hosted_web_controller_attached', true);
         config.callbacks.onControllerAttached(config.tabId);
+        AiraLoadScrollJankProbe.endUiTask('web_controller_attached', probeStartedAt);
       })
       .onPageVisible((event: OnPageVisibleEvent) => {
+        const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('web_page_visible');
         configureHostedWebBackForwardCache(config.tabId, config.controller, 'hosted_web_page_visible');
         config.callbacks.onPageVisible(config.tabId, event);
+        AiraLoadScrollJankProbe.endUiTask('web_page_visible', probeStartedAt);
       })
       .onPageBegin((event: OnPageBeginEvent) => {
+        const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('web_page_begin');
         registerHostedWebNativeMediaObservation(config);
         config.callbacks.onPageBegin(config.tabId, event);
+        AiraLoadScrollJankProbe.endUiTask('web_page_begin', probeStartedAt);
       })
       .onPageEnd((event: OnPageEndEvent) => {
+        const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('web_page_end');
         hilog.info(
           HOSTED_WEB_NODE_LOG_DOMAIN,
           HOSTED_WEB_NODE_LOG_TAG,
@@ -2351,11 +2361,14 @@ function HostedWebNodeBuilder(config: HostedWebNodeConfig) {
         injectWebFileSavePickerCompat(config);
         injectPageBehaviorSignal(config);
         config.callbacks.onPageEnd(config.tabId, event);
+        AiraLoadScrollJankProbe.endUiTask('web_page_end', probeStartedAt);
       })
       .onLoadFinished(() => {
+        const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('web_load_finished');
         injectWebFileSavePickerCompat(config);
         requestPageBehaviorResample(config);
         config.callbacks.onLoadFinished(config.tabId);
+        AiraLoadScrollJankProbe.endUiTask('web_load_finished', probeStartedAt);
       })
       .onProgressChange((event: OnProgressChangeEvent) => {
         config.callbacks.onProgressChange(config.tabId, event);

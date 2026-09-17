@@ -183,17 +183,21 @@ export class BrowserPageChromeThemeSamplingCoordinator {
   }
 
   handleThemeSignal(tabId: string, payloadJson: string): void {
+    const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('handle_theme_signal');
     const facts = this.host.readFacts();
     if (!this.isActiveVisibleTabId(tabId, facts)) {
+      AiraLoadScrollJankProbe.endUiTask('handle_theme_signal', probeStartedAt);
       return;
     }
     const snapshot = this.probe.parseProbeResult(payloadJson);
     const hasColorSignal = snapshot.themeColor.length > 0 || snapshot.pageBackgroundColor.length > 0;
     if (hasColorSignal) {
       this.applyPageChromeTheme(tabId, this.toSnapshot(snapshot));
+      AiraLoadScrollJankProbe.endUiTask('handle_theme_signal', probeStartedAt);
       return;
     }
     this.scheduleScriptProbeWithDelay(tabId, THEME_SIGNAL_FALLBACK_DELAY_MS);
+    AiraLoadScrollJankProbe.endUiTask('handle_theme_signal', probeStartedAt);
   }
 
   clearTab(tabId: string): void {
@@ -252,42 +256,48 @@ export class BrowserPageChromeThemeSamplingCoordinator {
       }
       // Temporary [DEBUG-load-scroll-jank-7c4d] probe: the theme probe runs a WebviewController
       // script round-trip on the UI thread, so measure its cost against the load-finished mark.
-      const probeStartedAt = AiraLoadScrollJankProbe.startTimed();
+      const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('theme_script_probe_dispatch');
       this.probe.runPageChromeThemeProbe(tabId, this.buildProbeDispatchHost());
-      AiraLoadScrollJankProbe.endTimed('theme_script_probe_dispatch', probeStartedAt);
+      AiraLoadScrollJankProbe.endUiTask('theme_script_probe_dispatch', probeStartedAt);
     }, schedule.delayMs);
   }
 
   private samplePageChromeVisualTopColor(tabId: string): void {
+    // Temporary [DEBUG-load-scroll-jank-7c4d] probe: only the synchronous dispatch is bracketed as a
+    // UI-thread task. `sample` returns a Promise, so timing the whole thing would report Promise wall
+    // time rather than thread occupancy, and that is what made this candidate look guilty before.
+    const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('visual_sample_dispatch');
     const context = this.host.resolveVisualSamplingContext();
-    // Temporary [DEBUG-load-scroll-jank-7c4d] probe: the component snapshot + pixel readback is a
-    // candidate for the post-load hitch, so its cost is measured per sample.
-    const probeStartedAt = AiraLoadScrollJankProbe.startTimed();
     void this.dependencies.colorSampler.sample({
       uiContext: context.uiContext,
       componentSnapshotId: buildBrowserTabPreviewComponentSnapshotId(tabId),
       systemTopInsetPx: context.systemTopInsetPx,
       contentGapPx: context.contentGapPx
     }).then((result: BrowserWebTopSafeAreaColorSampleResult) => {
-      AiraLoadScrollJankProbe.endTimed('visual_color_sample', probeStartedAt, `color=${result.color}`);
       this.handleVisualSampleResult(tabId, result);
     }).catch((_error: Error) => {
-      AiraLoadScrollJankProbe.endTimed('visual_color_sample_failed', probeStartedAt);
     });
+    AiraLoadScrollJankProbe.endUiTask('visual_sample_dispatch', probeStartedAt);
   }
 
   private handleVisualSampleResult(
     tabId: string,
     result: BrowserWebTopSafeAreaColorSampleResult
   ): void {
+    // Temporary [DEBUG-load-scroll-jank-7c4d] probe: this continuation lands on the UI thread as
+    // soon as the snapshot readback resolves, which can be right at the first swipe.
+    const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('visual_sample_result');
     const facts = this.host.readFacts();
     if (!this.isActiveVisibleTabId(tabId, facts) || facts.visualSamplingSuppressed || result.color.length <= 0) {
+      AiraLoadScrollJankProbe.endUiTask('visual_sample_result', probeStartedAt);
       return;
     }
     this.applyPageChromeVisualTopColor(tabId, result.color);
+    AiraLoadScrollJankProbe.endUiTask('visual_sample_result', probeStartedAt);
   }
 
   private applyPageChromeTheme(tabId: string, snapshot: BrowserPageChromeThemeSnapshot): boolean {
+    const probeStartedAt = AiraLoadScrollJankProbe.beginUiTask('apply_page_chrome_theme');
     const facts = this.host.readFacts();
     const nextState = this.dependencies.chromeRuntimeCoordinator.applyPageChromeTheme(
       facts.chromeRuntimeState,
@@ -300,6 +310,7 @@ export class BrowserPageChromeThemeSamplingCoordinator {
       }
     );
     if (nextState === facts.chromeRuntimeState) {
+      AiraLoadScrollJankProbe.endUiTask('apply_page_chrome_theme', probeStartedAt);
       return false;
     }
     this.host.publishChromeRuntimeState(nextState);
@@ -307,6 +318,7 @@ export class BrowserPageChromeThemeSamplingCoordinator {
       this.host.syncBottomPanelStatusBarStyle();
       this.scheduleVisualSample(tabId);
     }
+    AiraLoadScrollJankProbe.endUiTask('apply_page_chrome_theme', probeStartedAt);
     return true;
   }
 

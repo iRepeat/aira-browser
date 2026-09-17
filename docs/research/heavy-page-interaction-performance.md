@@ -607,7 +607,8 @@ Aira 唯一运行在渲染进程里的代码是**注入的 document-start 脚本
 本节用埋点日志（`AiraLoadScrollJankProbe` 的 `frame_gap`、`postFrameCallback` 帧节奏探针、
 `SqliteSharedResultSet: FillBlock`、`BrowserDatabase` 的 `Loaded history visits`）逐条排查。
 **已修复并验证两处**：历史子系统的冗余全表读，以及一次图标更新导致整个网格重建。
-**仍未解释一处**：`load + 189/226ms` 那两个卡顿点（详见下文）。
+**仍未修复一处**：滑动初期剩余的那一下卡顿——已确认在 UI 线程（ArkTS 侧）而非渲染进程，
+且集中在 Web 节点可见性/表面建立的交界处；但具体是哪个调用尚未证实，详见下文。
 
 ### 历史读取：先纠正一个推断
 
@@ -706,7 +707,7 @@ private resolveShortcutContentRenderKey(): string {
    已经做到了「只有该图标的 `path` 或 `pixelMap` 真的变了才 `revision += 1`」，正是格子需要的粒度；
    拖拽期间仍用冻结的列表级版本，保证手指下那排格子全程不动。
 
-### 仍未解释的第一下：按页面稳定复现，与网格重建无关
+### 剩下的那一下：在滑动场景中按页面稳定复现，与网格重建无关
 
 第 2 条修复后，用同一批页面各重复加载 2–3 次复现，`load + 2526ms`（150ms）与 `load + 2594ms`（117ms）
 两个卡顿点**消失**，`gap ≥ 100ms` 从 6 个降到 2 个。但 `load + 189ms`（75ms）与 `load + 226ms`（108ms）
@@ -718,33 +719,291 @@ private resolveShortcutContentRenderKey(): string {
 |---|---|
 | 首页网格重建 | 83 次重建里只有 5 次后面跟着卡顿；`tiles=17` 的整块重建引发 3 次、未引发 47 次 |
 | `iconsVersion` 那条路径 | 已在第 2 条修复中改掉，且改后这一下仍在（毫秒数不变） |
-| ArkTS 主线程被占 | 108ms 那个区间内（`33.919→34.031`）主线程在 `33.932/33.948/33.973` 都有日志，UI 线程并未被占 |
 | 历史读取 | 已修复并验证（本节末），且时间点不符 |
-| 平台判定为纯 Web 侧 | `SCROLL_ARKWEB_FLING_JANK`，`max_app_frame_time` 174–241ms |
 
-关键对照是**同一批页面里有的卡有的不卡，重建次数相同**（11 次会话卡 / 19 次不卡），
-所以更像是这些页面**首次绘制的渲染/合成开销**（主线程活着但帧没提交出去），
-不在 ArkTS 侧。**这一下尚未定位，也没有对应的修复。**
+关键对照是**同一批页面里有的卡有的不卡，重建次数相同**（11 次会话卡 / 19 次不卡）。
 
-### 一次归因方法的教训
+### 加上占用探针之后：两个场景被分开了
 
-排查这一下时我先用了「卡顿点前 N 毫秒内是否有事件 X」的正向统计，得到「7/7 卡顿前都有网格重建」，
-据此差点认定重建是原因；反向一算才发现重建共发生 83 次，绝大多数（78 次）后面并没有卡顿。
-**对高频事件做正向共现统计会系统性高估因果**，必须同时算反向发生率（或基准概率）才能用。
+只用帧节奏探针无法区分「UI 线程忙」和「UI 线程空闲但取不到帧」——两者都表现为一个 VSync 间隔。
+因此给 `AiraLoadScrollJankProbe` 补了第三个量：一个 8ms 自续期定时器，记录它**迟到多少**
+（`occupancyMs`）。定时器与 UI 渲染同线程，所以：
 
-另有一处更正：最初把紧邻卡顿的那批 `CreatePixelMap` 说成「阻塞主线程」是错的——那些解码的
-tid 是 12232–12476，在**后台线程**，主线程 tid 是 11942。它们是同一触发源（图标更新 → 缓存失效 →
-整块重建）的伴随现象，不是主线程停顿本身。
+- `occupancyMs ≈ gap` → ArkTS 确实被占住；
+- `occupancyMs` 明显小于 `gap` → UI 线程空闲，帧是渲染侧没交出来。
+
+同时输出每约 0.5s 一条 `occupancy_sample` 作为基线，避免拿一个孤立的 `occupancyMs=90`
+当作证据——没有基线它说明不了任何事。
+
+### 探针自身的一个 bug，以及它作废了哪些结论
+
+第一版占用探针把累计窗口写成**只在有卡顿上报时才清零**（`gapMs <= 33` 时提前 `return`，跳过了清零），
+于是 `occupancyMs` 会把多帧累加。败露方式是自相矛盾的数据：某次卡顿落在只有 38ms 的窗口里，
+却报出 `occupancyMs=94`——定时器周期是 8ms，38ms 内最多触发 4～5 次，迟到 94ms 在物理上不可能。
+
+同时发现第二个问题：`gap` 取自 `postFrameCallback` 的 VSync 时间戳，`occupancyMs` 用墙钟，
+两者不同源却直接比大小。修正三处：每帧清零、加 generation 防止重开会话残留两条定时器链、
+新增 `wallGapMs`（同一间隔的墙钟值），此后只比较 `occupancyMs` 与 `wallGapMs`。
+
+**因此下面这些先前的结论作废**，它们是从有 bug 的数据推出来的：
+「滑动场景下 UI 线程没有被主导性占用，开销在渲染侧」（那次比的是 `occupancyMs` 与 `gap`），
+以及「打开 Sheet 占住 UI 线程 110ms」（数字取自未清零的累计值）。
+
+### 修正后重测（一次干净采集：3 会话、1436 次滑动、0 次弹层）
+
+`gap` 与 `wallGapMs` 仍然严重不一致，最多差 8 倍：
+
+| 时间 | `gap`（VSync 口径） | `wallGapMs`（墙钟） | `occupancyMs` |
+|---|---|---|---|
+| 17:27:10.538 | 192ms | 50ms | 45ms |
+| 17:27:12.464 | 100ms | 43ms | 41ms |
+| 17:27:04.867 | 42ms | **8ms** | 0ms |
+
+两个后果：一是 **`gap` 不能当作「卡顿时长」读**，此前报的 150/117/167ms 很可能是被高估的
+（那几轮只有 `gap`，没有墙钟对照）；二是判定只能靠 `occupancyMs` vs `wallGapMs`。
+
+按这个口径，修正后的结论与之前相反——**剩下的卡顿是 ArkTS 侧的**：凡 `wallGapMs` 达到 43–50ms 的
+帧，`occupancyMs` 都是 41–46ms（比值 0.9–0.95，即阻塞几乎覆盖整个间隔）；而 `wallGapMs` 只有 5–8ms 的帧
+`occupancyMs` 为 0。三个会话的 `maxOccupancyMs` 分别是 50 / 162 / 86ms，基线 `occupancy_sample`
+中位数约 19ms。设备实测约 108fps。
+
+### 目前定位到的：4 个被占帧都在「页面可见 / load-finished」交界处
+
+三个会话里 `wallGap ≥ 40ms` 且 `occupancyMs ≥ 0.8 × wallGap`（即 UI 线程确实被占）的帧只有 4 个：
+
+| 时刻 | `wallGapMs` | `occupancyMs` | 紧随其前的关键日志 |
+|---|---|---|---|
+| 17:27:05.219 | 47 | 46 | `JSWeb::OnPageVisible`、`WebPattern::CheckAndSetWebNested`、`load_finished_done`、`SetSurfaceDensity: 3.25` |
+| 17:27:10.538 | 50 | 45 | `NWebDelegate::OnWindowHide`、`RenderProcessStateHandler`、`SetVisible nweb … visible 0` |
+| 17:27:10.583 | 45 | 36 | 同上（同一簇） |
+| 17:27:12.464 | 43 | 41 | `SetNestedScrollExt`、`WebModelNG::SetOnMediaCastEnter`、`JSWeb::OnPageVisible`、`load_finished` |
+
+共同点是**Web 节点的可见性/表面建立**（`OnPageVisible`、`SetSurfaceDensity`、`SetNestedScrollExt`、
+`WebModelNG`、`UnregisterAvoidAreaChangeListener`）——都是 ArkWeb 的原生调用，落在 UI 线程上。
+量级 43–50ms 与 `occupancyMs` 41–46ms 吻合。
+
+### 被否掉的两个候选（都经过反向验证）
+
+**`visual_color_sample`（chrome 取色）——不是原因。** 它是 `void sample(...).then(...)` 的
+**异步**调用，打点测出的 27–39ms 是 Promise 的墙钟时长，不等于线程占用；而且把它的执行区间
+（`结束时刻 − durationMs`）与那 4 个被占帧逐一比对，**零重叠**（最近的相距 239ms）。
+它原本看起来像候选，只是因为它的耗时数字量级接近，属于又一次「数字接近就当成原因」。
+
+**`ForEach` 标脏风暴——不是原因，且为负相关。** 4 个被占帧前 60ms 的 `ForEachNode skip mark dirty`
+数量是 2 / 2 / 17 / 18，而**未被占**帧的中位数是 19、最大 26；全部 23 处「ForEach 风暴」
+（60ms 窗口内 ≥12 次）里只有 3 处紧邻一个被占帧。也就是说标脏越多反而越不容易触发被占帧。
+
+### 三次归因方法的教训
+
+1. **正向共现会系统性高估因果**。我用「卡顿点前 N 毫秒内有事件 X」得到「7/7 卡顿前都有网格重建」，
+   差点据此认定重建是原因；反向一算重建共 83 次，其中 78 次后面根本没有卡顿。
+   必须同时算反向发生率（或基准概率）。
+2. **「相邻出现」不是「因果」，线程号可查**。最大那两个卡顿旁边的 `CreatePixelMap` 被我说成
+   「阻塞主线程」，实际那些解码在后台线程（tid 12232–12476，主线程 11942）。
+3. **测量工具本身要先自检**。占用探针的累计窗口 bug 是靠「38ms 窗口里报出 94ms」这种自相矛盾
+   才发现的。任何新指标都应先验证它给出的数在物理上说得通，再拿它下结论。
+4. **「量级接近」同样不是证据**。`visual_color_sample` 一度被我写成「当前最强候选」，
+   理由是它的 27–39ms 和卡顿量级相当；实际它的执行区间与卡顿帧零重叠。
+5. **异步调用的 `durationMs` 不等于线程占用**。`endTimed` 测的是 Promise 从发起到 resolve 的墙钟时间，
+   期间线程可能完全空闲。要测占用必须用独立的心跳（本节新增的 occupancy 探针），不能复用打点。
 
 ### 验证
 
 `AIRA_ALLOW_UNSIGNED_BUILD=1 SKIP_INSTALL=1 ./scripts/build-aira-browser.sh` 构建通过；
-`check-architecture-guardrails.sh`、`check-aira-history-sync-contract.sh`、
+签名版 `AIRA_DISTRIBUTION=official ./scripts/build-aira-browser.sh` 构建并安装成功（本机签名 profile 的
+bundle 名是 `com.aira.browser`，社区版是 `org.aira.browser`，所以测试安装走 official 分发，源码树仍留在
+Community）。`check-architecture-guardrails.sh`、`check-aira-history-sync-contract.sh`、
 `check-aira-sync-provider-switch-contract.sh`、`check-aira-sync-first-activation-contract.sh`、
 `check-open-source-source-tree.sh` 五个契约脚本全部通过。
 
-历史三条与图标重建键两处修复都已在真机上复现确认。`load + 189/226ms` 那一下没有修复，
-埋点保留在源码中（`common/debug/AiraLoadScrollJankProbe.ets`），便于下一轮从 Web 首绘方向继续。
+历史三条与图标重建键两处修复都已在真机上复现确认。剩下的滑动卡顿**本轮已排除自家代码**（见下），
+但具体归谁仍未测得，因此也未修复。埋点保留在源码中（`common/debug/AiraLoadScrollJankProbe.ets`）。
+
+### 又一次方法修正：平台采样被堵死，改成给自家代码打点
+
+上一节写的「取调用栈」路线在这台设备上不通。`MAIN_THREAD_JANK_V2` 的每一种参数组合都被拒：
+
+```
+jank_policy_step rejected MAIN_THREAD_JANK/log_type=1(number)            code=401 message=Invalid param value for event config.
+jank_policy_step rejected MAIN_THREAD_JANK/log_type=1(string)            code=401 ...
+jank_policy_step rejected MAIN_THREAD_JANK_V2/log_type=1(string)         code=401 ...
+jank_policy_step rejected MAIN_THREAD_JANK_V2/sample_interval=50(string) code=401 ...
+```
+
+（API 24 / OpenHarmony-6.1.1.120 / phone。`MAIN_THREAD_JANK` 本身在整轮采集里只触发过 1 次，就是订阅那行。）
+
+于是放弃「拿栈」，改成不需要平台配合的做法：**给我们自己在这条路径上的同步代码打点**。
+新增 `beginUiTask` / `endUiTask`，把每段自有同步区间（名称 + 起止墙钟）存进环形缓冲；
+每次报 `frame_gap` 时用同一窗口求交集，输出 `uiTasks=`。
+
+打点位置（都是我们自己、且都在 ArkWeb 回调里同步执行）：`web_controller_attached`、`web_page_visible`、
+`web_page_begin`、`web_page_end`、`web_load_finished`（含 BFCache 配置、safe browsing、脚本注入），
+以及 `handle_theme_signal`、`apply_page_chrome_theme`、`visual_sample_dispatch`、`visual_sample_result`、
+`theme_script_probe_dispatch`。
+
+顺带修掉上一节留下的一个测量错误：`visual_color_sample` 原来把整段 Promise 计入 `durationMs`
+（测的是墙钟，不是占用），现在只量同步派发那一段，续体单独计 `visual_sample_result`。
+
+### 结果：卡顿窗口里我们自己的代码为零
+
+一轮干净采集（冷启动 → 开一个网页 → 等画面出现 → 立刻滑动，重复 3 次），
+共 17 个 `frame_gap ≥ 33ms` 窗口，其中 14 个 `wallGapMs ≥ 20ms`：
+
+| 判据 | 结果 |
+|---|---|
+| `uiTasks=none` 的窗口 | **17 / 17** |
+| 自有任务区间与卡顿窗口重叠 | **0**（15 段任务，合计 273ms） |
+| 自有任务最长耗时 | 48ms，但它结束在卡顿窗口开始前 19ms，属于另一次页面建立 |
+
+同一轮里平台自己的 `JankFrameMonitor::ProcessJank jank >= threshold` 报了 18 次，与本探针的 17 次基本
+一一对应——说明 33ms 这个阈值和设备判定一致，不是自造标准。
+
+因此上一节那句「剩下的卡顿在 ArkTS 侧」需要收窄：**UI 线程确实被占满，但占它的不是我们的 JS。**
+同理，`uiTasks=none` 也让「把可见性交界处的取色/探测挪出 UI 线程」这个方案失去依据——那部分本来就不在窗口里。
+
+### 新发现：占用不是「一次长阻塞」，而是「连续短任务把线程占满」
+
+我此前把 `occupancyMs ≈ wallGapMs` 读成「有一次 40–50ms 的同步阻塞」。这次同时打了窗口内主线程日志的
+最长静默，两者对不上：
+
+| 窗口 `wallGapMs` | `occupancyMs` | 窗口内主线程最长无日志空档 |
+|---|---|---|
+| 104 | 95 | 19ms |
+| 60 | 52 | 20ms |
+| 36 | 31 | 22ms |
+| 36 | 23 | 16ms |
+| 34 | 24 | 20ms |
+
+最长静默只有 19–24ms，而 occupancy 报 52–95ms，两者不能同时成立于「一次阻塞」模型：线程若被单次阻塞
+95ms，主线程日志也会静默 95ms。唯一自洽的解释是**一段连续、背靠背的短任务流反复饿死了定时器**
+（定时器优先级低于帧/vsync 回调），占用被累计到远超任何单次阻塞。
+**所以 occupancy 度量的是「线程被帧管线占满」，不是「某次调用阻塞」**；拿它指认「哪个调用慢」从一开始
+就是错的用法。这条已加入教训清单。
+
+### 窗口里实际是什么
+
+对 14 个 `wallGapMs ≥ 20ms` 的窗口做主线程标签直方图：
+
+- **最大的那一下（`wallGapMs=104`, `occupancyMs=95`）是系统材质/模糊管线**：窗口内 `HDS_EFFECT=132`、
+  `HDS_tabs=60`、`AceResource=48`（`sys.float.hms_material_style` 读取失败 48 次），并有
+  `MaterialModel::CreateMaterial` / `UpdateMaterial`、`TransparencyUtils::RegisterTransparencyListener`
+  与 `animateTo starts, dur:180, curve:responsiveSpring(...)`。这是 HDS `Tabs` 组件的材质渲染，属系统
+  组件流水线。它出现在 `sinceLoadFinished=4465ms`，也不属于「刚开网页」那一下。
+- **开网页后头 100ms 内的 6 个窗口**（`sinceLoadFinished=35/49/58/61/65/75ms`）与 Web 表面落位同时发生：
+  `SetSurfaceDensity: 3.25`、`NWeb size change`、`SetVisible nweb … visible 0→1`，以及**一簇 27 次
+  `SetExpectedFrameRateRange{15, 60, 30}`**（期望 30fps，而屏幕约 108fps）。`expectedFrameRateRange`
+  在全仓 ets 里 grep 不到，我们从未设置过它 → 来自 ArkUI 动画框架默认值。
+- `AceForEach` 在每个窗口里稳定 17–19 行。上一节记的是「负相关」，这次按遍历粒度量了：**78 次遍历里
+  23 次 ≥17 行，而每次 17 行的跨度只有 2–3ms**（且 `Ids.size[1]`、日志写的是 `skip mark dirty`，即该节点
+  被跳过）。标脏确实被富集（窗口内命中 13/17，随机 60ms 窗口基准 24.6%），但绝对成本是毫秒级，
+  **不可能构成 20–100ms 的占用**；它和卡顿是同一批状态变更的共同症状。
+
+### 顺带量到、但经检验收益近乎为零的一条：Web 节点「先全屏再收缩」
+
+每次开网页，Web 节点会**先按全屏高布局、再缩一次**：
+
+```
+NWeb size change from 0*0             to 1*1,             nweb id = N   （初始化占位）
+NWeb size change from 1*1             to 1216*2688,       nweb id = N   （全窗口高）
+NWeb size change from 1216*2688       to 1216*2564,       nweb id = N   （收缩 124px ≈ 38vp）
+```
+
+2688 正是屏幕像素高（同窗口 `native_display_manager` 报 `width: 1216, height: 2688`），即「先给全屏、再让出
+124px」。三行都在**主线程**（tid 15198）。曾设想「若避让区更早应用，就能省掉这一次表面重建」。
+
+**但重叠检验否决了这个收益。** 对全部 17 个卡顿窗口逐一求交集：
+
+| 检验 | 结果 |
+|---|---|
+| 卡顿窗口内含有 resize 的 | **2 / 17**，且都是 `sinceLoadFinished≈4465ms` 的平滑滑动段 |
+| 「开网页后头 100ms」那 10 个窗口含 resize 的 | **0 / 10** |
+| 三个收缩点之后 150ms 内的卡顿 | **仅第 3 个收缩点有**（即上面那个 sinceLoad≈4.5s 的窗口），前两个收缩点后 150ms 内无卡顿 |
+
+也就是说：你最在意的那一下（开网页后立刻滑动）与这次 resize **完全不相邻**；唯一重叠的那一帧已被归因给
+系统 HDS 材质管线，不是 resize。所以「避让区更早应用」在可测范围内收益≈0，**不建议做**。
+
+两点诚实的边界：其一，resize 发生在 `load_finished` **之前**，而帧间隔探针是从 `load_finished` 才开始跑
+（`cadence_start` 与 `timeline load_finished` 同一毫秒），这段是探针盲区，其单帧成本没测到；但收缩完成
+（35072.013）到 `load_finished`（35072.495）之间有 482ms 且未见停顿。其二，任何单帧成本低于 33ms 阈值的
+开销在本次采样里本就不可见。合并起来：**能给的上限是「一次目前看不到害处的表面重建」**，不足以支撑改动。
+
+### 一条修正：`uiTasks=none` 不能完全洗清我们的状态写入
+
+上一节用 `uiTasks=none` 得出「不是我们的 ArkTS 代码」。这个结论需要限定一个前提：`beginUiTask`/`endUiTask`
+只包住**我们自己函数的同步体**；我们函数里的 `@State`/`@StorageProp` 写入本身很快（因此不出现在窗口里），
+但它**触发的重建发生在 ArkUI 自己的帧流程里，在我的括号之外**。所以 `uiTasks=none` 排除的是「我们的同步
+计算」，**不排除「我们写状态导致的大范围重建」**。
+
+顺着这条线看窗口内容：9 个「头 100ms」窗口里占主导的是 `AceForEach` **稳定 17 行**——恰好是首页 17 个磁贴
+（同轮日志 `shortcuts=17`）。我们的渲染键是
+`` `${iconKey}:${storedResolvedThemeMode}:${storedShowShortcutNames ? 'names' : 'icons'}` ``，
+其中 `storedResolvedThemeMode` 是 `@StorageProp(BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY)`。**若开网页时
+解析出的主题模式发生变化，17 个磁贴的键会同时翻转、17 个一起重建**——这条完全属于我们，且尚未验证。
+
+但同时要压制它的量级预期：已测每次遍历日志跨度只有 2–3ms，即使 17 个全中也不过毫秒级；遍历日志也不包含
+item builder 内部的解码/几何成本。**因此这是下一个待验证假设，不是已定结论。**
+
+### 又一个测量陷阱：`shortcut_load` 的 121ms 同样是墙钟
+
+`HomeShortcutState shortcut_load_done durationMs=123 / 121` 看起来是主线程上一次 120ms 级阻塞，
+但同一区间内主线程打印了 **315 / 314 行**日志。真同步阻塞会让日志一起静默；所以这仍是 Promise 墙钟，
+与已记录过的 `visual_color_sample` 是同一个坑。**凡「开始/结束各打一条日志、中间隔很久」的耗时，必须先
+确认中间主线程有没有在打印，才能当占用用。**
+
+### 对上一条假设的验证：整体翻转**不存在**，这条假设关闭
+
+为「主题模式翻转会不会整体重建 17 个磁贴」专门加了 `tile_keys` 探针：在 `resolveShortcutContentRenderKey`
+（每个磁贴每次构建都会走）里记下当前键，去抖 60ms 收成一次快照，输出 `total/changed/vanished/allChanged`、
+`themeMode` 与 `previousThemeMode`、`changedIds`、以及 `sinceLoadFinished`。
+
+一次干净采集（冷启动 → 开网页 → 立刻滑动，3 轮）的**全部 3 次键快照**：
+
+| 时刻 | `changed` | `allChanged` | `themeMode` | `previousThemeMode` | 备注 |
+|---|---|---|---|---|---|
+| 冷启动首次构建 | 17 | yes | light | none | 首次填充，`previous` 为空，非翻转 |
+| 冷启动 +472ms | 14 | **no** | light | light | 主题模式**未变**；17 个里 14 个 `iconKey=0`→有值 |
+| 开网页后 2396ms | 1 | **no** | light | light | 仅 `shortcut-seed-bilibili` 一个图标 |
+
+**结论：假设被否。** 开网页场景下 `storedResolvedThemeMode` 全程为 `light`，`previousThemeMode` 与
+`themeMode` 始终相同，**没有任何一次「主题模式翻转导致 17 个键整体重打」**。唯一一次 `allChanged=yes`
+是冷启动首帧的初次填充（17 个键从无到有），它发生在开网页之前，`previousThemeMode=none` 也标明了这一点。
+开网页后唯一的键变化是 `changed=1`，就是我们上一轮已修好的那个 per-icon 路径正常工作。
+
+顺带修正上一条对 `AceForEach` 17 行的解读：那 17 行**不是**「键整体翻转导致的重建」。`changed=14` 那次
+（冷启动）确实接近全量，但除此之外，滑动期间的 17 行遍历对应的是 `AllChildren` 级的遍历，而不是 17 个
+item builder 全部重跑；结合每次遍历跨度仅 2–3ms，它不成立为 20–100ms 卡顿的原因。
+
+### 探针自身的两处不一致（先记下，不影响上面结论）
+
+1. **`occupancyMs` 偶尔大于 `wallGapMs`**（3 例：`wallGap=33/occ=52`、`23/76`、`33/50`）。两个指标覆盖的
+   区间本应相同，出现这种情况说明 `occupancyMaxSinceFrameMs` 的归属仍有偏差（帧回调排队延迟时，
+   定时器心跳可能落在两个帧之间而被记到相邻帧）。因此**只看 `occupancyMs` 与 `wallGapMs` 同向且量级相近
+   的部分**，不拿单个数做精细结论。
+2. **`uiTasks` 的偏移量出现 `+-1ms`**（`visual_sample_dispatch@+-1ms`）。这是浮点比较边界导致把刚结束的区间
+   算进下一帧窗口，属显示层的边界噪声；这些区间的 `durationMs` 都是 0–1ms，不改变「自有代码不构成占用」
+   的结论。
+
+### 顺带确认：含自有任务的窗口，任务本身都是毫秒级
+
+41 个窗口里只有 4 个 `uiTasks` 非 `none`，且列出的自有区间全是 0–1ms：
+`visual_sample_dispatch@+32ms/1ms`、`visual_sample_result@+6ms/0ms`、
+`web_page_visible@+60ms/0ms` + `web_load_finished@+61ms/12ms`、`visual_sample_result@+30ms/1ms`。
+最长的一段 12ms（`web_load_finished`）其所在窗口是 `wallGap=74ms`、且发生在 `sinceLoadFinished=2ms`
+（页面刚结束加载，不属于滑动场景）。**自有任务既不构成占用，也不落在滑动卡顿窗口里。**
+
+同时这一轮最大的两下（`wallGap=100/98`，`occupancyMs=91/88`）再次落在 `sinceLoadFinished≈5010/5045ms`
+的平滑滑动段，窗口内构成与上一轮完全一致：`HDS_EFFECT=132`、`HDS_tabs=60`、`AceResource=48`
+（`sys.float.hms_material_style` 读取失败），即系统 HDS 材质/模糊管线，**不是我们的代码**。
+
+### 这一步的结论
+
+- 「主题模式翻转导致 17 个磁贴整体重建」**已被数据否掉**：`themeMode` 全程未变，`allChanged` 仅出现在
+  冷启动首帧的初次填充。这条假设关闭，不需要改渲染键。
+- 剩下的卡顿**不是我们的同步计算**，也**不是我们状态写入触发的大范围重建**（这两条现在都有测量支撑）。
+- 「避让区更早应用」经重叠检验收益≈0，不做。
+- 最大的一直是系统 HDS 材质/模糊管线；平台栈采样在这台设备上不可用，所以「哪个原生调用占了多少」
+  **仍未测得**；要再进一步只能换 `hiTraceMeter` 区间 + SmartPerf 逐条看时间片归属。
+- 因此本轮**不改任何行为**，只保留埋点与上述结论。
 
 ## 来源
 

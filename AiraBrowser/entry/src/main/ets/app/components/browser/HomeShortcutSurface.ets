@@ -691,8 +691,17 @@ export struct HomeShortcutSurface {
     const iconKey = this.frozenIconsVersion >= 0
       ? this.frozenIconsVersion
       : this.resolveShortcutIconSourceRevision(shortcut);
-    return `${iconKey}:${this.storedResolvedThemeMode}:` +
+    const renderKey = `${iconKey}:${this.storedResolvedThemeMode}:` +
       `${this.storedShowShortcutNames ? 'names' : 'icons'}`;
+    // Temporary [DEBUG-load-scroll-jank-7c4d] probe: snapshot the whole key set so a theme-mode flip
+    // that re-keys all 17 tiles at once can be told apart from per-icon changes.
+    AiraLoadScrollJankProbe.noteShortcutRenderKey(
+      shortcut.id,
+      renderKey,
+      this.storedResolvedThemeMode,
+      this.storedShowShortcutNames
+    );
+    return renderKey;
   }
 
   private resolveStoredShortcutIconUri(shortcut: ShortcutRecord): string {
