@@ -369,6 +369,12 @@ export struct BrowserBottomAddressPanel {
   private homeDismissAfterLowSettlePending: boolean = false;
   private activeChromeGestureSource: BrowserBottomChromeGestureSource = 'none';
   private activeChromeGestureStartedOnVisibleChrome: boolean = false;
+  /**
+   * True when this gesture began on the collapsed bottom bar of the three-block chrome. Such a
+   * gesture belongs to the bar's own trigger (open the toolbar, or nothing), never to the panel
+   * detent machine that would expand the persistent panel behind an opaque scrim.
+   */
+  private activeChromeGestureOwnedByToolbarBar: boolean = false;
   private activeChromeGestureMiddlePanelHeight: number = 0;
   private toolbarSystemSheetDismissedAtMs: number = 0;
   private pendingToolbarSystemSheetAction: BrowserBottomAddressPanelAction | undefined = undefined;
@@ -615,9 +621,12 @@ export struct BrowserBottomAddressPanel {
             this.activeChromeGestureSource = this.isExpandedPanelDetent(this.panelDetent) ? 'none' :
               this.resolveBottomChromeGestureSource(frame.startX, frame.panelWidth);
             this.activeChromeGestureStartedOnVisibleChrome = frame.startedOnVisibleChrome;
+            this.activeChromeGestureOwnedByToolbarBar =
+              !this.isExpandedPanelDetent(this.panelDetent) && this.shouldUseThreeBlockBottomChrome();
             logToolbarPopupReopen('gesture_start', `startX=${frame.startX} panelWidth=${frame.panelWidth} ` +
               `source=${this.activeChromeGestureSource} detent=${this.panelDetent} ` +
               `onVisibleChrome=${frame.startedOnVisibleChrome} ` +
+              `barOwned=${this.activeChromeGestureOwnedByToolbarBar} ` +
               `mode=${this.liveBottomChromePresentation.mode} expanded=${this.isExpandedPanelDetent(this.panelDetent)} ` +
               `hitW=${this.resolveFloatingHeaderInteractionWidth()} ` +
               `hitH=${this.resolveFloatingHeaderInteractionHeight()} ` +
@@ -695,12 +704,14 @@ export struct BrowserBottomAddressPanel {
           }
           const source = this.activeChromeGestureSource;
           const startedOnVisibleChrome = this.activeChromeGestureStartedOnVisibleChrome;
+          const barOwned = this.activeChromeGestureOwnedByToolbarBar;
           this.activeChromeGestureSource = 'none';
           this.activeChromeGestureStartedOnVisibleChrome = false;
+          this.activeChromeGestureOwnedByToolbarBar = false;
           const opensSheet = this.shouldOpenToolbarSystemSheetFromGesture(
             targetDetent, offsetY, source, startedOnVisibleChrome);
           logToolbarPopupReopen('sheet_gesture_end', `detent=${targetDetent} offsetY=${offsetY} ` +
-            `source=${source} onVisibleChrome=${startedOnVisibleChrome} ` +
+            `source=${source} onVisibleChrome=${startedOnVisibleChrome} barOwned=${barOwned} ` +
             `sinceDismissMs=${this.toolbarSystemSheetDismissedAtMs > 0 ?
               Date.now() - this.toolbarSystemSheetDismissedAtMs : -1} ` +
             `intercept=${opensSheet}`);
@@ -708,10 +719,13 @@ export struct BrowserBottomAddressPanel {
             this.openToolbarSystemSheet('gesture_center_capsule');
             return 'low';
           }
-          // A pull that did not qualify must not fall through to the legacy panel expansion: that
-          // contradicts the refusal, and on a web page it leaves the content covered by an empty
-          // expanded panel. Settle back to the resting bar instead.
-          if (source === 'center-capsule' && !startedOnVisibleChrome) {
+          // A pull on the collapsed bar is the bar's own trigger: it either opens the toolbar or
+          // does nothing. Handing a refused pull to the legacy panel intercept expanded the
+          // persistent panel to 'middle' with nothing in it, leaving an opaque scrim over the page
+          // -- which is worse than the reopen this guard exists to stop. The outer clusters keep
+          // their own downward Return-Home path, so only the center capsule and the gaps between
+          // the three blocks are consumed here.
+          if (barOwned && (source === 'center-capsule' || source === 'none')) {
             return 'low';
           }
           return this.onPanelDragEndIntercept(panelHeight, targetDetent, offsetY, source);
