@@ -1,4 +1,4 @@
-import auth from '@hw-agconnect/auth';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BrowserDataBoundaryInput } from '../../common/models/BrowserModels';
 import {
   BrowserPrivacyEffectIntent,
@@ -10,6 +10,14 @@ import { AccountIdentityChangeCoordinator } from './AccountIdentityChangeCoordin
 import { SyncActivationResult } from '../sync/SyncActivationModels';
 import { SyncExperienceCoordinator } from '../sync/SyncExperienceCoordinator';
 import { sharedCrossDeviceTabPresenceCoordinator } from '../deviceTabs/CrossDeviceTabPresenceCoordinator';
+import {
+  HuaweiAgcSdkHandle,
+  isHuaweiAgcSdkUnavailableError,
+  sharedHuaweiAgcSdkLoader
+} from '../../platform/huawei/HuaweiAgcSdkLoader';
+
+const HUAWEI_ACCOUNT_MUTATION_DOMAIN: number = 0x0000;
+const HUAWEI_ACCOUNT_MUTATION_TAG: string = 'HuaweiAccountMutation';
 
 export interface HuaweiAccountSignOutResult {
   ok: boolean;
@@ -115,12 +123,32 @@ export class HuaweiAccountMutationCoordinator {
       .catch((_error: Error): void => {
       });
     await this.syncExperienceCoordinator.clearHuaweiAccountIdentity();
-    await auth.signOut().catch((_error: Error) => Promise.resolve());
+    await this.signOutAgcSessionIfAvailable();
     return {
       ok: true,
       title: '已退出华为账号',
       message: ''
     };
+  }
+
+  /**
+   * Local identity is already cleared by the time this runs, so an absent SDK must not fail the
+   * sign-out: there is no AGC session left to end, and the caller is told the user is signed out.
+   */
+  private async signOutAgcSessionIfAvailable(): Promise<void> {
+    try {
+      const sdk = await sharedHuaweiAgcSdkLoader.load();
+      await sdk.auth.signOut();
+    } catch (error) {
+      if (!isHuaweiAgcSdkUnavailableError(error as Error)) {
+        hilog.warn(
+          HUAWEI_ACCOUNT_MUTATION_DOMAIN,
+          HUAWEI_ACCOUNT_MUTATION_TAG,
+          'agconnect sign-out skipped error=%{public}s',
+          JSON.stringify(error)
+        );
+      }
+    }
   }
 
   private isEffectAllowed(

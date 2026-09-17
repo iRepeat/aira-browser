@@ -16,6 +16,9 @@ import browserLargeScreenOmniboxSearchViewModelTest from './BrowserLargeScreenOm
 import browserPrivacyEffectPolicyTest from './BrowserPrivacyEffectPolicy.test';
 import downloadPrivacyPolicyTest from './DownloadPrivacyPolicy.test';
 import downloadSelectionModeTest from './DownloadSelectionMode.test';
+import downloadV2StateMachineTest from './DownloadV2StateMachine.test';
+import historyAccountBindingPolicyTest from './HistoryAccountBindingPolicy.test';
+import huaweiAgcSdkLoaderTest from './HuaweiAgcSdkLoader.test';
 import settingsDestinationNavigationOwnerTest from './SettingsDestinationNavigationOwner.test';
 import airaBookmarkMergeServiceTest from './AiraBookmarkMergeService.test';
 import siteSettingTargetAndUserAgentTest from './SiteSettingTargetAndUserAgent.test';
@@ -42,11 +45,14 @@ import airaBookmarkIdentityNoOpServiceTest from './AiraBookmarkIdentityNoOpServi
 import airaSyncClosedLoopTest from './AiraSyncClosedLoop.test';
 import airaSyncWorkThrottleTest from './AiraSyncWorkThrottle.test';
 import huaweiSpaceHistoryCloudReadGateTest from './HuaweiSpaceHistoryCloudReadGate.test';
+import historySyncTransportContractTest from './HistorySyncTransportContract.test';
 import huaweiSpaceTransportWarmupTest from './HuaweiSpaceTransportWarmup.test';
 import historySelectionMoreMenuTest from './HistorySelectionMoreMenu.test';
 import huaweiIapProductCatalogTest from './HuaweiIapProductCatalog.test';
 import startupWelcomeIntroTest from './StartupWelcomeIntro.test';
 import browserWebTopSafeAreaColorTest from './BrowserWebTopSafeAreaColor.test';
+import browserSearchEnginePopupLayoutViewModelTest from './BrowserSearchEnginePopupLayoutViewModel.test';
+import browserTabsOverviewSwipeDismissPolicyTest from './BrowserTabsOverviewSwipeDismissPolicy.test';
 
 export default function tests(): void {
   userScriptValueStateStoreTest();
@@ -66,6 +72,9 @@ export default function tests(): void {
   browserPrivacyEffectPolicyTest();
   downloadPrivacyPolicyTest();
   downloadSelectionModeTest();
+  downloadV2StateMachineTest();
+  historyAccountBindingPolicyTest();
+  huaweiAgcSdkLoaderTest();
   settingsDestinationNavigationOwnerTest();
   airaBookmarkMergeServiceTest();
   siteSettingTargetAndUserAgentTest();
@@ -91,9 +100,12 @@ export default function tests(): void {
   airaSyncClosedLoopTest();
   airaSyncWorkThrottleTest();
   huaweiSpaceHistoryCloudReadGateTest();
+  historySyncTransportContractTest();
   huaweiSpaceTransportWarmupTest();
   historySelectionMoreMenuTest();
   huaweiIapProductCatalogTest();
   startupWelcomeIntroTest();
   browserWebTopSafeAreaColorTest();
+  browserSearchEnginePopupLayoutViewModelTest();
+  browserTabsOverviewSwipeDismissPolicyTest();
 }

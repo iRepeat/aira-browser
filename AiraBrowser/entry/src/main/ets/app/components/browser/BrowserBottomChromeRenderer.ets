@@ -26,7 +26,10 @@ import {
   BROWSER_FLOATING_CHROME_RELEASE_DURATION_MS
 } from '../../../core/browser/BrowserBottomAddressPanelMetrics';
 import { AiraIcon } from '../common/AiraIcon';
+import { logToolbarPopupReopen } from '../../../common/debug/AiraToolbarPopupReopenProbe';
 import { SearchEngineIconResources } from '../search/SearchEngineIconResources';
+import { BrowserSearchEnginePopupLayoutViewModel } from
+  '../../../core/browser/BrowserSearchEnginePopupLayoutViewModel';
 import {
   DownloadToolbarIndicatorState,
   createHiddenDownloadToolbarIndicatorState
@@ -109,6 +112,21 @@ export struct BrowserBottomChromeRenderer {
   @State private centerBodyPressedProgress: number = 0;
   @State private addressContextMenuVisible: boolean = false;
   @State private searchEnginePopupVisible: boolean = false;
+  /**
+   * Visibility captured on touch-down. The toggle must be computed against the state the user
+   * actually pressed, because the popup can dismiss itself (auto-cancel on a stray tap) between
+   * down and click, and inverting the live value then reads as "open" again.
+   */
+  private searchEnginePopupVisibleAtPress: boolean = false;
+  /**
+   * Global top of the search-engine popup's anchor. The popup is capped to the space above it so
+   * the framework never flips the menu onto the keyboard. Deliberately not reactive: it is
+   * refreshed on layout and on touch-down, both of which run before the popup reads it, so it
+   * needs no render of its own.
+   */
+  private searchEnginePopupAnchorTopVp: number = 0;
+  private searchEnginePopupLayout: BrowserSearchEnginePopupLayoutViewModel =
+    new BrowserSearchEnginePopupLayoutViewModel();
   private pressedTargetIntent: BrowserBottomChromeTapIntent | undefined;
   private pressedTargetIntentKey: string = '';
   private pressedTargetMotionVersion: number = 0;
@@ -157,6 +175,8 @@ export struct BrowserBottomChromeRenderer {
   @Prop chromeIconTone: AppChromeIconTone = 'light';
   @Prop reliableActionsEnabled: boolean = true;
   @Prop addressContextMenuEnabled: boolean = false;
+  /** Window top safe inset, used to bound the search-engine popup to the space above its anchor. */
+  @Prop topSafeInsetVp: number = 0;
   @BuilderParam editingLayer: () => void = this.emptyBuilder;
   onIntent: (intent: BrowserBottomChromeTapIntent) => void = (_intent: BrowserBottomChromeTapIntent) => {};
   onLongPressIntent: (intent: BrowserBottomChromeTapIntent) => void =
@@ -180,13 +200,15 @@ export struct BrowserBottomChromeRenderer {
     if (this.presentation.mode === 'center-active-editing') {
       this.scheduleImmediateFocusReady();
     }
+    logToolbarPopupReopen('renderer_appear', `mode=${this.presentation.mode} scene=${this.presentation.scene} ` +
+      `popupFlag=${this.searchEnginePopupVisible} slotVisible=${this.isSearchEngineMenuVisible()}`);
   }
 
   aboutToDisappear(): void {
     this.invalidateActiveMotion();
     this.resetPressedTarget();
     this.clearFocusReadyTimer();
-    this.searchEnginePopupVisible = false;
+    this.applySearchEnginePopupVisible(false, 'about_to_disappear');
     this.addressContextMenuVisible = false;
     this.clearPressedTargetIntent();
   }
@@ -573,7 +595,20 @@ export struct BrowserBottomChromeRenderer {
       .accessibilityText(this.resolveLiveTapTarget('center-leading').accessibilityText)
       .hitTestBehavior(this.isTargetEnabled(this.resolveLiveTapTarget('center-leading')) ?
         HitTestMode.Default : HitTestMode.None)
+      // The popup's own height is derived from this, so it must reflect the anchor's real
+      // on-screen top rather than its untransformed layout slot.
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        this.rememberSearchEnginePopupAnchorTop(this.parseAreaPosition(newArea.globalPosition.y));
+      })
       .onTouch((event: TouchEvent) => {
+        if (event.type === TouchType.Down) {
+          this.searchEnginePopupVisibleAtPress = this.searchEnginePopupVisible;
+          // The frame that opens the popup has to know the anchor's top already, and onAreaChange
+          // has not necessarily reported it for this mount yet, so take it from the press itself.
+          this.rememberSearchEnginePopupAnchorTop(this.parseAreaPosition(event.target.area.globalPosition.y));
+          logToolbarPopupReopen('popup_anchor_down',
+            `visible=${this.searchEnginePopupVisible} slotVisible=${this.isSearchEngineMenuVisible()}`);
+        }
         this.updatePressedTarget(
           'center-leading',
           this.resolveLiveTapTarget('center-leading'),
@@ -584,16 +619,28 @@ export struct BrowserBottomChromeRenderer {
         if (!this.isTargetEnabled(this.resolveLiveTapTarget('center-leading'))) {
           return;
         }
-        this.searchEnginePopupVisible = !this.searchEnginePopupVisible;
+        this.applySearchEnginePopupVisible(!this.searchEnginePopupVisibleAtPress, 'anchor_click_toggle');
       })
-      .bindPopup(this.searchEnginePopupVisible, {
+      .bindPopup(this.searchEnginePopupVisible && this.isSearchEngineMenuVisible(), {
         builder: this.buildSearchEnginePopup,
         placement: Placement.Top,
         popupColor: $r('sys.color.ohos_id_color_background_transparent'),
         enableArrow: false,
         autoCancel: true,
+        /**
+         * The authoritative clear. onStateChange reports the dismissal only after it has happened
+         * and is skipped entirely when the bound slot is torn down by a mode change, so a flag left
+         * set there can be handed back to the framework as "show" on the next re-render and revive
+         * the popup without a tap. Clearing it as the dismissal starts closes that window.
+         */
+        onWillDismiss: (action: DismissPopupAction) => {
+          logToolbarPopupReopen('popup_on_will_dismiss', `reason=${action.reason}`);
+          this.applySearchEnginePopupVisible(false, 'on_will_dismiss');
+          action.dismiss();
+        },
         onStateChange: (event: PopupStateChangeParam) => {
-          this.searchEnginePopupVisible = event.isVisible;
+          logToolbarPopupReopen('popup_on_state_change', `isVisible=${event.isVisible}`);
+          this.applySearchEnginePopupVisible(event.isVisible, 'on_state_change');
         },
         showInSubWindow: false,
         mask: false,
@@ -677,7 +724,7 @@ export struct BrowserBottomChromeRenderer {
     .focusOnTouch(false)
     .accessibilityText(`切换到${engine.name}`)
     .onClick(() => {
-      this.searchEnginePopupVisible = false;
+      this.applySearchEnginePopupVisible(false, 'row_select');
       this.onSelectSearchEngine(engine.id);
     })
   }
@@ -1042,6 +1089,9 @@ export struct BrowserBottomChromeRenderer {
     const frameChanged = !this.targetFrame.isEquivalent(this.presentation.frame);
     const compactChanged = !this.isCompactProgressSettled();
     const displaySwapNeeded = this.shouldSwapDisplayContent(previous, this.presentation);
+    logToolbarPopupReopen('renderer_sync_presentation',
+      `mode=${previous.mode}->${this.presentation.mode} scene=${this.presentation.scene} ` +
+      `popupFlag=${this.searchEnginePopupVisible} frameChanged=${frameChanged} compactChanged=${compactChanged}`);
     this.currentPresentation = this.presentation;
     this.compactFrame = this.presentation.compactFrame;
     this.applyPresentationMetadata(this.presentation);
@@ -1053,7 +1103,7 @@ export struct BrowserBottomChromeRenderer {
       this.addressContextMenuVisible = false;
     }
     if (!this.isSearchEngineMenuVisible()) {
-      this.searchEnginePopupVisible = false;
+      this.applySearchEnginePopupVisible(false, 'sync_presentation_slot_gone');
     }
     if (this.presentation.mode !== 'center-active-editing') {
       this.focusReadyDispatched = false;
@@ -1613,17 +1663,66 @@ export struct BrowserBottomChromeRenderer {
     return this.presentation.centerLeadingTarget.intent.kind === 'open-search-engine-menu';
   }
 
+  /**
+   * Temporary probe: every write to the popup flag goes through here so a capture shows not just
+   * that the popup came back but which trigger asked for it.
+   */
+  private applySearchEnginePopupVisible(next: boolean, trigger: string): void {
+    logToolbarPopupReopen('popup_write', `trigger=${trigger} from=${this.searchEnginePopupVisible} ` +
+      `to=${next} slotVisible=${this.isSearchEngineMenuVisible()} mode=${this.presentation.mode} ` +
+      `scene=${this.presentation.scene} atPress=${this.searchEnginePopupVisibleAtPress}`);
+    this.searchEnginePopupVisible = next;
+  }
+
   private isSelectedSearchEngine(engineId: SearchEngineId): boolean {
     return this.presentation.searchEnginePresentation.selectedSearchEngine === engineId;
   }
 
+  /**
+   * The menu is capped to the space above its own anchor so `Placement.Top` stays satisfiable.
+   * Anything taller lets the framework flip the popup downwards onto the keyboard, which this
+   * window never treats as occupied. Rows that no longer fit stay reachable through the popup's
+   * Scroll.
+   */
   private resolveSearchEnginePopupHeight(): number {
-    const rowCount = Math.max(1, Math.min(
+    const preferredRowCount = Math.max(1, Math.min(
       BROWSER_SEARCH_ENGINE_POPUP_MAX_VISIBLE_ROWS,
       this.presentation.searchEnginePresentation.searchEngines.length
     ));
-    return rowCount * BROWSER_SEARCH_ENGINE_POPUP_ROW_HEIGHT +
-      BROWSER_SEARCH_ENGINE_POPUP_CONTENT_PADDING * 2;
+    return this.searchEnginePopupLayout.resolve({
+      anchorTopVp: this.searchEnginePopupAnchorTopVp,
+      topSafeInsetVp: this.topSafeInsetVp,
+      rowHeightVp: BROWSER_SEARCH_ENGINE_POPUP_ROW_HEIGHT,
+      contentPaddingVp: BROWSER_SEARCH_ENGINE_POPUP_CONTENT_PADDING,
+      preferredRowCount: preferredRowCount,
+      anchorGapVp: BROWSER_SEARCH_ENGINE_POPUP_TARGET_SPACE
+    }).heightVp;
+  }
+
+  private parseAreaDimension(value: Length): number {
+    if (typeof value === 'number') {
+      return value;
+    }
+    const parsed = Number.parseFloat(`${value}`);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private parseAreaPosition(value?: Length): number {
+    return value === undefined ? 0 : this.parseAreaDimension(value);
+  }
+
+  /**
+   * A zero or negative reading means the host has not measured the anchor; the popup policy keeps
+   * the full menu in that case rather than collapsing to a single row on a bad measurement.
+   */
+  private rememberSearchEnginePopupAnchorTop(anchorTop: number): void {
+    if (!Number.isFinite(anchorTop) || anchorTop <= 0) {
+      return;
+    }
+    if (Math.abs(anchorTop - this.searchEnginePopupAnchorTopVp) < 1) {
+      return;
+    }
+    this.searchEnginePopupAnchorTopVp = anchorTop;
   }
 
   private resolveSelectedSearchEngineIcon(): Resource | undefined {

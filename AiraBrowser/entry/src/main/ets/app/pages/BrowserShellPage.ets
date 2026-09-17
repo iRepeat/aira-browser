@@ -6772,6 +6772,7 @@ struct BrowserShellPage {
       toolbarSystemSheetRequested: this.rootBottomPanelToolbarSystemSheetRequested,
       toolbarSystemSheetRequestVersion: this.rootBottomPanelToolbarSystemSheetRequestVersion,
       responsiveState: renderContext.responsiveState,
+      topSafeInsetVp: this.homeTopSafeInsetVp,
       onPanelDetentChange: (detent: HomeSearchPanelDetent) => {
         this.applyRootBottomPanelDetent(detent);
       },

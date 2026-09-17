@@ -420,6 +420,8 @@ export struct BrowserBottomAddressPanel {
   @Prop responsiveState: BrowserBottomPanelResponsiveState = DEFAULT_BROWSER_BOTTOM_PANEL_RESPONSIVE_STATE;
   @Prop toolbarActionRevision: number = 0;
   @Prop toolbarLayoutRevision: number = 0;
+  /** Window top safe inset, forwarded to the chrome renderer that bounds the search-engine popup. */
+  @Prop topSafeInsetVp: number = 0;
   @Prop
   @Watch('syncToolbarSystemSheetRequest')
   toolbarSystemSheetRequested: boolean = false;
@@ -912,6 +914,7 @@ export struct BrowserBottomAddressPanel {
       chromeIconTone: this.resolveChromeIconTone(),
       reliableActionsEnabled: this.reliableHeaderActionEnabled,
       addressContextMenuEnabled: true,
+      topSafeInsetVp: this.topSafeInsetVp,
       editingLayer: () => {
         this.buildBottomChromeEditingLayer()
       },

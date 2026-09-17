@@ -46,6 +46,9 @@ import {
   BrowserTabsOverviewSwipeFeedbackService
 } from '../../../core/browser/tabsOverview/BrowserTabsOverviewSwipeFeedbackService';
 import {
+  BrowserTabsOverviewSwipeDismissPolicy
+} from '../../../core/browser/tabsOverview/BrowserTabsOverviewSwipeDismissPolicy';
+import {
   BrowserTabsOverviewSelectionDisplacement,
   BrowserTabsOverviewSelectionDisplacementCoordinator
 } from '../../../core/browser/tabsOverview/BrowserTabsOverviewSelectionDisplacementCoordinator';
@@ -189,6 +192,8 @@ export struct BrowserTabsFloatingOverlay {
   private overlayViewModel: BrowserTabsOverlayViewModel = new BrowserTabsOverlayViewModel();
   private animationViewModel: BrowserTabsOverlayAnimationViewModel = new BrowserTabsOverlayAnimationViewModel();
   private sectionPolicy: BrowserTabsOverviewSectionPolicy = new BrowserTabsOverviewSectionPolicy();
+  private swipeDismissPolicy: BrowserTabsOverviewSwipeDismissPolicy =
+    new BrowserTabsOverviewSwipeDismissPolicy();
   private selectionDisplacementCoordinator: BrowserTabsOverviewSelectionDisplacementCoordinator =
     new BrowserTabsOverviewSelectionDisplacementCoordinator();
   private entryTargetCoordinator: BrowserTabsFloatingEntryTargetCoordinator =
@@ -584,7 +589,7 @@ export struct BrowserTabsFloatingOverlay {
       entryMountDurationMs: this.animationViewModel.getFloatingCardEntryDurationMs(),
       entryMountCurve: this.animationViewModel.getFloatingCardEntryCurve(),
       entryMountDelayMs: this.resolveCardMotionDelayMs(item.index),
-      swipeDismissThreshold: 96,
+      swipeDismissThreshold: this.resolveSwipeDismissThreshold(item),
       swipeFlyoutOffset: this.resolveRootWidth(),
       swipeDismissMode: this.layoutState.layoutStyle === 'horizontal_cards' ? 'upward' : 'horizontal',
       closeButtonEnabled: true,
@@ -1574,6 +1579,18 @@ export struct BrowserTabsFloatingOverlay {
   private resolveItemHeight(item: BrowserTabsFloatingItem): number {
     return this.resolveCardHeight(item) + this.layoutState.identityHeaderHeight +
       this.layoutState.identityPreviewGap;
+  }
+
+  /**
+   * The dismiss gesture runs along the card's own axis: a grid card is swiped sideways, while the
+   * horizontal-cards style is swiped up, so the travel that matters is the card's height. Measuring
+   * the card keeps the effort the same on every window size instead of a fixed distance that is a
+   * fifth of a desktop card and two thirds of a phone one.
+   */
+  private resolveSwipeDismissThreshold(item: BrowserTabsFloatingItem): number {
+    const extent = this.layoutState.layoutStyle === 'horizontal_cards' ?
+      this.resolveItemHeight(item) : this.resolveCardWidth(item);
+    return this.swipeDismissPolicy.resolveThresholdVp(extent);
   }
 
   private resolveHorizontalEdgeInset(first: boolean): number {

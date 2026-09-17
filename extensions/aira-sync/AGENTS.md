@@ -38,6 +38,6 @@ These rules are mandatory for Codex or any other coding agent working in this re
 
 ## Workspace Safety
 
-- Preserve unrelated working-tree changes. Do not create or switch branches/worktrees unless the user explicitly asks.
+- Preserve unrelated working-tree changes. Work directly on `main`; never create or switch branches/worktrees.
 - Never commit credentials, tokens, production environment files, browser profile data, `node_modules`, signing material,
   or remote data snapshots.

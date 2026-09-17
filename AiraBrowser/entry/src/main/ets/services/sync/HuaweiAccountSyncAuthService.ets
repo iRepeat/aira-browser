@@ -1,4 +1,3 @@
-import auth, { AuthUser } from '@hw-agconnect/auth';
 import { authentication } from '@kit.AccountKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -7,6 +6,12 @@ import { AppRuntimeContext } from '../../app/runtime/AppRuntimeContext';
 import { HuaweiCloudSyncInitService } from './HuaweiCloudSyncInitService';
 import { AIRA_DISTRIBUTION_CAPABILITY_OWNER } from '../../common/config/AiraDistributionCapabilityOwner';
 import { resolveAiraLocalTestIdentity } from '../../common/config/AiraLocalTestAuth';
+import {
+  HuaweiAgcAuthHandle,
+  HuaweiAgcAuthUserHandle,
+  HuaweiAgcSdkHandle,
+  sharedHuaweiAgcSdkLoader
+} from '../../platform/huawei/HuaweiAgcSdkLoader';
 
 const HUAWEI_ACCOUNT_AUTH_DOMAIN = 0x0000;
 const HUAWEI_ACCOUNT_AUTH_TAG = 'HuaweiAccountAuth';
@@ -37,6 +42,7 @@ class AgcHuaweiAccountSyncAuthAdapter implements HuaweiAccountSyncAuthAdapter {
     if (current !== undefined) {
       return this.enrichWithHuaweiProfile(current);
     }
+    const auth: HuaweiAgcAuthHandle = await this.resolveAuth();
     const result = await auth.signIn({
       autoCreateUser: true,
       credentialInfo: {
@@ -53,7 +59,8 @@ class AgcHuaweiAccountSyncAuthAdapter implements HuaweiAccountSyncAuthAdapter {
     return this.enrichWithHuaweiProfile(baseIdentity);
   }
 
-  resetSignInState(): Promise<void> {
+  async resetSignInState(): Promise<void> {
+    const auth = await this.resolveAuth();
     return auth.signOut()
       .catch((error: Error) => {
         const detail = error as HuaweiAccountSyncErrorDetail;
@@ -65,6 +72,7 @@ class AgcHuaweiAccountSyncAuthAdapter implements HuaweiAccountSyncAuthAdapter {
   }
 
   async getCurrentIdentity(): Promise<HuaweiAccountSyncIdentity | undefined> {
+    const auth = await this.resolveAuth();
     const user = await auth.getCurrentUser();
     if (user === null) {
       return undefined;
@@ -80,8 +88,18 @@ class AgcHuaweiAccountSyncAuthAdapter implements HuaweiAccountSyncAuthAdapter {
     return this.enrichWithHuaweiProfile(current, false);
   }
 
-  signOut(): Promise<void> {
+  async signOut(): Promise<void> {
+    const auth = await this.resolveAuth();
     return auth.signOut();
+  }
+
+  /**
+   * Resolves the Official AGConnect SDK on demand. When the package does not carry it this rejects
+   * with HuaweiAgcSdkUnavailableError, which the callers surface as "feature unavailable".
+   */
+  private async resolveAuth(): Promise<HuaweiAgcAuthHandle> {
+    const sdk: HuaweiAgcSdkHandle = await sharedHuaweiAgcSdkLoader.load();
+    return sdk.auth;
   }
 
   private resolveDisplayName(displayName: string | undefined, uid: string | undefined): string {
@@ -102,7 +120,7 @@ class AgcHuaweiAccountSyncAuthAdapter implements HuaweiAccountSyncAuthAdapter {
     return photoUrl?.trim() ?? '';
   }
 
-  private buildIdentityFromUser(user: AuthUser): HuaweiAccountSyncIdentity {
+  private buildIdentityFromUser(user: HuaweiAgcAuthUserHandle): HuaweiAccountSyncIdentity {
     const uid = this.resolveUid(user.getUid());
     return {
       uid: uid,
@@ -313,7 +331,8 @@ export class HuaweiAccountSyncAuthService implements HuaweiAccountAccessTokenPro
   }
 
   private async getSignedInUserAccessToken(forceRefresh: boolean): Promise<HuaweiAccountSyncAccessToken> {
-    const user = await auth.getCurrentUser();
+    const sdk: HuaweiAgcSdkHandle = await sharedHuaweiAgcSdkLoader.load();
+    const user = await sdk.auth.getCurrentUser();
     if (user === null) {
       throw new Error('No AGC user signed in.');
     }
