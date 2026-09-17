@@ -14,6 +14,7 @@ import novelFontSubstitutionPolicyTest from './NovelFontSubstitutionPolicy.test'
 import browserLargeScreenOmniboxSearchViewModelTest from './BrowserLargeScreenOmniboxSearchViewModel.test';
 import browserPrivacyEffectPolicyTest from './BrowserPrivacyEffectPolicy.test';
 import downloadPrivacyPolicyTest from './DownloadPrivacyPolicy.test';
+import downloadSelectionModeTest from './DownloadSelectionMode.test';
 import settingsDestinationNavigationOwnerTest from './SettingsDestinationNavigationOwner.test';
 import airaBookmarkMergeServiceTest from './AiraBookmarkMergeService.test';
 import siteSettingTargetAndUserAgentTest from './SiteSettingTargetAndUserAgent.test';
@@ -62,6 +63,7 @@ export default function tests(): void {
   browserLargeScreenOmniboxSearchViewModelTest();
   browserPrivacyEffectPolicyTest();
   downloadPrivacyPolicyTest();
+  downloadSelectionModeTest();
   settingsDestinationNavigationOwnerTest();
   airaBookmarkMergeServiceTest();
   siteSettingTargetAndUserAgentTest();

@@ -45,8 +45,11 @@ export struct BrowserDownloadManagementRow {
   @ObjectLink row: DownloadManagementRowState;
   @State private cardPressed: boolean = false;
   @State private contextMenuVisible: boolean = false;
+  @Prop selectionMode: boolean = false;
+  @Prop selected: boolean = false;
   onAction: (guid: string, action: DownloadManagementRowAction) => void =
     (_guid: string, _action: DownloadManagementRowAction): void => {};
+  onToggleSelection: (guid: string) => void = (_guid: string): void => {};
 
   build() {
     if (this.row.status === 'completed') {
@@ -68,7 +71,9 @@ export struct BrowserDownloadManagementRow {
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
 
-      if (this.row.primaryAction !== undefined) {
+      if (this.selectionMode) {
+        this.buildSelectionCheckbox()
+      } else if (this.row.primaryAction !== undefined) {
         this.buildPrimaryActionButton()
       }
     }
@@ -366,10 +371,28 @@ export struct BrowserDownloadManagementRow {
     return this.row.status === 'completed' && this.row.primaryAction === 'open_file';
   }
 
+  @Builder
+  private buildSelectionCheckbox() {
+    // Display-only: the card tap owns the toggle, so one press can never select and
+    // immediately deselect by reaching both the Checkbox and the card gesture.
+    Checkbox()
+      .width(22)
+      .height(22)
+      .shape(CheckBoxShape.CIRCLE)
+      .select(this.selected)
+      .selectedColor(this.storedAccentColor)
+      .hitTestBehavior(HitTestMode.None)
+      .focusable(false)
+  }
+
   private resolveInteractiveCardBackgroundColor(): ResourceColor {
-    return this.cardPressed
-      ? this.storedPressedBackgroundColor
-      : this.storedSurfaceBackgroundColor;
+    if (this.cardPressed) {
+      return this.storedPressedBackgroundColor;
+    }
+    if (this.selectionMode && this.selected) {
+      return this.storedControlBackgroundColor;
+    }
+    return this.storedSurfaceBackgroundColor;
   }
 
   private resolveInteractiveCardBackdropBlurRadius(): number {
@@ -387,6 +410,10 @@ export struct BrowserDownloadManagementRow {
   }
 
   private handleCompletedCardClick(): void {
+    if (this.selectionMode) {
+      this.onToggleSelection(this.row.guid);
+      return;
+    }
     if (!this.isCompletedCardClickable()) {
       return;
     }
@@ -404,13 +431,16 @@ export struct BrowserDownloadManagementRow {
   }
 
   private openContextMenu(): void {
+    if (this.selectionMode) {
+      return;
+    }
     if (this.row.menuActions.length > 0) {
       this.contextMenuVisible = true;
     }
   }
 
   private shouldShowContextMenu(): boolean {
-    return this.contextMenuVisible && this.row.menuActions.length > 0;
+    return this.contextMenuVisible && !this.selectionMode && this.row.menuActions.length > 0;
   }
 
   private dismissContextMenu(): void {

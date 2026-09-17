@@ -18,6 +18,14 @@ import {
   DownloadManagerViewModel
 } from '../../../core/download/DownloadManagerViewModel';
 import {
+  buildDownloadSelectionTitle,
+  canSelectDownloadTask,
+  collectSelectableDownloadGuids,
+  DownloadSelectionCandidate,
+  DOWNLOAD_SELECTION_EMPTY_TOAST,
+  pruneDownloadSelection
+} from '../../../core/download/DownloadSelectionViewModel';
+import {
   DownloadQueryGroup,
   DownloadTaskBoundary,
   getDownloadV2QueryGroup
@@ -50,6 +58,7 @@ import { FloatingGlassMaterialSurface } from '../common/FloatingGlassMaterialSur
 import { resolveFloatingGlassMaterialTintForMode } from '../common/FloatingGlassMaterialTokens';
 import { AppWindowModalLayoutService } from '../../../services/layout/AppWindowModalLayoutService';
 import { BROWSER_WINDOW_SAFE_TOP_INSET_STORAGE_KEY } from '../../../core/browser/BrowserWindowAvoidAreaCoordinator';
+import { FloatingSelectionToolbar } from '../common/FloatingSelectionToolbar';
 
 interface HiddenDownloadTaskSnapshot {
   guid: string;
@@ -62,6 +71,8 @@ interface OptimisticControlSnapshot {
 }
 
 type CompletedDownloadDeleteMode = 'task_only' | 'task_and_file';
+
+type BatchDownloadDeleteScope = 'records_only' | 'records_and_files';
 
 const DOWNLOAD_MANAGEMENT_REFRESH_INTERVAL_MS: number = 1500;
 const DOWNLOAD_MANAGEMENT_DOMAIN = 0x0000;
@@ -82,6 +93,8 @@ const DOWNLOAD_FILTER_TO_CONTENT_GAP: number = 4;
 const DOWNLOAD_EMBEDDED_FILTER_TOP_INSET: number = 8;
 const DOWNLOAD_IMMERSIVE_TITLE_TO_CONTENT_GAP: number = 16;
 const DOWNLOAD_IMMERSIVE_TOP_BLUR_RADIUS: number = 20;
+const DOWNLOAD_CONTEXT_MENU_DISMISS_DELAY_MS: number = 240;
+const DOWNLOAD_SELECTION_TOOLBAR_FLOAT_BOTTOM: number = 36;
 
 @Component
 export struct BrowserDownloadManagementScreen {
@@ -118,6 +131,8 @@ export struct BrowserDownloadManagementScreen {
   @State completedDeleteConfirmFileName: string = '';
   @State completedDeleteConfirmMode: CompletedDownloadDeleteMode = 'task_only';
   @State locallyHiddenTasks: HiddenDownloadTaskSnapshot[] = [];
+  @State isSelectionMode: boolean = false;
+  @State selectedGuids: string[] = [];
   @State private downloadSettingsPopupVisible: boolean = false;
   @State private viewportWidthVp: number = 0;
   @State private viewportHeightVp: number = 0;
@@ -170,9 +185,29 @@ export struct BrowserDownloadManagementScreen {
   }
 
   build() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      this.buildManagementScaffold()
+
+      this.buildSelectionToolbarOverlay()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.storedPageBackgroundColor)
+    .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], this.resolveSystemSafeAreaEdges())
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      this.updateViewportSize(newArea);
+    })
+    .onAppear(() => {
+      this.presentCancelDialogIfNeeded();
+      this.presentCompletedDeleteDialogIfNeeded();
+    })
+  }
+
+  @Builder
+  private buildManagementScaffold() {
     Column() {
       ManagementHdsScaffold({
-        title: '下载',
+        title: this.resolveScreenTitle(),
         backIconKind: 'close',
         showBackButton: this.presentationMode !== 'native_tab',
         useTopSafeInset: this.presentationMode !== 'native_tab',
@@ -183,6 +218,10 @@ export struct BrowserDownloadManagementScreen {
         immersiveContent: this.presentationMode !== 'native_tab',
         menuActions: this.buildHeaderMenuActions(),
         onBack: () => {
+          if (this.isSelectionMode) {
+            this.exitSelectionMode();
+            return;
+          }
           router.back();
         }
       }) {
@@ -208,14 +247,45 @@ export struct BrowserDownloadManagementScreen {
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
     .backgroundColor(this.storedPageBackgroundColor)
-    .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], this.resolveSystemSafeAreaEdges())
-    .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      this.updateViewportSize(newArea);
-    })
-    .onAppear(() => {
-      this.presentCancelDialogIfNeeded();
-      this.presentCompletedDeleteDialogIfNeeded();
-    })
+  }
+
+  @Builder
+  private buildSelectionToolbarOverlay() {
+    if (this.isSelectionMode) {
+      Stack({ alignContent: Alignment.Bottom }) {
+        FloatingSelectionToolbar({
+          actions: [
+            {
+              airaIconId: 'browser.toolbar.selectAll',
+              title: '全选',
+              action: (): void => {
+                this.selectAllVisibleRows();
+              }
+            },
+            {
+              airaIconId: 'browser.tabs.delete',
+              title: '删除',
+              action: (): void => {
+                this.confirmDeleteSelectedRows();
+              }
+            }
+          ]
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ bottom: DOWNLOAD_SELECTION_TOOLBAR_FLOAT_BOTTOM })
+      .hitTestBehavior(HitTestMode.Transparent)
+      .zIndex(60)
+      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    }
+  }
+
+  private resolveScreenTitle(): string {
+    if (this.isSelectionMode) {
+      return buildDownloadSelectionTitle(this.selectedGuids.length);
+    }
+    return '下载';
   }
 
   @Builder
@@ -365,7 +435,7 @@ export struct BrowserDownloadManagementScreen {
   }
 
   private buildHeaderMenuActions(): ManagementHdsMenuAction[] {
-    if (this.presentationMode === 'native_tab') {
+    if (this.presentationMode === 'native_tab' || this.isSelectionMode) {
       return [];
     }
     const actions: ManagementHdsMenuAction[] = [
@@ -438,11 +508,17 @@ export struct BrowserDownloadManagementScreen {
       ForEach(this.getRowsForGroup(group), (row: DownloadManagementRowState) => {
         BrowserDownloadManagementRow({
           row: row,
+          selectionMode: this.isSelectionMode,
+          selected: this.isRowSelected(row.guid),
           onAction: (guid: string, action: DownloadManagementRowAction): void => {
             this.handleRowAction(guid, action);
+          },
+          onToggleSelection: (guid: string): void => {
+            this.toggleRowSelection(guid);
           }
         })
-      }, (row: DownloadManagementRowState) => row.guid)
+      }, (row: DownloadManagementRowState) =>
+        `${row.guid}:${this.isRowSelected(row.guid) ? 'selected' : 'idle'}:${this.isSelectionMode ? 'edit' : 'browse'}`)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -541,6 +617,7 @@ export struct BrowserDownloadManagementScreen {
         baseListState
       );
       this.downloadListState = this.reconcileRowStateList(latestListState);
+      this.pruneSelectionToVisibleRows();
       this.syncSwiperToSelectedGroup(false);
       this.updateAutoRefreshTimer();
       const selectedRows = this.getRowsForGroup(this.selectedGroup);
@@ -1060,6 +1137,15 @@ export struct BrowserDownloadManagementScreen {
   }
 
   private handleRowAction(guid: string, action: DownloadManagementRowAction): void {
+    if (action === 'enter_selection') {
+      this.runAfterContextMenuDismiss((): void => {
+        this.enterSelectionMode(guid);
+      });
+      return;
+    }
+    if (this.isSelectionMode) {
+      return;
+    }
     if (action === 'cancel') {
       this.requestCancelDownload(guid);
       return;
@@ -1112,6 +1198,23 @@ export struct BrowserDownloadManagementScreen {
       group: this.resolveVisibleGroupForGuid(guid)
     }]);
     this.refreshState();
+  }
+
+  private hideTasksLocally(guids: string[]): void {
+    const nextHidden: HiddenDownloadTaskSnapshot[] = [];
+    guids.forEach((guid: string) => {
+      if (this.findHiddenTaskSnapshotIndex(guid) >= 0) {
+        return;
+      }
+      nextHidden.push({
+        guid: guid,
+        group: this.resolveVisibleGroupForGuid(guid)
+      });
+    });
+    if (nextHidden.length === 0) {
+      return;
+    }
+    this.locallyHiddenTasks = this.locallyHiddenTasks.concat(nextHidden);
   }
 
   private showTaskLocally(guid: string): void {
@@ -1311,6 +1414,159 @@ export struct BrowserDownloadManagementScreen {
     const groups = this.getAvailableGroups();
     const selectedIndex = groups.findIndex((group: DownloadManagementGroupState) => group.group === this.selectedGroup);
     return selectedIndex >= 0 ? selectedIndex : 0;
+  }
+
+  private enterSelectionMode(initialGuid?: string): void {
+    if (!this.canEnterSelectionMode()) {
+      this.showToast('当前没有可多选的下载任务。');
+      return;
+    }
+    this.isSelectionMode = true;
+    this.selectedGuids = [];
+    if (initialGuid !== undefined && initialGuid.length > 0) {
+      this.setRowSelected(initialGuid, true);
+    }
+  }
+
+  private exitSelectionMode(): void {
+    this.isSelectionMode = false;
+    this.selectedGuids = [];
+  }
+
+  private canEnterSelectionMode(): boolean {
+    return this.collectSelectableRows().length > 0;
+  }
+
+  private collectSelectableRows(): DownloadSelectionCandidate[] {
+    const candidates: DownloadSelectionCandidate[] = [];
+    this.downloadListState.groups.forEach((group: DownloadManagementGroupState) => {
+      group.rows.forEach((row: DownloadManagementRowState) => {
+        candidates.push({
+          guid: row.guid,
+          status: row.status
+        });
+      });
+    });
+    return candidates;
+  }
+
+  private isRowSelected(guid: string): boolean {
+    return this.selectedGuids.indexOf(guid) >= 0;
+  }
+
+  private setRowSelected(guid: string, isSelected: boolean): void {
+    const row = this.findVisibleRowByGuid(guid);
+    if (row === undefined || !canSelectDownloadTask(row.status)) {
+      this.selectedGuids = this.selectedGuids.filter((selectedGuid: string) => selectedGuid !== guid);
+      return;
+    }
+    const selected = this.selectedGuids.slice();
+    const index = selected.indexOf(guid);
+    if (isSelected && index < 0) {
+      selected.push(guid);
+    } else if (!isSelected && index >= 0) {
+      selected.splice(index, 1);
+    }
+    this.selectedGuids = selected;
+  }
+
+  private toggleRowSelection(guid: string): void {
+    this.setRowSelected(guid, !this.isRowSelected(guid));
+  }
+
+  private selectAllVisibleRows(): void {
+    this.selectedGuids = collectSelectableDownloadGuids(this.collectSelectableRows());
+  }
+
+  private pruneSelectionToVisibleRows(): void {
+    if (this.selectedGuids.length === 0) {
+      return;
+    }
+    const selectableRows = this.collectSelectableRows();
+    this.selectedGuids = pruneDownloadSelection(
+      this.selectedGuids,
+      collectSelectableDownloadGuids(selectableRows)
+    );
+    if (this.isSelectionMode && selectableRows.length === 0) {
+      this.exitSelectionMode();
+    }
+  }
+
+  private confirmDeleteSelectedRows(): void {
+    if (this.selectedGuids.length === 0) {
+      this.showToast(DOWNLOAD_SELECTION_EMPTY_TOAST);
+      return;
+    }
+    const selectedCount = this.selectedGuids.length;
+    showCenteredAlertDialog({
+      title: '删除下载',
+      message: `确定删除选中的 ${selectedCount} 项下载吗？\n\n“仅删除任务”会让文件保留在设备上；“删除任务和文件”会把文件移入系统回收站。`,
+      autoCancel: true,
+      buttonDirection: DialogButtonDirection.VERTICAL,
+      buttons: [
+        {
+          value: '仅删除任务',
+          action: (): void => {
+            this.deleteSelectedRows('records_only');
+          }
+        },
+        {
+          value: '删除任务和文件',
+          fontColor: $r('app.color.permission_blocked'),
+          action: (): void => {
+            this.deleteSelectedRows('records_and_files');
+          }
+        },
+        {
+          value: '取消',
+          action: (): void => {
+          }
+        }
+      ]
+    });
+  }
+
+  private deleteSelectedRows(scope: BatchDownloadDeleteScope): void {
+    const deletingGuids = this.selectedGuids.slice();
+    if (deletingGuids.length === 0) {
+      return;
+    }
+    this.hideTasksLocally(deletingGuids);
+    this.exitSelectionMode();
+    this.refreshState();
+    if (scope === 'records_and_files') {
+      void this.deleteSelectedRowsAndFiles(deletingGuids);
+      return;
+    }
+    const boundary = this.getCurrentDownloadBoundary();
+    let removedCount = 0;
+    deletingGuids.forEach((guid: string) => {
+      if (sharedDownloadRuntimeService.removeTaskRecordForBoundary(guid, boundary)) {
+        removedCount += 1;
+      }
+    });
+    this.showToast(removedCount > 0 ? `已删除 ${removedCount} 项下载记录。` : '当前下载记录暂时不能删除。');
+    this.refreshState();
+  }
+
+  private async deleteSelectedRowsAndFiles(deletingGuids: string[]): Promise<void> {
+    const boundary = this.getCurrentDownloadBoundary();
+    let removedCount = 0;
+    for (let index = 0; index < deletingGuids.length; index += 1) {
+      const result = await sharedDownloadRuntimeService.deleteCompletedFileAndRemoveRecordForBoundary(
+        deletingGuids[index],
+        boundary
+      );
+      if (result.recordRemoved) {
+        removedCount += 1;
+      }
+    }
+    this.showToast(removedCount > 0 ? `已删除 ${removedCount} 项下载。` : '当前下载暂时不能删除。');
+    this.refreshState();
+  }
+
+  private runAfterContextMenuDismiss(action: () => void): void {
+    setTimeout(action, DOWNLOAD_CONTEXT_MENU_DISMISS_DELAY_MS);
   }
 
   private syncSelectedGroupFromIndex(index: number): void {

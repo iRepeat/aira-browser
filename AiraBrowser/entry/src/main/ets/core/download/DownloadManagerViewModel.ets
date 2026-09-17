@@ -37,7 +37,11 @@ export interface DownloadManagementGroupState extends DownloadManagementFilterCh
   rows: DownloadManagementRowState[];
 }
 
-export type DownloadManagementRowAction = DownloadV2ManagementAction | 'copy_link' | 'delete_task_and_file';
+export type DownloadManagementRowAction = DownloadV2ManagementAction | 'copy_link' | 'delete_task_and_file' |
+  'enter_selection';
+
+export const DOWNLOAD_ROW_ENTER_SELECTION_ACTION: DownloadManagementRowAction = 'enter_selection';
+export const DOWNLOAD_ROW_ENTER_SELECTION_LABEL: string = '多选';
 
 export interface DownloadManagementRowMenuActionView {
   action: DownloadManagementRowAction;
@@ -298,7 +302,7 @@ export class DownloadManagerViewModel {
       primaryAction: primaryAction,
       primaryActionLabel: this.resolvePrimaryActionLabel(primaryAction),
       primaryActionEmphasis: primaryAction === 'pause' ? 'secondary' : 'primary',
-      menuActions: this.buildMenuActions(presentation.allowedActions, task.status, primaryAction)
+      menuActions: this.buildRowMenuActions(presentation.allowedActions, task.status, primaryAction)
     });
   }
 
@@ -480,12 +484,15 @@ export class DownloadManagerViewModel {
         return '取消';
       case 'remove_record':
         return status === 'completed' ? '仅删除任务' : '删除任务';
+      case 'enter_selection':
+        return DOWNLOAD_ROW_ENTER_SELECTION_LABEL;
       default:
         return action;
     }
   }
 
-  private buildMenuActions(
+  /** Owns the long-press menu order, so a completed download leads with the batch-selection entry. */
+  buildRowMenuActions(
     actions: DownloadV2ManagementAction[],
     status: DownloadV2Status,
     primaryAction?: DownloadV2ManagementAction
@@ -495,6 +502,12 @@ export class DownloadManagerViewModel {
       menuActions.push('copy_link');
     }
     const views: DownloadManagementRowMenuActionView[] = [];
+    if (status === 'completed') {
+      views.push({
+        action: DOWNLOAD_ROW_ENTER_SELECTION_ACTION,
+        label: DOWNLOAD_ROW_ENTER_SELECTION_LABEL
+      });
+    }
     menuActions.forEach((action: DownloadManagementRowAction) => {
       if (action === primaryAction) {
         return;
