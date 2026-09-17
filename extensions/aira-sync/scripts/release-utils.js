@@ -12,7 +12,41 @@ const COMMUNITY_EXTENSION_ID = 'efehgppkhnkjamcpbipclfmmofdildji';
 // Public manifest identity retained for Official manual-install updates.
 const LOCAL_OFFICIAL_MANIFEST_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqjAoslU3RDPLkH+htp3PaoxQ9gIJaFTHp7ww9ALBpaiFk5vBXlbPMKOs1u1CCWi0t31aDWp59hd1yWYmnUgIJ2DDLkmRobM7I8jOXng8O9S1bLdjFK82lLTYVjHTaPWnWosw8ObtVJfCI1Q62S0p80DmHETLq1sn8/JrMxq8hJuaD1dxzV1sF+fZ1pZpzaNWMsXgxJXti8wg1dBFbGflCsMcOzhRw4fks97sSCbUbX+OaFmupMSLc+47ptYEdg8BgfGtlBnT1wJOA0jF4IgR7bzIG+VBgK4RvIVMjBVALpg+ZtLc3Kdn6gGpqkoDlF4pNU9PiHi4LToRLHOebNZW0QIDAQAB';
 const LOCAL_OFFICIAL_EXTENSION_ID = 'plnjjlkaaonbccmjpfljbbbbaahfklem';
-const FIREFOX_EXTENSION_ID = 'aira-sync@aira-browser';
+// Gecko identity of the existing addons.mozilla.org listing. AMO rejects any upload whose
+// browser_specific_settings.gecko.id differs from the published add-on.
+const FIREFOX_EXTENSION_ID = 'airatab@cc';
+// Firefox has no counterpart for these Chromium-only manifest permissions.
+const FIREFOX_UNSUPPORTED_PERMISSIONS = new Set(['permissions', 'favicon']);
+
+// Firefox runs Manifest V3 through a non-persistent background page instead of a service worker,
+// so the built background entry is declared as an ES module script.
+function prepareFirefoxStoreManifest(dirPath) {
+  const manifestPath = path.join(dirPath, 'manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  delete manifest.key;
+  manifest.permissions = Array.isArray(manifest.permissions)
+    ? manifest.permissions.filter((permission) => !FIREFOX_UNSUPPORTED_PERMISSIONS.has(permission))
+    : manifest.permissions;
+  manifest.background = {
+    scripts: ['background-sw.js'],
+    type: 'module',
+  };
+  manifest.browser_specific_settings = {
+    gecko: {
+      id: FIREFOX_EXTENSION_ID,
+      data_collection_permissions: {
+        required: [
+          'authenticationInfo',
+          'bookmarksInfo',
+          'browsingActivity',
+        ],
+      },
+      strict_min_version: '142.0',
+    },
+  };
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return manifest;
+}
 
 function detectReleaseEditionByManifest(manifest) {
   void manifest;
@@ -45,6 +79,11 @@ function getCommunityReleasePackageFilename(version) {
 
 function getLocalOfficialReleasePackageFilename(version) {
   return `Aira-Sync-Official-v${version}.zip`;
+}
+
+function getOfficialFirefoxPackageBasenames(version) {
+  const stem = `Aira-Sync-Official-v${version}-firefox-store`;
+  return { xpiFilename: `${stem}.xpi`, zipFilename: `${stem}.zip` };
 }
 
 function readReleaseMarkerFromZip(zipPath) {
@@ -85,6 +124,8 @@ module.exports = {
   detectReleaseEditionByManifest,
   getCommunityReleasePackageFilename,
   getLocalOfficialReleasePackageFilename,
+  getOfficialFirefoxPackageBasenames,
+  prepareFirefoxStoreManifest,
   readReleaseMarkerFromDir,
   readReleaseMarkerFromZip,
   writeReleaseMarkerToDir,

@@ -2041,6 +2041,24 @@ export class BrowserDatabase {
     return store.delete(predicates);
   }
 
+  /**
+   * Drops specific outbox mutations without an acknowledgement. Used for a mutation the transport
+   * already knows it cannot submit: the server refuses the whole exchange batch, so a mutation it
+   * would reject on every run otherwise stays at the front of the queue and blocks every later one.
+   */
+  async deleteHistorySyncOutboxMutations(
+    accountUid: string,
+    mutationIds: string[]
+  ): Promise<number> {
+    const normalizedUid = accountUid.trim();
+    if (normalizedUid.length <= 0 || mutationIds.length <= 0) {
+      return 0;
+    }
+    const store = await this.getStore();
+    await this.deleteHistorySyncOutboxMutationsInStore(store, normalizedUid, mutationIds);
+    return mutationIds.length;
+  }
+
   async prepareAiraHistorySyncProviderEnrollment(
     accountUid: string,
     clientId: string,
@@ -2400,6 +2418,15 @@ export class BrowserDatabase {
 
   async detachHistorySyncRemoteProjectionsExcept(accountUid: string): Promise<number> {
     const normalizedUid = accountUid.trim();
+    // An empty account means the user signed out, not that they switched accounts. This is the only
+    // operation in the group that deletes rows, and its predicate matches every remote row whose
+    // account differs from the given uid — so an empty uid would delete the whole synchronized
+    // history rather than one account's leftovers. Signing out must not destroy history the user
+    // can still see after signing back in; the sibling prune/enrollment operations guard the same
+    // way. A genuine account switch still passes the new uid and clears the previous account's rows.
+    if (normalizedUid.length <= 0) {
+      return 0;
+    }
     const store = await this.getStore();
     let transactionStarted = false;
     try {

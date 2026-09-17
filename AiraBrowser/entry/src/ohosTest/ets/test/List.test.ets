@@ -7,6 +7,9 @@ import mediaSessionResolutionServiceTest from '../../../test/MediaSessionResolut
 import mediaSessionResolutionRuntimeServiceTest from '../../../test/MediaSessionResolutionRuntimeService.test';
 import browserArkWebMediaTakeoverRecoveryCharacterizationTest from
   '../../../test/BrowserArkWebMediaTakeoverRecoveryCharacterization.test';
+import downloadV2StateMachineTest from '../../../test/DownloadV2StateMachine.test';
+import historyAccountBindingPolicyTest from '../../../test/HistoryAccountBindingPolicy.test';
+import huaweiAgcSdkLoaderTest from '../../../test/HuaweiAgcSdkLoader.test';
 
 export default function tests(): void {
   userScriptValueFileAdapterConformanceTest();
@@ -16,4 +19,7 @@ export default function tests(): void {
   mediaSessionResolutionServiceTest();
   mediaSessionResolutionRuntimeServiceTest();
   browserArkWebMediaTakeoverRecoveryCharacterizationTest();
+  downloadV2StateMachineTest();
+  historyAccountBindingPolicyTest();
+  huaweiAgcSdkLoaderTest();
 }

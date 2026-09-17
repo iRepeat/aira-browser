@@ -87,6 +87,13 @@ npm run check
 `npm run check` starts an isolated temporary server and verifies discovery, phone and desktop pairing, all four sync
 domains, Page Push, Cross-device Tabs, compare-and-swap conflicts, credential rotation, device listing, and revocation.
 
+`npm run check:history-limits` starts the same kind of temporary server to verify the History field limits a client must
+respect before submitting a visit: an over-long payload is refused with `history_field_too_long`, the same payload capped
+by the client is accepted, and one over-long record no longer blocks the records queued behind it.
+
+Both checks need a Node runtime matching the installed `better-sqlite3` binary. A mismatched runtime fails with
+`ERR_DLOPEN_FAILED` before any assertion runs; rebuild under the intended Node with `npm rebuild better-sqlite3`.
+
 ## Scope And Compatibility
 
 The discovery document at `/.well-known/aira` is the client compatibility contract. Protocol changes must remain explicit and versioned. Aira production membership, IAP, admin, analytics, diagnostics, and Huawei-account services are intentionally outside this public monorepo.

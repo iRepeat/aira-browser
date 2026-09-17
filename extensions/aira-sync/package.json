@@ -47,6 +47,7 @@
     "pack:zip:optimized": "npm run pack:zip",
     "pack:release": "npm run pack:zip",
     "pack:local-official": "node scripts/package-local-official.js",
+    "pack:firefox-official": "node scripts/package-firefox-official.js",
     "pack:release:all": "npm run pack:zip:optimized && npm run pack:local-official",
     "release:bump": "node scripts/package-release-zips.js --bump",
     "verify:release": "node scripts/verify-release.js"

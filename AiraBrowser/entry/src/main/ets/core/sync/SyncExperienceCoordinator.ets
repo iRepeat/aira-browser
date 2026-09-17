@@ -60,6 +60,7 @@ import {
   SyncWebdavConfigurationParams
 } from './SyncExperienceProviderOperations';
 import { SyncActivationResult } from './SyncActivationModels';
+import { shouldClearHistoryAccountBinding } from './HistoryAccountBindingPolicy';
 import {
   SyncAdditionalBackupViewModel,
   SyncAdditionalBackupViewState
@@ -351,7 +352,7 @@ export class SyncExperienceCoordinator implements AiraCloudBookmarkV4BootstrapTr
     }
     const accountUid = this.resolveHistoryAccountUid(settings);
     const boundAccountUid = state.historyAccountUid.trim();
-    if (boundAccountUid.length > 0 && boundAccountUid !== accountUid) {
+    if (shouldClearHistoryAccountBinding(boundAccountUid, accountUid)) {
       const cleared = await this.experienceStateStore.setHistorySelected(false);
       this.automaticRuntime.cancelHistoryAutomaticSync();
       return cleared;

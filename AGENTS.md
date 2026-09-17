@@ -1,5 +1,7 @@
 # Aira Contributor Rules
 
+- Do all work directly on the `main` branch. Never create a new branch or a worktree for a task, and never ask whether
+  to branch first; commit to `main` when the user asks for a commit.
 - This monorepo is the public open-source source of truth. Maintain only this tree.
 - This monorepo contains the HarmonyOS client at `AiraBrowser/`, Aira-sync at `extensions/aira-sync/`, and Personal
   Server at `services/personal-server/`.

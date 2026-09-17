@@ -4,12 +4,12 @@ const { execSync } = require('child_process');
 const {
   COMMUNITY_EXTENSION_ID,
   COMMUNITY_MANIFEST_KEY,
-  FIREFOX_EXTENSION_ID,
   RELEASE_EDITION,
   RELEASE_PACKAGE_BASENAME,
   computeExtensionIdFromManifestKey,
   detectReleaseEditionByManifest,
   getCommunityReleasePackageFilename,
+  prepareFirefoxStoreManifest,
   readReleaseMarkerFromDir,
 } = require('./release-utils');
 
@@ -161,33 +161,6 @@ function removeStoreForbiddenManifestFields(dir) {
   const manifestPath = path.join(dir, 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
   delete manifest.key;
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-}
-
-function prepareFirefoxStoreManifest(dir) {
-  const manifestPath = path.join(dir, 'manifest.json');
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-  delete manifest.key;
-  manifest.permissions = Array.isArray(manifest.permissions)
-    ? manifest.permissions.filter((permission) => permission !== 'permissions')
-    : manifest.permissions;
-  manifest.background = {
-    scripts: ['background-sw.js'],
-    type: 'module',
-  };
-  manifest.browser_specific_settings = {
-    gecko: {
-      id: FIREFOX_EXTENSION_ID,
-      data_collection_permissions: {
-        required: [
-          'authenticationInfo',
-          'bookmarksInfo',
-          'browsingActivity',
-        ],
-      },
-      strict_min_version: '142.0',
-    },
-  };
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 

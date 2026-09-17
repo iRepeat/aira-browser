@@ -169,6 +169,13 @@ function computeQueuedTransition(event: DownloadV2Event): DownloadV2Status | und
       return 'queued';
     case 'start':
       return 'running';
+    // A queued task can fail before it ever starts: the download backend rejects the request
+    // outright for a method it cannot issue, and admission can only defer a start, never refuse it.
+    // Without this the failure has nowhere to go, the task stays startable as `queued`, and the
+    // queue drain re-selects it until the main thread is killed for input blocking. `failed` keeps
+    // `retry`, so the user still has a way forward once the cause is fixed.
+    case 'fail':
+      return 'failed';
     case 'cancel':
       return 'canceled';
     case 'remove':

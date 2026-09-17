@@ -75,6 +75,23 @@ ID, and writes `Aira-Sync-Official-v<version>.zip`. The explicit `-Official` nam
 case-insensitive Community filename on macOS. It never changes source manifests, `build/official/`, or the Community and
 store packages. `npm run pack:release:all` includes this Official local package after the three standard release zips.
 
+To package the same Official build for Firefox, run:
+
+```bash
+npm run pack:firefox-official
+```
+
+This stages `build/official/` and rewrites only the package copy of the manifest for Gecko: it removes the Chromium
+`key` and `favicon` permission, declares the built background entry as a non-persistent
+`background.scripts` ES module instead of a service worker, and adds `browser_specific_settings.gecko` with the
+addons.mozilla.org listing id `airatab@cc` and its required `data_collection_permissions`. It writes two identical
+artifacts — an
+`.xpi` for temporary `about:debugging` installs and a `.zip` for the addons.mozilla.org upload. Official Aira sign-in,
+desktop pairing, Aira cloud sync, Page Push, and Cross-device Tabs work because the staged copy keeps the Official
+service routes injected by `build:official`. The command warns when the staged build still carries `example.invalid`
+placeholder routes, because such a build cannot sign in. Firefox has no `_favicon/` endpoint, so Cross-device Tabs falls
+back to a generic site icon there.
+
 ## Personal Server
 
 Deploy [Aira Personal Server](../../services/personal-server/README.md), then open Aira-sync and choose

@@ -628,6 +628,31 @@ if [ "${failures}" -eq 0 ]; then
   require_pattern "${SNAPSHOT_CODEC_REL}" \
     "buildProjectionReusingHead" \
     "History lite writes must reuse unchanged Head bucket references"
+  # One over-long title used to stop History sync permanently: the personal server refuses the whole
+  # exchange batch, the outbox drains oldest first, and an unacknowledged row is retried forever. The
+  # Aira Cloud path must therefore cap each outbox payload to the server's field limits before send.
+  require_pattern "${MODEL_REL}" \
+    "HISTORY_SYNC_VISIT_TITLE_MAX_LENGTH: number = 2048" \
+    "History sync must mirror the personal server's title limit"
+  require_pattern "${MODEL_REL}" \
+    "normalizeHistorySyncMutationForTransport" \
+    "History sync must expose a transport normalizer for outbox payloads"
+  require_pattern "${SERVICE_REL}" \
+    "normalizeHistorySyncMutationForTransport\(mutation\)" \
+    "the Aira Cloud History path must normalize outbox payloads before submitting them"
+  reject_pattern "${DATABASE_REL}" \
+    "normalizeHistorySyncVisitForTransport" \
+    "outbox normalization must stay out of the shared outbox writer so Huawei Space stays unaffected"
+  # Sign-out must not destroy synchronized history. This is the only operation in the remote-history
+  # group that deletes rows, and its `sync_account_uid <> ?` predicate matches every remote row when
+  # the uid is empty — exactly the account state during sign-out, so the unguarded form wiped the
+  # user's synced history on every sign-out. The prune and enrollment siblings already return early
+  # on an empty account; this one has to as well, while a real account switch still passes the new
+  # uid and clears the previous account's rows.
+  if ! grep -A 14 "async detachHistorySyncRemoteProjectionsExcept" "${REPO_ROOT}/${DATABASE_REL}" \
+    | grep -q "normalizedUid.length <= 0"; then
+    fail "detachHistorySyncRemoteProjectionsExcept must skip an empty account so sign-out cannot delete synchronized history"
+  fi
 fi
 
 if [ "${failures}" -gt 0 ]; then

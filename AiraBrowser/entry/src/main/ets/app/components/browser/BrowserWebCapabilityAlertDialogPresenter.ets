@@ -4,6 +4,13 @@ import {
 } from '../../../core/browser/BrowserWebCapabilityPromptApplicationCoordinator';
 import { showCenteredAlertDialog } from '../common/CenteredDialogSurface';
 import { WebSslWarningModel } from '../../../core/web/WebRuntimeBridge';
+import {
+  BROWSER_THEME_STORAGE_ACCENT_KEY,
+  BROWSER_THEME_STORAGE_ON_PRIMARY_KEY
+} from '../../../core/theme/BrowserThemeStorageKeys';
+
+const WARNING_DIALOG_FALLBACK_ACCENT_COLOR: string = '#0A59F7';
+const WARNING_DIALOG_FALLBACK_ON_PRIMARY_COLOR: string = '#FFFFFF';
 
 export class BrowserWebCapabilityAlertDialogPresenter {
   private readonly coordinator: BrowserWebCapabilityPromptApplicationCoordinator;
@@ -94,18 +101,38 @@ export class BrowserWebCapabilityAlertDialogPresenter {
     cancel: () => void,
     confirm: () => void
   ): void {
+    // The safe choice gets the filled primary treatment and the risky continue
+    // path is demoted to a text button, so a security warning never presents the
+    // insecure action as the visually dominant one.
     showCenteredAlertDialog({
       title: presentation.title,
       message: presentation.message,
       autoCancel: false,
-      primaryButton: {
-        value: presentation.cancelLabel,
-        action: cancel
-      },
-      secondaryButton: {
-        value: presentation.confirmLabel,
-        action: confirm
-      }
+      buttonDirection: DialogButtonDirection.VERTICAL,
+      buttons: [
+        {
+          value: presentation.cancelLabel,
+          primary: true,
+          fontColor: this.resolveWarningDialogOnPrimaryColor(),
+          backgroundColor: this.resolveWarningDialogAccentColor(),
+          action: cancel
+        },
+        {
+          value: presentation.confirmLabel,
+          fontColor: this.resolveWarningDialogAccentColor(),
+          action: confirm
+        }
+      ]
     });
+  }
+
+  private resolveWarningDialogAccentColor(): string {
+    return AppStorage.get<string>(BROWSER_THEME_STORAGE_ACCENT_KEY) ??
+      WARNING_DIALOG_FALLBACK_ACCENT_COLOR;
+  }
+
+  private resolveWarningDialogOnPrimaryColor(): string {
+    return AppStorage.get<string>(BROWSER_THEME_STORAGE_ON_PRIMARY_KEY) ??
+      WARNING_DIALOG_FALLBACK_ON_PRIMARY_COLOR;
   }
 }

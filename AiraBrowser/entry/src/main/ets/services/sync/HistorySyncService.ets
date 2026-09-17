@@ -6,7 +6,8 @@ import {
   HistorySyncLocalState,
   HistorySyncMutation,
   HistorySyncProviderKind,
-  HistorySyncRunResult
+  HistorySyncRunResult,
+  normalizeHistorySyncMutationForTransport
 } from '../../common/models/HistorySyncModels';
 import {
   AiraSyncRemoteKind,
@@ -325,6 +326,16 @@ export class HistorySyncService {
     throw new Error('历史记录增量过多，本轮未能在安全上限内完成，请稍后继续同步。');
   }
 
+  /**
+   * Selects the next outbox batch and caps it to what the remote accepts.
+   *
+   * The outbox is shared with Huawei Space, which has no field limits, so the payload is normalized
+   * here rather than at write time: a record that reached the queue with an over-long title still
+   * syncs, with the title capped. The exchange is rejected as a whole and the queue drains oldest
+   * first, so a record the remote would refuse does not merely fail once — it fails every later run
+   * too. A record whose identity cannot survive normalization is dropped from the queue for that
+   * reason; leaving it would stop all History sync indefinitely.
+   */
   private async listAiraCloudMutationsForRun(
     accountUid: string,
     acknowledgedMutationIds: Set<string>
@@ -333,9 +344,29 @@ export class HistorySyncService {
       accountUid,
       acknowledgedMutationIds.size + HISTORY_SYNC_EXCHANGE_BATCH_SIZE
     );
-    return candidates.filter((mutation: HistorySyncMutation): boolean => {
+    const batch = candidates.filter((mutation: HistorySyncMutation): boolean => {
       return !acknowledgedMutationIds.has(mutation.mutationId);
     }).slice(0, HISTORY_SYNC_EXCHANGE_BATCH_SIZE);
+    const submittable: HistorySyncMutation[] = [];
+    const refusedMutationIds: string[] = [];
+    batch.forEach((mutation: HistorySyncMutation): void => {
+      const normalized = normalizeHistorySyncMutationForTransport(mutation);
+      if (normalized === undefined) {
+        refusedMutationIds.push(mutation.mutationId);
+        return;
+      }
+      submittable.push(normalized);
+    });
+    if (refusedMutationIds.length > 0) {
+      await this.database.deleteHistorySyncOutboxMutations(accountUid, refusedMutationIds);
+      hilog.warn(
+        DOMAIN,
+        TAG,
+        'dropped %{public}d history mutations the remote transport cannot accept',
+        refusedMutationIds.length
+      );
+    }
+    return submittable;
   }
 
   private async runBootstrap(

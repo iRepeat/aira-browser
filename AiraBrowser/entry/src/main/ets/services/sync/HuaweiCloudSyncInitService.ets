@@ -1,21 +1,24 @@
 import { common } from '@kit.AbilityKit';
-import auth from '@hw-agconnect/auth';
-import agconnect from '@hw-agconnect/api-ohos';
-import '@hw-agconnect/core-ohos';
 import buffer from '@ohos.buffer';
 import { AIRA_DISTRIBUTION_CAPABILITY_OWNER } from '../../common/config/AiraDistributionCapabilityOwner';
+import {
+  HuaweiAgcSdkHandle,
+  sharedHuaweiAgcSdkLoader
+} from '../../platform/huawei/HuaweiAgcSdkLoader';
 
 export interface HuaweiCloudSyncInitAdapter {
   initializeAuth(context: common.Context): Promise<void>;
 }
 
 class AgcHuaweiCloudSyncInitAdapter implements HuaweiCloudSyncInitAdapter {
-  initializeAuth(context: common.Context): Promise<void> {
+  async initializeAuth(context: common.Context): Promise<void> {
+    // Resolved lazily so a package without the Official SDK fails this call, not module load.
+    const sdk: HuaweiAgcSdkHandle = await sharedHuaweiAgcSdkLoader.load();
     const rawFile = context.resourceManager.getRawFileContentSync('agconnect-services.json');
     const json = buffer.from(rawFile.buffer).toString('utf8');
-    auth.init(context, json);
-    agconnect.instance().init(context, JSON.parse(json));
-    return Promise.resolve();
+    const config: Object = JSON.parse(json);
+    sdk.auth.init(context, json);
+    sdk.agconnect.instance().init(context, config);
   }
 }
 

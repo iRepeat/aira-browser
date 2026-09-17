@@ -1204,6 +1204,12 @@ export class DownloadV2Service {
       return;
     }
     this.isQueueScheduling = true;
+    // One drain must never hand the same task to the adapter twice. A successful start moves the
+    // task to `running` and a deferred admission makes the next plan un-startable, so a guid that
+    // comes back around is a start that keeps reporting failure without moving the task out of
+    // `queued`. Retrying it here is what turned one un-startable download into an unbounded
+    // main-thread loop, so stop and leave the task for the user instead.
+    const attemptedGuids = new Set<string>();
     try {
       while (true) {
         const plan = this.downloadQueuePolicyService.buildSchedulePlan(
@@ -1214,10 +1220,22 @@ export class DownloadV2Service {
           this.logQueueScheduleIdle(reason, plan);
           return;
         }
+        if (attemptedGuids.has(plan.nextGuid)) {
+          hilog.warn(
+            DOWNLOAD_V2_SERVICE_DOMAIN,
+            DOWNLOAD_V2_SERVICE_TAG,
+            'queue schedule stalled guid=%{public}s reason=%{public}s attempted=%{public}d; leaving task queued',
+            plan.nextGuid,
+            reason,
+            attemptedGuids.size
+          );
+          return;
+        }
         const task = this.engine.findTask(plan.nextGuid);
         if (task === undefined || task.status !== 'queued') {
           return;
         }
+        attemptedGuids.add(plan.nextGuid);
         const request = this.buildCapturedRequestFromTask(task);
         const started = await this.startPreparedTaskFromRequest(request, task, reason);
         if (!started) {

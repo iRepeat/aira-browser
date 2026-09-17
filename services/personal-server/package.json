@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node src/server.js",
     "check": "node scripts/check-install.js",
+    "check:history-limits": "node scripts/check-history-field-limits.js",
     "backup": "node scripts/backup.js",
     "restore": "node scripts/restore.js"
   },
