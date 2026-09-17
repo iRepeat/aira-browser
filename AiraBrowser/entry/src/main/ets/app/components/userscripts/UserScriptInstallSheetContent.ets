@@ -1,12 +1,13 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
-import { showCenteredAlertDialog } from '../common/CenteredDialogSurface';
 import router from '@ohos.router';
 import { UserScriptInstallScreen } from './UserScriptInstallScreen';
 import {
   UserScriptManualSourceEditOwner,
+  UserScriptInstallExistingTarget,
   UserScriptInstallSessionObserver,
   UserScriptInstallSessionState,
-  UserScriptInstallSourceResult
+  UserScriptInstallSourceResult,
+  buildEmptyUserScriptInstallExistingTarget
 } from '../../../core/userscripts/UserScriptInstallSessionCoordinator';
 import {
   UserScriptInstallPreviewState,
@@ -54,9 +55,9 @@ export struct UserScriptInstallSheetContent {
   private installSurfaceDataScope: string = 'profile_persistent';
   private installSurfacePrivacyMode: string = 'regular';
   private pageVisible: boolean = false;
-  private pendingDuplicateName: string = '';
   @State private source: string = '';
   @State private preview: UserScriptInstallPreviewState = this.viewModel.buildInstallPreview(undefined, [], '');
+  @State private existingTarget: UserScriptInstallExistingTarget = buildEmptyUserScriptInstallExistingTarget();
   @State private importBusy: boolean = false;
   @State private commitBusy: boolean = false;
   aboutToAppear(): void {
@@ -104,7 +105,6 @@ export struct UserScriptInstallSheetContent {
     if (state.revision !== this.sessionRevision) {
       this.applySessionState(state);
     }
-    this.showPendingDuplicateDialog();
   }
 
   onPageHide(): void {
@@ -131,6 +131,7 @@ export struct UserScriptInstallSheetContent {
       UserScriptInstallScreen({
         source: this.source,
         preview: this.preview,
+        existingTarget: this.existingTarget,
         importBusy: this.importBusy,
         installBusy: this.commitBusy,
         onSave: () => {
@@ -153,6 +154,7 @@ export struct UserScriptInstallSheetContent {
   private applySessionState(state: UserScriptInstallSessionState): void {
     this.sessionRevision = state.revision;
     this.source = state.source;
+    this.existingTarget = state.existingTarget;
     if (state.preview === undefined) {
       this.preview = this.viewModel.buildInstallPreview(undefined, [], '');
     } else {
@@ -227,19 +229,6 @@ export struct UserScriptInstallSheetContent {
     }).catch((_error: Error) => {});
   }
 
-  private showDuplicateInstallDialog(duplicateName: string): void {
-    showCenteredAlertDialog({
-      title: '脚本已安装',
-      message: `“${duplicateName}”已经安装，可以在已安装列表中检查更新或编辑。`,
-      autoCancel: true,
-      primaryButton: {
-        value: '知道了',
-        action: () => {
-        }
-      }
-    });
-  }
-
   private async loadSourceFromInitialUrl(url: string): Promise<void> {
     const result = await sharedUserScriptInstallSessionCoordinator.loadSource({
       type: 'url',
@@ -250,9 +239,6 @@ export struct UserScriptInstallSheetContent {
 
   private handleSourceLoadResult(result: UserScriptInstallSourceResult): void {
     if (!this.pageVisible) {
-      if (result.status === 'duplicate') {
-        this.pendingDuplicateName = result.duplicate.scriptName;
-      }
       return;
     }
     this.applySourceLoadResult(result);
@@ -264,22 +250,10 @@ export struct UserScriptInstallSheetContent {
         return;
       case 'failed':
         return;
-      case 'duplicate':
-        this.showDuplicateInstallDialog(result.duplicate.scriptName);
-        return;
       case 'loaded':
         this.applySessionState(result.state);
         return;
     }
-  }
-
-  private showPendingDuplicateDialog(): void {
-    const duplicateName = this.pendingDuplicateName;
-    if (duplicateName.length === 0) {
-      return;
-    }
-    this.pendingDuplicateName = '';
-    this.showDuplicateInstallDialog(duplicateName);
   }
 
   private handleSaveResult(result: UserScriptPackageMutationResult): void {
@@ -287,9 +261,6 @@ export struct UserScriptInstallSheetContent {
       case 'installed':
       case 'updated':
         this.onInstalled(result);
-        return;
-      case 'duplicate':
-        this.showDuplicateInstallDialog(result.duplicate.scriptName);
         return;
       case 'denied':
         this.showSaveFailure(result.errorMessage, result.warnings);

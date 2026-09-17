@@ -1,4 +1,5 @@
 import userScriptValueStateStoreTest from './UserScriptValueStateStore.test';
+import userScriptOverwriteInstallTest from './UserScriptOverwriteInstall.test';
 import novelReadingSessionStateTest from './NovelReadingSessionState.test';
 import readingDocumentTest from './ReadingDocument.test';
 import mediaSessionResolutionServiceTest from './MediaSessionResolutionService.test';
@@ -49,6 +50,7 @@ import browserWebTopSafeAreaColorTest from './BrowserWebTopSafeAreaColor.test';
 
 export default function tests(): void {
   userScriptValueStateStoreTest();
+  userScriptOverwriteInstallTest();
   novelReadingSessionStateTest();
   readingDocumentTest();
   mediaSessionResolutionServiceTest();

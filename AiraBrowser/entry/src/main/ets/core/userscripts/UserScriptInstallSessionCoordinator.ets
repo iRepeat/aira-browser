@@ -7,11 +7,11 @@ import {
   UserScriptSourceFetchService
 } from '../../services/userscripts/UserScriptSourceFetchService';
 import {
+  InstalledUserScriptState,
   resolveUserScriptPackageSource,
   UserScriptPackageSource
 } from '../../features/userscripts/UserScriptMetadataModels';
 import {
-  UserScriptPackageDuplicateInfo,
   UserScriptPackageLifecycleCoordinator,
   UserScriptPackageMutationResult,
   UserScriptPackageCommitResult,
@@ -43,11 +43,49 @@ interface UserScriptManualSourceEditSession {
   completionPending: boolean;
 }
 
+export interface UserScriptInstallExistingTarget {
+  scriptId: string;
+  name: string;
+  version: string;
+  enabled: boolean;
+}
+
+export function buildEmptyUserScriptInstallExistingTarget(): UserScriptInstallExistingTarget {
+  return {
+    scriptId: '',
+    name: '',
+    version: '',
+    enabled: true
+  };
+}
+
+export function buildInstalledUserScriptExistingTarget(
+  installed: InstalledUserScriptState
+): UserScriptInstallExistingTarget {
+  return {
+    scriptId: installed.id,
+    name: installed.name,
+    version: installed.version,
+    enabled: installed.enabled
+  };
+}
+
+export function cloneUserScriptInstallExistingTarget(
+  target: UserScriptInstallExistingTarget
+): UserScriptInstallExistingTarget {
+  return {
+    scriptId: target.scriptId,
+    name: target.name,
+    version: target.version,
+    enabled: target.enabled
+  };
+}
+
 export interface UserScriptInstallSessionState {
   source: string;
   sourceUrl: string;
   installSource: UserScriptPackageSource;
-  existingScriptId: string;
+  existingTarget: UserScriptInstallExistingTarget;
   importBusy: boolean;
   commitBusy: boolean;
   helperMessage: string;
@@ -97,11 +135,6 @@ export interface UserScriptInstallSourceLoadedResult {
   state: UserScriptInstallSessionState;
 }
 
-export interface UserScriptInstallSourceDuplicateResult {
-  status: 'duplicate';
-  duplicate: UserScriptPackageDuplicateInfo;
-}
-
 export interface UserScriptInstallSourceCancelledResult {
   status: 'cancelled';
 }
@@ -113,7 +146,6 @@ export interface UserScriptInstallSourceFailedResult {
 
 export type UserScriptInstallSourceResult =
   UserScriptInstallSourceLoadedResult |
-  UserScriptInstallSourceDuplicateResult |
   UserScriptInstallSourceCancelledResult |
   UserScriptInstallSourceFailedResult;
 
@@ -142,7 +174,7 @@ interface UserScriptInstallSessionDraft {
   source: string;
   sourceUrl: string;
   installSource: UserScriptPackageSource;
-  existingScriptId: string;
+  existingTarget: UserScriptInstallExistingTarget;
   clearOriginOnSourceEdit: boolean;
   previewRequested: boolean;
   importBusy: boolean;
@@ -159,7 +191,7 @@ export class UserScriptInstallSessionCoordinator {
     source: '',
     sourceUrl: '',
     installSource: 'paste',
-    existingScriptId: '',
+    existingTarget: buildEmptyUserScriptInstallExistingTarget(),
     clearOriginOnSourceEdit: true,
     previewRequested: false,
     importBusy: false,
@@ -199,7 +231,7 @@ export class UserScriptInstallSessionCoordinator {
       return this.getState();
     }
     this.invalidateImportOperation();
-    return this.replaceDraft('', '', 'paste', '', true, false);
+    return this.replaceDraft('', '', 'paste', buildEmptyUserScriptInstallExistingTarget(), true, false);
   }
 
   registerManualSourceInstallHost(owner: UserScriptManualSourceEditOwner): string {
@@ -330,7 +362,7 @@ export class UserScriptInstallSessionCoordinator {
             existing.source,
             existing.sourceUrl,
             resolveUserScriptPackageSource(existing.installSource, existing.sourceUrl),
-            existing.id,
+            buildInstalledUserScriptExistingTarget(existing),
             false,
             true
           )
@@ -352,7 +384,7 @@ export class UserScriptInstallSessionCoordinator {
           source,
           sourceUrl,
           sourceUrl.length > 0 ? 'url' : 'paste',
-          '',
+          buildEmptyUserScriptInstallExistingTarget(),
           true,
           true
         )
@@ -375,7 +407,7 @@ export class UserScriptInstallSessionCoordinator {
       source: source,
       sourceUrl: clearOrigin ? '' : this.draft.sourceUrl,
       installSource: clearOrigin ? 'paste' : this.draft.installSource,
-      existingScriptId: this.draft.existingScriptId,
+      existingTarget: cloneUserScriptInstallExistingTarget(this.draft.existingTarget),
       clearOriginOnSourceEdit: clearOrigin,
       previewRequested: true,
       importBusy: false,
@@ -440,7 +472,7 @@ export class UserScriptInstallSessionCoordinator {
     this.manualSourceInstallToken = session.token;
     this.observer = undefined;
     this.installSurfaceObserverToken = '';
-    this.replaceDraft(session.source, '', 'paste', '', true, true);
+    this.replaceDraft(session.source, '', 'paste', buildEmptyUserScriptInstallExistingTarget(), true, true);
     return session.token;
   }
 
@@ -585,7 +617,7 @@ export class UserScriptInstallSessionCoordinator {
       source: this.draft.source,
       sourceUrl: this.draft.sourceUrl,
       installSource: this.draft.installSource,
-      existingScriptId: this.draft.existingScriptId,
+      existingTarget: cloneUserScriptInstallExistingTarget(this.draft.existingTarget),
       importBusy: this.draft.importBusy,
       commitBusy: this.draft.commitBusy,
       helperMessage: this.draft.helperMessage,
@@ -649,38 +681,56 @@ export class UserScriptInstallSessionCoordinator {
     sourceUrl: string,
     installSource: UserScriptPackageSource
   ): UserScriptInstallSourceResult {
-    const input: UserScriptPackageSourceInput = {
+    const preview = this.packageLifecycle.previewSource({
       source: source,
       sourceUrl: sourceUrl,
       installSource: installSource,
-      existingScriptId: this.draft.existingScriptId
-    };
-    const preview = this.packageLifecycle.previewSource(input);
-    if (preview.status === 'duplicate') {
-      return {
-        status: 'duplicate',
-        duplicate: preview.duplicate
-      };
-    }
+      existingScriptId: this.draft.existingTarget.scriptId
+    });
+    // A package that matches an installed script by identity is a newer copy of that
+    // script, not a second script, so the loaded draft adopts it as the replace target
+    // and the confirmation surface reports an overwrite instead of refusing the load.
+    const replacementScriptId = preview.status === 'duplicate' ?
+      preview.duplicate.scriptId : this.draft.existingTarget.scriptId;
+    const replacementPreview = replacementScriptId === this.draft.existingTarget.scriptId ?
+      preview :
+      this.packageLifecycle.previewSource({
+        source: source,
+        sourceUrl: sourceUrl,
+        installSource: installSource,
+        existingScriptId: replacementScriptId
+      });
+    const resolvedTarget = this.resolveExistingTargetById(replacementScriptId);
     return {
       status: 'loaded',
       state: this.replaceDraft(
         source,
         sourceUrl,
         installSource,
-        this.draft.existingScriptId,
-        this.draft.existingScriptId.length === 0,
+        resolvedTarget,
+        resolvedTarget.scriptId.length === 0,
         true,
-        preview
+        replacementPreview
       )
     };
+  }
+
+  private resolveExistingTargetById(scriptId: string): UserScriptInstallExistingTarget {
+    const normalizedScriptId = scriptId.trim();
+    if (normalizedScriptId.length === 0) {
+      return buildEmptyUserScriptInstallExistingTarget();
+    }
+    const installed = this.packageLifecycle.findInstalledScript(normalizedScriptId);
+    return installed === undefined ?
+      buildEmptyUserScriptInstallExistingTarget() :
+      buildInstalledUserScriptExistingTarget(installed);
   }
 
   private replaceDraft(
     source: string,
     sourceUrl: string,
     installSource: UserScriptPackageSource,
-    existingScriptId: string,
+    existingTarget: UserScriptInstallExistingTarget,
     clearOriginOnSourceEdit: boolean,
     previewRequested: boolean,
     knownPreview?: UserScriptPackagePreviewResult
@@ -689,7 +739,7 @@ export class UserScriptInstallSessionCoordinator {
       source: source,
       sourceUrl: sourceUrl,
       installSource: installSource,
-      existingScriptId: existingScriptId,
+      existingTarget: cloneUserScriptInstallExistingTarget(existingTarget),
       clearOriginOnSourceEdit: clearOriginOnSourceEdit,
       previewRequested: previewRequested,
       importBusy: false,
@@ -707,7 +757,7 @@ export class UserScriptInstallSessionCoordinator {
       source: this.draft.source,
       sourceUrl: this.draft.sourceUrl,
       installSource: this.draft.installSource,
-      existingScriptId: this.draft.existingScriptId,
+      existingTarget: cloneUserScriptInstallExistingTarget(this.draft.existingTarget),
       clearOriginOnSourceEdit: this.draft.clearOriginOnSourceEdit,
       previewRequested: this.draft.previewRequested,
       importBusy: importBusy,
@@ -723,7 +773,7 @@ export class UserScriptInstallSessionCoordinator {
       source: this.draft.source,
       sourceUrl: this.draft.sourceUrl,
       installSource: this.draft.installSource,
-      existingScriptId: this.draft.existingScriptId,
+      existingTarget: cloneUserScriptInstallExistingTarget(this.draft.existingTarget),
       clearOriginOnSourceEdit: this.draft.clearOriginOnSourceEdit,
       previewRequested: this.draft.previewRequested,
       importBusy: this.draft.importBusy,
@@ -761,7 +811,7 @@ export class UserScriptInstallSessionCoordinator {
     this.manualSourceInstallToken = '';
     this.manualSourceInstallReleasePending = false;
     this.invalidateImportOperation();
-    this.replaceDraft('', '', 'paste', '', true, false);
+    this.replaceDraft('', '', 'paste', buildEmptyUserScriptInstallExistingTarget(), true, false);
   }
 
   private beginImportOperation(): number {
@@ -786,7 +836,7 @@ export class UserScriptInstallSessionCoordinator {
       source: this.draft.source,
       sourceUrl: this.draft.sourceUrl,
       installSource: this.draft.installSource,
-      existingScriptId: this.draft.existingScriptId
+      existingScriptId: this.draft.existingTarget.scriptId
     };
   }
 

@@ -89,12 +89,6 @@ export interface UserScriptPackageSuccessResult {
   warnings: string[];
 }
 
-export interface UserScriptPackageDuplicateResult {
-  status: 'duplicate';
-  warnings: string[];
-  duplicate: UserScriptPackageDuplicateInfo;
-}
-
 export interface UserScriptPackageDeniedResult {
   status: 'denied';
   scriptId: string;
@@ -115,9 +109,7 @@ export type UserScriptPackageCommitResult =
   UserScriptPackageDeniedResult |
   UserScriptPackageFailureResult;
 
-export type UserScriptPackageMutationResult =
-  UserScriptPackageCommitResult |
-  UserScriptPackageDuplicateResult;
+export type UserScriptPackageMutationResult = UserScriptPackageCommitResult;
 
 export class UserScriptPackageLifecycleCoordinator {
   private repository: UserScriptRepository;
@@ -251,8 +243,15 @@ export class UserScriptPackageLifecycleCoordinator {
     switch (preview.status) {
       case 'failed':
         return this.fail(preview.errorMessage, preview.warnings);
-      case 'duplicate':
-        return this.duplicate(preview);
+      case 'duplicate': {
+        // Confirming an install is an explicit overwrite: when the confirmed package
+        // matches an installed script by identity, replace that script in place.
+        const replacement = this.repository.findScript(preview.duplicate.scriptId);
+        if (replacement === undefined) {
+          return this.fail('脚本不存在，无法保存。', preview.warnings);
+        }
+        return this.commitCandidate(preview.candidate, replacement, entitlementContext, preview.warnings, 0);
+      }
       case 'ready': {
         const existingScriptId = input.existingScriptId.trim();
         const existing = existingScriptId.length > 0 ? this.repository.findScript(existingScriptId) : undefined;
@@ -412,17 +411,7 @@ export class UserScriptPackageLifecycleCoordinator {
   }
 
   private findDirectInstallReplacement(candidate: UserScriptPackageCandidate): InstalledUserScriptState | undefined {
-    const targetName = candidate.name.trim();
-    const targetNamespace = candidate.namespace.trim();
-    return this.repository.listScripts().find((installed: InstalledUserScriptState): boolean => {
-      if (installed.name.trim() !== targetName) {
-        return false;
-      }
-      if (targetNamespace.length > 0 || installed.namespace.trim().length > 0) {
-        return installed.namespace.trim() === targetNamespace;
-      }
-      return true;
-    });
+    return this.identityService.findDuplicateScript(candidate, this.repository.listScripts());
   }
 
   private async commitCandidate(
@@ -444,12 +433,16 @@ export class UserScriptPackageLifecycleCoordinator {
         return this.denied(decision, candidate, warnings);
       }
     }
-    const materialized: UserScriptDependencyFetchResult = await this.dependencyFetchService.materialize(candidate);
+    // An overwrite must not silently drop the remote update addresses: a local copy or a
+    // marketplace re-install of a script that was first installed from a URL keeps future
+    // update checks working when the new copy omits @updateURL/@downloadURL.
+    const resolvedCandidate = existing === undefined ? candidate : this.preserveRemoteUpdateUrls(candidate, existing);
+    const materialized: UserScriptDependencyFetchResult = await this.dependencyFetchService.materialize(resolvedCandidate);
     const committedAt = Date.now();
     const nextState = existing === undefined ?
-      createInstalledUserScriptState(candidate, materialized.dependencies, committedAt) :
+      createInstalledUserScriptState(resolvedCandidate, materialized.dependencies, committedAt) :
       replaceInstalledUserScriptPackage(
-        candidate,
+        resolvedCandidate,
         materialized.dependencies,
         existing,
         checkedAt > 0 ? checkedAt : existing.lastCheckedAt,
@@ -554,14 +547,6 @@ export class UserScriptPackageLifecycleCoordinator {
       status: 'failed',
       warnings: parsed.warnings,
       errorMessage: this.resolveParseError(parsed, '脚本格式不正确。')
-    };
-  }
-
-  private duplicate(preview: UserScriptPackageDuplicatePreviewResult): UserScriptPackageDuplicateResult {
-    return {
-      status: 'duplicate',
-      warnings: preview.warnings,
-      duplicate: preview.duplicate
     };
   }
 

@@ -579,9 +579,6 @@ export struct UserScriptManagementHost {
       case 'failed':
         this.showToast(result.errorMessage);
         return;
-      case 'duplicate':
-        this.showToast(`“${result.duplicate.scriptName}”已经安装。`);
-        return;
       case 'loaded':
         this.openInstallSurface();
         return;

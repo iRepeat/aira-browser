@@ -1,5 +1,9 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import { UserScriptInstallPreviewState } from '../../../core/userscripts/UserScriptsSettingsViewModel';
+import {
+  UserScriptInstallExistingTarget,
+  buildEmptyUserScriptInstallExistingTarget
+} from '../../../core/userscripts/UserScriptInstallSessionCoordinator';
 import { SiteIconView } from '../common/SiteIconView';
 import {
   BROWSER_MODAL_BOTTOM_SHEET_ACTION_HEIGHT,
@@ -46,6 +50,7 @@ export struct UserScriptInstallScreen {
   };
   @Prop importBusy: boolean = false;
   @Prop installBusy: boolean = false;
+  @Prop existingTarget: UserScriptInstallExistingTarget = buildEmptyUserScriptInstallExistingTarget();
   onSave: () => void = () => {};
   onClose: () => void = () => {};
 
@@ -138,7 +143,7 @@ export struct UserScriptInstallScreen {
   private buildPreviewSection() {
     if (this.source.length > 0 || this.preview.errorMessage.length > 0 || this.preview.warnings.length > 0) {
       Column({ space: 8 }) {
-        this.buildSectionTitle(this.shouldShowInstallConfirmation() ? '待安装脚本' : '脚本信息')
+        this.buildSectionTitle(this.resolvePreviewSectionTitle())
         Column({ space: 0 }) {
           this.buildPreviewDetails()
         }
@@ -146,9 +151,36 @@ export struct UserScriptInstallScreen {
         .backgroundColor(this.storedSurfaceBackgroundColor)
         .borderRadius(22)
         .clip(true)
+
+        if (this.isUpdatingInstalledScript() && this.preview.errorMessage.length <= 0) {
+          Text('安装后会替换已安装的同名脚本，脚本保存的数据保持不变。')
+            .width('100%')
+            .fontSize(13)
+            .lineHeight(18)
+            .fontColor(this.storedSecondaryTextColor)
+            .padding({ left: 16, right: 16 })
+        }
       }
       .width('100%')
     }
+  }
+
+  private resolvePreviewSectionTitle(): string {
+    if (this.shouldShowInstallConfirmation()) {
+      return this.isUpdatingInstalledScript() ? '待更新脚本' : '待安装脚本';
+    }
+    return '脚本信息';
+  }
+
+  private isUpdatingInstalledScript(): boolean {
+    return this.existingTarget.scriptId.length > 0;
+  }
+
+  private resolveInstallActionLabel(): string {
+    if (this.installBusy) {
+      return this.isUpdatingInstalledScript() ? '正在更新…' : '正在安装…';
+    }
+    return this.isUpdatingInstalledScript() ? '更新' : '安装';
   }
 
   @Builder
@@ -166,7 +198,8 @@ export struct UserScriptInstallScreen {
         textColor: this.storedPrimaryTextColor
       })
 
-      Text(this.preview.name.length > 0 ? this.preview.name : '准备安装用户脚本')
+      Text(this.preview.name.length > 0 ? this.preview.name :
+        (this.isUpdatingInstalledScript() ? '准备更新用户脚本' : '准备安装用户脚本'))
         .width('100%')
         .fontSize(22)
         .fontWeight(FontWeight.Bold)
@@ -195,7 +228,7 @@ export struct UserScriptInstallScreen {
   private buildInstallAction() {
     Row() {
       BrowserSheetActionButton({
-        label: this.installBusy ? '正在安装…' : '安装',
+        label: this.resolveInstallActionLabel(),
         emphasis: 'primary',
         accentColor: this.storedAccentColor,
         actionEnabled: this.isInstallActionEnabled(),
@@ -229,7 +262,10 @@ export struct UserScriptInstallScreen {
   @Builder
   private buildPreviewDetails() {
     if (this.preview.version.length > 0) {
-      this.buildInfoRow({ label: '版本', value: this.preview.version }, this.hasRowsAfterVersion())
+      this.buildInfoRow(
+        { label: '版本', value: this.resolveVersionValue() },
+        this.hasRowsAfterVersion()
+      )
     }
     if (this.preview.sourceLabel.length > 0) {
       this.buildInfoRow({ label: '来源', value: this.preview.sourceLabel }, this.hasRowsAfterSource())
@@ -261,6 +297,14 @@ export struct UserScriptInstallScreen {
     ForEach(this.preview.warnings, (warning: string) => {
       this.buildPreviewMessage(warning, false)
     }, (warning: string) => warning)
+  }
+
+  private resolveVersionValue(): string {
+    const installedVersion = this.existingTarget.version.trim();
+    if (!this.isUpdatingInstalledScript() || installedVersion.length === 0) {
+      return this.preview.version;
+    }
+    return `${this.preview.version}（已安装 ${installedVersion}）`;
   }
 
   @Builder

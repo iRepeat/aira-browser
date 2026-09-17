@@ -103,12 +103,6 @@ export class UserScriptExternalImportCoordinator {
           status: 'prepared',
           errorMessage: ''
         };
-      case 'duplicate':
-        return {
-          requestId: requestId,
-          status: 'failed',
-          errorMessage: `“${result.duplicate.scriptName}”已经安装。`
-        };
       case 'failed':
         return {
           requestId: requestId,
