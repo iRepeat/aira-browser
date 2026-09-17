@@ -116,6 +116,11 @@ assertContract(addressPanel.includes('private shouldOpenToolbarSystemSheetFromGe
   !toolbarGestureHelper.includes('this.isWebContentMode()'),
   'Home and Web center upward gestures must open the native Sheet and leave the legacy panel at low, ' +
   'and must only fire for a deliberate pull that began on the visible chrome.');
+// A pull that starts on the collapsed bar is intercepted so it cannot expand the legacy panel, but
+// that interception must stay upward-only: a downward pull on the bar is the hide-the-search-panel
+// gesture, and swallowing it silently removed that affordance.
+assertContract(addressPanel.includes('barOwned && (source === \'center-capsule\' || source === \'none\') && offsetY < 0'),
+  'Bar-gesture interception must consume upward pulls only, so a downward pull can still hide the panel.');
 assertContract(!addressPanel.includes('private resolveToolbarGestureRelease('),
   'The old toolbar stage gesture-release state machine must not remain in the address panel.');
 assertContract(addressPanel.includes("intent.actionId === 'bottomChromeMenu'"),

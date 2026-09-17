@@ -719,13 +719,12 @@ export struct BrowserBottomAddressPanel {
             this.openToolbarSystemSheet('gesture_center_capsule');
             return 'low';
           }
-          // A pull on the collapsed bar is the bar's own trigger: it either opens the toolbar or
-          // does nothing. Handing a refused pull to the legacy panel intercept expanded the
-          // persistent panel to 'middle' with nothing in it, leaving an opaque scrim over the page
-          // -- which is worse than the reopen this guard exists to stop. The outer clusters keep
-          // their own downward Return-Home path, so only the center capsule and the gaps between
-          // the three blocks are consumed here.
-          if (barOwned && (source === 'center-capsule' || source === 'none')) {
+          // An upward pull on the collapsed bar must not reach the legacy panel intercept: that
+          // expands the persistent panel to 'middle' with nothing inside it, an opaque scrim over
+          // the page. A downward pull is the opposite gesture and must keep its existing meaning
+          // (hide the search panel / Return-Home on the outer clusters), so only upward pulls are
+          // consumed here.
+          if (barOwned && (source === 'center-capsule' || source === 'none') && offsetY < 0) {
             return 'low';
           }
           return this.onPanelDragEndIntercept(panelHeight, targetDetent, offsetY, source);
