@@ -1035,8 +1035,8 @@ check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CH
   'BROWSER_BOTTOM_CHROME_COMPACT_HEIGHT: number = 32' \
   "Scroll-Compact must keep the refined 32vp capsule height."
 check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
-  'BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y: number = 16' \
-  "Scroll-Compact must bottom-align the 32vp capsule inside the 48vp interaction rail."
+  'BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y: number =' \
+  "Scroll-Compact must lift the 32vp capsule clear of the 48vp rail's bottom edge."
 check_file_contains_rule "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL}" "${BOTTOM_CHROME_PRESENTATION_VIEW_MODEL_REL}" \
   'BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y: number = 16' \
   "Scroll-Compact must translate the floating surface with the refined capsule."

@@ -205,11 +205,15 @@ const BROWSER_BOTTOM_CHROME_ACCESSORY_GAP: number = 2;
 const BROWSER_BOTTOM_CHROME_COMPACT_WIDTH: number = 96;
 const BROWSER_BOTTOM_CHROME_COMPACT_HEIGHT: number = 32;
 const BROWSER_BOTTOM_CHROME_COMPACT_RADIUS: number = 16;
-// Scroll-Compact: the capsule is bottom-aligned inside the chrome render rail, so both
-// shifts equal that rail's height minus the compact capsule (48 - 32). Update them together
-// with BROWSER_BOTTOM_CHROME_RENDER_HEIGHT or the capsule overflows the rail.
-const BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y: number = 16;
+// Scroll-Compact: the capsule is bottom-aligned inside the chrome render rail, so the floating
+// surface still travels that rail's height minus the compact capsule (48 - 32). The capsule then
+// rides BROWSER_BOTTOM_CHROME_COMPACT_LIFT_Y clear of that bottom edge, since sitting flush on it
+// reads too low next to the gesture bar. Keep all three in step with
+// BROWSER_BOTTOM_CHROME_RENDER_HEIGHT or the capsule leaves the rail.
+const BROWSER_BOTTOM_CHROME_COMPACT_LIFT_Y: number = 12;
 const BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y: number = 16;
+const BROWSER_BOTTOM_CHROME_COMPACT_TRANSLATE_Y: number =
+  BROWSER_BOTTOM_CHROME_COMPACT_FLOATING_SURFACE_TRANSLATE_Y - BROWSER_BOTTOM_CHROME_COMPACT_LIFT_Y;
 const BROWSER_BOTTOM_CHROME_COMPACT_DISPLAY_SCALE: number = 14 / 15;
 const BROWSER_BOTTOM_CHROME_COMPACT_HORIZONTAL_PADDING: number = 10;
 const BROWSER_BOTTOM_CHROME_COMPACT_VERTICAL_PADDING: number = 4;

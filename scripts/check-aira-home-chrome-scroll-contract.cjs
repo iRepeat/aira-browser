@@ -589,8 +589,8 @@ function checkCollapseIsAnOpacityCrossFade() {
   assert(compact.compactFrame.centerWidth === 96 &&
     compact.compactFrame.centerHeight === 32 &&
     compact.compactFrame.centerRadius === 16 &&
-    compact.compactFrame.centerTranslateY === 16,
-  'the collapsed capsule must keep its refined 96x32 capsule bottom-aligned in the 48vp rail');
+    compact.compactFrame.centerTranslateY === 4,
+  'the collapsed capsule must keep its refined 96x32 capsule lifted 12vp clear of the 48vp rail');
   assert(compact.compactFrame.leadingOuterWidth === 0 &&
     compact.compactFrame.trailingOuterWidth === 0 &&
     compact.compactFrame.outerOpacity === 0,
