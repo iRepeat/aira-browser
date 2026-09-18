@@ -18,6 +18,7 @@ export struct BrowserAdaptiveModalOverlay {
   @Prop showDesktopHeader: boolean = true;
   @Prop showDesktopRefreshButton: boolean = false;
   @Prop phoneSheetHeight: Length = '';
+  @Prop phoneSheetAlignment: Alignment = Alignment.Bottom;
   @Prop phoneEnterOffsetY: number = 48;
   @Prop animationDurationMs: number = 220;
   @Prop zIndexValue: number = 220;
@@ -69,6 +70,7 @@ export struct BrowserAdaptiveModalOverlay {
       BrowserModalBottomOverlay({
         visible: this.visible,
         sheetHeight: this.phoneSheetHeight,
+        sheetAlignment: this.phoneSheetAlignment,
         enterOffsetY: this.phoneEnterOffsetY,
         animationDurationMs: this.animationDurationMs,
         zIndexValue: this.zIndexValue,

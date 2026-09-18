@@ -86,8 +86,17 @@ require_pattern "${COORDINATOR_REL}" "private async ensureGrant" \
   "the coordinator must nudge the idempotent grant before announcing it."
 require_pattern "${COORDINATOR_REL}" "export type NewUserGiftAction = 'dismiss'" \
   "the prompt is an announcement; its only action is to dismiss it."
-require_pattern "${COORDINATOR_REL}" "markAcknowledged\\(gift\\.uid\\)" \
+require_pattern "${COORDINATOR_REL}" "handleSurfaceRevealed\\(\\)" \
+  "the announcement must be acknowledged only once the surface actually reveals."
+require_pattern "${COORDINATOR_REL}" "markAcknowledged\\(uid\\)" \
   "the announcement must be recorded as acknowledged so it shows once."
+# A custom bottom surface mounts asynchronously, so the reveal guard must key off
+# this coordinator's own presentation generation and the visible snapshot. A
+# guard that rejects the visible snapshot abandons every presentation.
+require_pattern "${COORDINATOR_REL}" "presentationGeneration === this\\.presentationGeneration && this\\.snapshot\\.visible" \
+  "the reveal guard must require the published visible snapshot, not reject it."
+require_pattern "${SHELL_PAGE_REL}" "handleSurfaceRevealed\\(\\)" \
+  "the shell must acknowledge the announcement when the surface reveals."
 require_pattern "${REPOSITORY_REL}" "acknowledgedAt" \
   "the local record stores only that the announcement was seen."
 reject_pattern "${REPOSITORY_REL}" "claimedAt|grantedByUser|localGrant" \

@@ -40,8 +40,11 @@ server-side consequence of the account being new.
 
 - After a successful sign-in the client resolves the descriptor, best-effort nudges the idempotent ensure, and then
   announces the result once. The month of Pro is present whether or not the user interacts with the notice.
-- Dismissing the notice records a device-local acknowledgement in a per-account record so it is not shown again on this
-  device. Losing or never showing the notice never loses the entitlement; the local record suppresses repetition only.
+- The notice is acknowledged in a device-local per-account record once its transient bottom surface actually reveals,
+  so it is not shown again on this device. Acknowledgement is deliberately not tied to the presentation request:
+  a custom bottom surface mounts asynchronously, so a request that is abandoned before its reveal must not consume the
+  one-time announcement. Losing or never showing the notice never loses the entitlement; the local record suppresses
+  repetition only.
 - A different device or a reinstall may announce again, which is acceptable because the announcement is not a grant and
   the service refuses a duplicate grant.
 - The notice is a transient bottom surface like the Feature Gate, so back dismisses it and it composes with the existing

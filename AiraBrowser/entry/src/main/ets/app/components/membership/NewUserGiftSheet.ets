@@ -4,67 +4,59 @@ import {
   NewUserGiftSnapshot
 } from '../../../core/membership/NewUserGiftCoordinator';
 import {
-  BROWSER_THEME_STORAGE_ACCENT_KEY,
-  BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY,
-  BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
-  BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
-} from '../../../core/theme/BrowserThemeStorageKeys';
-import { AiraIcon } from '../common/AiraIcon';
-import {
   BrowserBottomSheetSurface,
   BrowserSheetActionButton
 } from '../browser/BrowserModalBottomSheet';
 
-const NEW_USER_GIFT_ICON_SIZE: number = 72;
-const NEW_USER_GIFT_ICON_GLYPH_SIZE: number = 34;
+// The announcement is a branded dark card, so its surface and on-surface text are
+// fixed instead of themed; the action keeps the shared brand token so the button
+// follows the app primary color in both light and dark mode.
+const NEW_USER_GIFT_CARD_RADIUS: number = 24;
+const NEW_USER_GIFT_CARD_PADDING: number = 18;
+const NEW_USER_GIFT_CARD_BACKGROUND: string = '#16151A';
+const NEW_USER_GIFT_CARD_TITLE_COLOR: string = '#EBEBEB';
+const NEW_USER_GIFT_CARD_MESSAGE_COLOR: string = '#BEBDC2';
+const NEW_USER_GIFT_ART_RADIUS: number = 14;
+const NEW_USER_GIFT_ART_ASPECT_RATIO: number = 1125 / 500;
+const NEW_USER_GIFT_TITLE_FONT_SIZE: number = 24;
+const NEW_USER_GIFT_MESSAGE_FONT_SIZE: number = 15;
 
 @Component
 export struct NewUserGiftSheet {
-  @StorageProp(BROWSER_THEME_STORAGE_ACCENT_KEY) private storedAccentColor: string = '#0A59F7';
-  @StorageProp(BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY) private storedControlBackgroundColor: string = '#EEF2F7';
-  @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY) private storedPrimaryTextColor: string = '#111318';
-  @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY) private storedSecondaryTextColor: string = '#5F6875';
   @Prop state: NewUserGiftSnapshot = createHiddenNewUserGiftSnapshot();
   @Prop layoutMode: 'phone' | 'large_screen' = 'phone';
   onAction: (action: NewUserGiftAction) => void = (_action: NewUserGiftAction) => {};
 
   build() {
     BrowserBottomSheetSurface({
-      presentation: this.layoutMode === 'large_screen' ? 'flat_content' : 'bottom_sheet'
+      presentation: 'flat_content',
+      horizontalPadding: 16,
+      topPadding: 0,
+      bottomPadding: 16
     }) {
       Column({ space: 18 }) {
-        Column({ space: 14 }) {
-          Stack({ alignContent: Alignment.Center }) {
-            Circle()
-              .width(NEW_USER_GIFT_ICON_SIZE)
-              .height(NEW_USER_GIFT_ICON_SIZE)
-              .fill(this.storedControlBackgroundColor)
+        Image($r('app.media.membership_reward_card'))
+          .width('100%')
+          .aspectRatio(NEW_USER_GIFT_ART_ASPECT_RATIO)
+          .objectFit(ImageFit.Cover)
+          .borderRadius(NEW_USER_GIFT_ART_RADIUS)
+          .clip(true)
 
-            AiraIcon({
-              airaIconId: 'membership.gift',
-              iconSize: NEW_USER_GIFT_ICON_GLYPH_SIZE,
-              iconColor: this.storedAccentColor
-            })
-          }
-          .width(NEW_USER_GIFT_ICON_SIZE)
-          .height(NEW_USER_GIFT_ICON_SIZE)
-
-          if (this.layoutMode === 'phone') {
-            Text(this.state.title)
-              .width('100%')
-              .fontSize(22)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.storedPrimaryTextColor)
-              .textAlign(TextAlign.Center)
-              .maxLines(2)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
+        Column({ space: 8 }) {
+          Text(this.state.title)
+            .width('100%')
+            .fontSize(NEW_USER_GIFT_TITLE_FONT_SIZE)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(NEW_USER_GIFT_CARD_TITLE_COLOR)
+            .textAlign(TextAlign.Center)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
 
           Text(this.state.message)
             .width('100%')
-            .fontSize(15)
+            .fontSize(NEW_USER_GIFT_MESSAGE_FONT_SIZE)
             .lineHeight(22)
-            .fontColor(this.storedSecondaryTextColor)
+            .fontColor(NEW_USER_GIFT_CARD_MESSAGE_COLOR)
             .textAlign(TextAlign.Center)
             .maxLines(3)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -76,7 +68,8 @@ export struct NewUserGiftSheet {
           BrowserSheetActionButton({
             label: this.state.actionTitle,
             emphasis: 'primary',
-            accentColor: this.storedAccentColor,
+            accentColor: $r('app.color.browser_brand_primary'),
+            textColor: $r('app.color.browser_brand_on_primary'),
             onAction: () => {
               this.onAction('dismiss');
             }
@@ -85,6 +78,11 @@ export struct NewUserGiftSheet {
         .width('100%')
       }
       .width('100%')
+      .padding(NEW_USER_GIFT_CARD_PADDING)
+      .backgroundColor(NEW_USER_GIFT_CARD_BACKGROUND)
+      .borderRadius(NEW_USER_GIFT_CARD_RADIUS)
+      .clip(true)
+      .alignItems(HorizontalAlign.Center)
     }
   }
 }

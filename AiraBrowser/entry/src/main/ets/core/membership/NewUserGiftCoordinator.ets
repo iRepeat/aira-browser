@@ -62,6 +62,7 @@ export class NewUserGiftCoordinator {
   private readonly shell: NewUserGiftShell;
   private evaluateTimer: number = -1;
   private evaluationGeneration: number = 0;
+  private presentationGeneration: number = 0;
   private snapshot: NewUserGiftSnapshot = createHiddenNewUserGiftSnapshot();
   private ensureInFlight: boolean = false;
 
@@ -94,12 +95,28 @@ export class NewUserGiftCoordinator {
     this.transientSurfaceCoordinator.dismiss('new_user_gift');
   }
 
+  /**
+   * Records that the announcement actually reached the user. A custom bottom
+   * surface mounts asynchronously, so a presentation request that is abandoned
+   * before its reveal must not consume the one-time announcement.
+   */
+  handleSurfaceRevealed(): void {
+    const uid = this.snapshot.uid;
+    if (!this.snapshot.visible || uid.length === 0) {
+      return;
+    }
+    void this.repository.markAcknowledged(uid).catch((_error: Error): void => {
+    });
+  }
+
   handleSurfaceDismissed(): void {
+    this.presentationGeneration += 1;
     this.publishState(createHiddenNewUserGiftSnapshot());
   }
 
   handleShellReset(): void {
     this.cancelEvaluation();
+    this.presentationGeneration += 1;
     this.publishState(createHiddenNewUserGiftSnapshot());
   }
 
@@ -144,14 +161,19 @@ export class NewUserGiftCoordinator {
     if (this.repository.getRecord(gift.uid).acknowledgedAt > 0) {
       return;
     }
+    this.presentAnnouncement(gift);
+  }
+
+  private presentAnnouncement(gift: AiraNewUserGiftView): void {
     this.publishState(this.buildVisibleSnapshot(gift));
+    this.presentationGeneration += 1;
+    const presentationGeneration = this.presentationGeneration;
     this.transientSurfaceCoordinator.present({
       id: 'new_user_gift',
       revealDelayMs: 0,
       dismissDurationMs: 0,
-      shouldReveal: (): boolean => this.canPresent(generation)
-    });
-    await this.repository.markAcknowledged(gift.uid).catch((_error: Error): void => {
+      shouldReveal: (): boolean =>
+        presentationGeneration === this.presentationGeneration && this.snapshot.visible
     });
   }
 
@@ -206,8 +228,14 @@ export class NewUserGiftCoordinator {
     return this.membershipFeature.getNewUserGiftState();
   }
 
+  /**
+   * Whether a presentation may still start. `snapshot.visible` is deliberately
+   * not consulted here: publishing the visible snapshot is what expresses the
+   * intent to present, so treating it as a blocker would abandon every
+   * presentation at the reveal step.
+   */
   private canPresent(generation: number): boolean {
-    if (generation !== this.evaluationGeneration || this.snapshot.visible) {
+    if (generation !== this.evaluationGeneration) {
       return false;
     }
     if (!this.isDistributionEligible()) {
@@ -237,10 +265,10 @@ export class NewUserGiftCoordinator {
     return {
       visible: true,
       uid: gift.uid,
-      title: '新用户会员已到账',
-      message: `欢迎使用 Aira。你已经获得 ${grantDays} 天 Aira Pro 权益，可在会员页查看。`,
+      title: 'Aira Pro 已到账',
+      message: `已为你开通 ${grantDays} 天 Aira Pro，权益立即生效。`,
       grantDays: grantDays,
-      actionTitle: '知道了'
+      actionTitle: '开心收下'
     };
   }
 

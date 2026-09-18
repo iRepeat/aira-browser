@@ -43,6 +43,11 @@ export struct BrowserModalBottomOverlay {
   @Prop @Watch('syncVisible') visible: boolean = false;
   @Prop dismissOnOutsideTap: boolean = true;
   @Prop showScrim: boolean = true;
+  /**
+   * Where the sheet lane sits in the viewport. Bottom keeps the standard sheet
+   * anchor; a centered lane presents the same content as a floating card.
+   */
+  @Prop sheetAlignment: Alignment = Alignment.Bottom;
   sheetHeight: Length = '';
   zIndexValue: number = BROWSER_MODAL_BOTTOM_SHEET_Z_INDEX;
   animationDurationMs: number = BROWSER_MODAL_BOTTOM_SHEET_ANIMATION_DURATION_MS;
@@ -60,7 +65,7 @@ export struct BrowserModalBottomOverlay {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Stack({ alignContent: this.sheetAlignment }) {
       Stack()
         .width('100%')
         .height('100%')

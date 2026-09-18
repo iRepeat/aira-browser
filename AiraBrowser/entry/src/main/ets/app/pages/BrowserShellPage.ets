@@ -8019,6 +8019,13 @@ struct BrowserShellPage {
         this.newUserGiftCoordinator.handleSurfaceDismissed();
       }
     }
+    if (update.lane === 'custom_bottom' &&
+      update.reason === 'reveal' &&
+      update.surfaceId === 'new_user_gift') {
+      // The announcement is only spent once it actually reaches the user; an
+      // abandoned mount must not consume the one-time notice.
+      this.newUserGiftCoordinator.handleSurfaceRevealed();
+    }
     if (update.lane === 'custom_bottom' && update.chromePlan !== undefined) {
       this.applyRootBottomPanelSessionChromePlan(update.chromePlan);
     }
