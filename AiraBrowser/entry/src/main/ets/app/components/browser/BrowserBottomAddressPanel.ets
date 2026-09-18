@@ -748,6 +748,16 @@ export struct BrowserBottomAddressPanel {
       showClose: false,
       backgroundColor: this.storedPageBackgroundColor,
       blurStyle: BlurStyle.NONE,
+      onWillDismiss: (action: DismissSheetAction): void => {
+        // Native interactive dismissal can finish its $$ writeback after the exit animation.
+        // Clear the binding before it starts so a scrolling-page redraw cannot resubmit show=true.
+        this.toolbarSystemSheetVisible = false;
+        action.dismiss();
+      },
+      onWillSpringBackWhenDismiss: (_action: SpringBackAction): void => {
+        // An interactive-dismiss handler otherwise adds a springback before drag dismissal.
+        // All dismissal reasons are accepted, so preserve the native direct-close behavior.
+      },
       onDisappear: (): void => {
         this.handleToolbarSystemSheetDisappear();
       }
