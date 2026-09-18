@@ -211,7 +211,9 @@ export struct BrowserBottomChromeRenderer {
     }
     .width('100%')
     .height(BROWSER_BOTTOM_CHROME_RENDER_HEIGHT)
-    .hitTestBehavior(HitTestMode.Transparent)
+    // While the capsule is the presented chrome this rail-sized box must not answer for itself;
+    // children stay live, so the capsule layer keeps working.
+    .hitTestBehavior(this.isCompactChromePresented() ? HitTestMode.None : HitTestMode.Transparent)
   }
 
   @Builder
@@ -234,7 +236,11 @@ export struct BrowserBottomChromeRenderer {
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Top)
     .opacity(1 - this.resolveScrollCompactProgress())
-    .hitTestBehavior(HitTestMode.Transparent)
+    // Faded out, this rail is still mounted and still spans the full width. Disowning the subtree
+    // keeps the invisible rail from claiming taps beside the capsule; siblings are untouched, so the
+    // capsule fades in over it and stays live.
+    .hitTestBehavior(this.isCompactChromePresented() ?
+      HitTestMode.BLOCK_DESCENDANTS : HitTestMode.Transparent)
   }
 
   /**
@@ -264,34 +270,42 @@ export struct BrowserBottomChromeRenderer {
           edgeHighlightColor: this.edgeHighlightColor
         }) {
           Stack({ alignContent: Alignment.Center }) {
-            Text(this.presentation.centerContent.displayText)
-              .width(this.compactFrame.centerViewportWidth)
-              .height(BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT)
-              .fontSize(BROWSER_BOTTOM_CHROME_TEXT_SIZE)
-              .lineHeight(BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT)
-              .halfLeading(true)
-              .textVerticalAlign(TextVerticalAlign.CENTER)
-              .fontColor(this.presentation.centerContent.displayUsesSecondaryTone ?
-                this.resolveSecondaryTextForeground() : this.resolvePrimaryTextForeground())
-              .fontWeight(FontWeight.Regular)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .textAlign(TextAlign.Center)
-              .scale({
-                x: this.compactFrame.centerDisplayScale,
-                y: this.compactFrame.centerDisplayScale
-              })
-              .hitTestBehavior(HitTestMode.None)
+            // The inset pads the display text only. Keeping it off the tap surface lets the whole
+            // 96x32 capsule answer the restore tap instead of the 76x24 content box, so the capsule's
+            // visible edge is not a dead band that falls through to the page.
+            Stack({ alignContent: Alignment.Center }) {
+              Text(this.presentation.centerContent.displayText)
+                .width(this.compactFrame.centerViewportWidth)
+                .height(BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT)
+                .fontSize(BROWSER_BOTTOM_CHROME_TEXT_SIZE)
+                .lineHeight(BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT)
+                .halfLeading(true)
+                .textVerticalAlign(TextVerticalAlign.CENTER)
+                .fontColor(this.presentation.centerContent.displayUsesSecondaryTone ?
+                  this.resolveSecondaryTextForeground() : this.resolvePrimaryTextForeground())
+                .fontWeight(FontWeight.Regular)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .textAlign(TextAlign.Center)
+                .scale({
+                  x: this.compactFrame.centerDisplayScale,
+                  y: this.compactFrame.centerDisplayScale
+                })
+                .hitTestBehavior(HitTestMode.None)
+            }
+            .width('100%')
+            .height('100%')
+            .padding({
+              left: this.compactFrame.centerHorizontalPadding,
+              right: this.compactFrame.centerHorizontalPadding,
+              top: this.compactFrame.centerVerticalPadding,
+              bottom: this.compactFrame.centerVerticalPadding
+            })
+            .hitTestBehavior(HitTestMode.None)
             this.buildCompactTapSurface()
           }
           .width('100%')
           .height('100%')
-          .padding({
-            left: this.compactFrame.centerHorizontalPadding,
-            right: this.compactFrame.centerHorizontalPadding,
-            top: this.compactFrame.centerVerticalPadding,
-            bottom: this.compactFrame.centerVerticalPadding
-          })
         }
       }
       .width(this.compactFrame.centerWidth)
@@ -323,8 +337,10 @@ export struct BrowserBottomChromeRenderer {
       .focusOnTouch(false)
       .enabled(this.isPhysicalTargetInteractive('compact-body'))
       .accessibilityText(this.resolveLiveTapTarget('compact-body').accessibilityText)
+      // Collapsed, the capsule is the only chrome and the header host no longer blocks the page, so
+      // the blocking lives here instead: confined to the capsule's own box.
       .hitTestBehavior(this.isPhysicalTargetInteractive('compact-body') ?
-        HitTestMode.Default : HitTestMode.None)
+        HitTestMode.BLOCK_HIERARCHY : HitTestMode.None)
       .onTouch((event: TouchEvent) => {
         if (event.type === TouchType.Down) {
           this.capturePressedTargetIntent('compact-body');

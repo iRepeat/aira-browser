@@ -295,11 +295,33 @@ function checkHiddenFloatingHeaderHitTesting() {
   assert(start >= 0 && end > start, 'cannot isolate floating header hit testing');
   const body = source.slice(start, end).replace(/\s+/g, ' ');
   assert(
-    body.includes(
-      '.hitTestBehavior(this.shouldEnableFloatingHeaderInteraction() ? HitTestMode.BLOCK_HIERARCHY : ' +
-        'HitTestMode.BLOCK_DESCENDANTS)'
-    ),
+    body.includes('.hitTestBehavior(this.shouldEnableFloatingHeaderInteraction() ?'),
+    'floating header hit testing must stay keyed off the presentation-owner interaction verdict'
+  );
+  assert(
+    body.includes('HitTestMode.BLOCK_DESCENDANTS'),
     'hidden floating Search must disable its complete interactive descendant subtree'
+  );
+  // Expanded chrome keeps BLOCK_HIERARCHY so the bar's taps cannot reach the page. Collapsed chrome
+  // must not: that mode blocks ancestors and lower-priority siblings across the host's whole box, not
+  // just its responseRegion, which left the blank space beside the collapsed capsule unable to reach
+  // either the page or any control. The capsule carries the blocking for its own box instead.
+  assert(
+    body.includes('HitTestMode.BLOCK_HIERARCHY') &&
+      body.includes('this.isCompactFloatingHeaderInteraction()') &&
+      body.includes('HitTestMode.Transparent'),
+    'floating header must block the page while expanded and release it while collapsed'
+  );
+  const rendererSource = fs.readFileSync(
+    path.join(repoRoot, 'AiraBrowser/entry/src/main/ets/app/components/browser/BrowserBottomChromeRenderer.ets'),
+    'utf8'
+  );
+  const compactStart = rendererSource.indexOf('private buildCompactTapSurface()');
+  const compactEnd = rendererSource.indexOf('private buildLeadingOuterMaterial()', compactStart);
+  assert(compactStart >= 0 && compactEnd > compactStart, 'cannot isolate the compact tap surface');
+  assert(
+    rendererSource.slice(compactStart, compactEnd).includes('HitTestMode.BLOCK_HIERARCHY : HitTestMode.None'),
+    'the collapsed capsule must block the page inside its own box while the header host releases it'
   );
 }
 

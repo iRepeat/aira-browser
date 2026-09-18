@@ -163,7 +163,10 @@ function allocateToolbarSystemSheetInstanceToken(): number {
   return toolbarSystemSheetInstanceTokenSequence;
 }
 
-const WEB_BOTTOM_ADDRESS_BAR_HEIGHT: number = 44;
+// Mirrors the three-block renderer's rail. The floating panel reserves 68vp for this header
+// (48 rail + 2 * 10 vertical padding), so hosting the rail in a shorter box clipped its top and
+// bottom edges by the difference.
+const WEB_BOTTOM_ADDRESS_BAR_HEIGHT: number = 48;
 const USER_AGENT_ACTION_DIAGNOSTIC_LOG_DOMAIN: number = 0x0000;
 const USER_AGENT_ACTION_DIAGNOSTIC_LOG_TAG: string = 'BrowsingIdentity';
 const USER_AGENT_ACTION_DIAGNOSTIC_PREFIX: string = '[DEBUG-UA-ACTION-20260828]';
@@ -171,9 +174,9 @@ const USER_AGENT_ACTION_DIAGNOSTIC_PREFIX: string = '[DEBUG-UA-ACTION-20260828]'
 const ROUTE_ACTION_DIAGNOSTIC_LOG_DOMAIN: number = 0x0000;
 const ROUTE_ACTION_DIAGNOSTIC_LOG_TAG: string = 'RouteActionDiag';
 const ROUTE_ACTION_DIAGNOSTIC_PREFIX: string = '[DIAG-route-action-20260914]';
-const WEB_BOTTOM_ADDRESS_INPUT_CONTENT_HEIGHT: number = 44;
+const WEB_BOTTOM_ADDRESS_INPUT_CONTENT_HEIGHT: number = 48;
 const WEB_BOTTOM_ADDRESS_INPUT_LINE_HEIGHT: number = BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT;
-const WEB_BOTTOM_ADDRESS_BUTTON_SIZE: number = 44;
+const WEB_BOTTOM_ADDRESS_BUTTON_SIZE: number = 48;
 const WEB_BOTTOM_ADDRESS_ICON_SIZE: number = 22;
 const WEB_BOTTOM_ADDRESS_IMAGE_ICON_SIZE: number = 22;
 const WEB_BOTTOM_ADDRESS_BUTTON_GAP: number = 2;
@@ -893,6 +896,10 @@ export struct BrowserBottomAddressPanel {
     }
     .width('100%')
     .height(WEB_BOTTOM_ADDRESS_BAR_HEIGHT)
+    // Pure layout container spanning the panel's full width. Left at the default it claims hits in
+    // the blank space beside the collapsed capsule, which keeps those taps from ever reaching the
+    // page. Self-only: children still respond, so every control keeps its own area.
+    .hitTestBehavior(HitTestMode.None)
   }
 
   @Builder

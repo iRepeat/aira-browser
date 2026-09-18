@@ -454,6 +454,11 @@ export struct BrowserDetentBottomPanel {
         top: BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING,
         bottom: BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING
       })
+      // Pure layout container filling the header box. Left at the default it becomes the hit target
+      // for every touch in that box, including the blank space beside the collapsed capsule, and the
+      // host above it blocks lower priorities -- so those taps reach neither the page nor a control.
+      // Self-only: children keep working, so the rail and the capsule are unaffected.
+      .hitTestBehavior(HitTestMode.None)
     }
     .width(this.resolveFloatingHeaderSurfaceWidth())
     .height(this.getFloatingHeaderHeight())
@@ -474,8 +479,15 @@ export struct BrowserDetentBottomPanel {
       width: this.resolveFloatingHeaderInteractionWidth(),
       height: this.resolveFloatingHeaderInteractionHeight()
     })
+    // BLOCK_HIERARCHY blocks ancestors and lower-priority siblings across this node's whole box, not
+    // just its responseRegion. Expanded, that is what keeps the bar's taps off the page. Collapsed, the
+    // capsule is the only interactive part, and blocking the full-width box would leave the blank space
+    // beside it dead -- claimed by nobody and reaching neither the page nor a control. Transparent
+    // keeps this host and its children responsive while the page receives everything else; the capsule
+    // carries its own blocking.
     .hitTestBehavior(this.shouldEnableFloatingHeaderInteraction() ?
-      HitTestMode.BLOCK_HIERARCHY : HitTestMode.BLOCK_DESCENDANTS)
+      (this.isCompactFloatingHeaderInteraction() ?
+        HitTestMode.Transparent : HitTestMode.BLOCK_HIERARCHY) : HitTestMode.BLOCK_DESCENDANTS)
     // The three-block header paints no surface of its own here, so clipping this host would slice the
     // round buttons' shadows off at an invisible pill edge. Clip only while the pill carries chrome.
     .clip(this.floatingHeaderChromeVisible)
@@ -1322,6 +1334,14 @@ export struct BrowserDetentBottomPanel {
     return this.floatingHeaderInteractionEnabled &&
       this.resolveFloatingHeaderPresentationOpacity() > 0.001 &&
       this.shouldEnableOverlayPanelHitTest();
+  }
+
+  /**
+   * The caller only supplies an interaction rect for the collapsed capsule, so a positive width
+   * means the capsule -- not the expanded rail -- is the chrome on screen.
+   */
+  private isCompactFloatingHeaderInteraction(): boolean {
+    return this.floatingHeaderInteractionWidth > 0;
   }
 
   private shouldClipOverlayPanel(): boolean {
