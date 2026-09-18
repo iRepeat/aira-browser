@@ -292,6 +292,10 @@ export struct CustomHomepageSurface {
         .width('100%')
         .height('100%')
         .backgroundColor(this.themeBackgroundColor)
+        // Fade one flattened cover. Without a render group, inherited opacity
+        // makes the image translucent over the separately faded backplate,
+        // tinting the handoff dark/light even when snapshot and live pixels match.
+        .renderGroup(true)
         .opacity(this.launchSnapshotRevealOpacity)
         .hitTestBehavior(HitTestMode.None)
         .onAppear((): void => {
