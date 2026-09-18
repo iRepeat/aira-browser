@@ -322,7 +322,9 @@ export struct BrowserBottomChromeRenderer {
     .height(BROWSER_BOTTOM_CHROME_RENDER_HEIGHT)
     .translate({ y: this.compactFrame.centerTranslateY })
     .opacity(this.resolveScrollCompactProgress())
-    .hitTestBehavior(this.isCompactChromePresented() ? HitTestMode.Transparent : HitTestMode.None)
+    // This rail stays above the address field even at zero opacity. None only excludes the rail
+    // itself; its material/layout descendants can still swallow the address field's center touches.
+    .hitTestBehavior(this.isCompactChromePresented() ? HitTestMode.Transparent : HitTestMode.BLOCK_DESCENDANTS)
   }
 
   @Builder
