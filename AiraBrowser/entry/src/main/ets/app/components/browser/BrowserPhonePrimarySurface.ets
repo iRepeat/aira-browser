@@ -27,7 +27,7 @@ export struct BrowserPhonePrimarySurface {
       }
 
       if (this.webLayerMounted) {
-        Stack() {
+        Stack({ alignContent: Alignment.Top }) {
           this.webSurface()
         }
         .width('100%')

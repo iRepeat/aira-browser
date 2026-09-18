@@ -19,6 +19,7 @@ import {
   BrowserScrollPerformanceState
 } from './BrowserScrollPerformanceCoordinator';
 import { BrowserWebTopImmersionSessionCoordinator } from './BrowserWebTopImmersionSessionCoordinator';
+import { BrowserWebViewportPresentationState } from './BrowserWebViewportCoordinator';
 import { AiraScrollOscProbe } from '../../common/debug/AiraScrollOscProbe';
 import { HomeSearchPanelDetent } from './HomeSearchPanelDetentViewModel';
 
@@ -43,6 +44,7 @@ export interface BrowserWebScrollInteractionDecision {
 
 export interface BrowserWebScrollInteractionShellFacts {
   activeTabId: string;
+  bottomToolbarPinnedBySafeArea?: boolean;
   webPageVisible: boolean;
   addressFocused: boolean;
   currentDetent: HomeSearchPanelDetent;
@@ -78,6 +80,9 @@ const DEFAULT_WEB_SCROLL_INTERACTION_CONFIG: BrowserWebScrollInteractionConfig =
 };
 
 const CONTINUATION_SCROLL_CHECKPOINT_DELAY_MS: number = 300;
+// Covers the immediate ArkWeb reflow after native top/bottom insets settle, without
+// suppressing a whole gesture or treating every reverse scroll as layout feedback.
+const VIEWPORT_SCROLL_CORRECTION_WINDOW_MS: number = 650;
 
 export class BrowserWebScrollInteractionCoordinator {
   private readonly dependencies: BrowserWebScrollInteractionDependencies;
@@ -89,6 +94,9 @@ export class BrowserWebScrollInteractionCoordinator {
   private recentScrollGestureUntilAt: number = 0;
   private programmaticScrollSuppressedUntilAt: number = 0;
   private lastScrollY: number = 0;
+  private viewportCorrectionTabId: string = '';
+  private viewportCorrectionRemainingPx: number = 0;
+  private viewportCorrectionUntilAt: number = 0;
   private lastBottomChromeScrollY: number = 0;
   private bottomChromeScrollSourceId: string = '';
   private scrollPerformanceState: BrowserScrollPerformanceState;
@@ -121,9 +129,15 @@ export class BrowserWebScrollInteractionCoordinator {
     const probePreviousY = this.lastScrollY;
     this.scheduleContinuationScrollCheckpoint(tabId, scrollY);
     this.adoptBottomChromeScrollSource(`global:${tabId}`, tabId, scrollY);
+    const viewportCorrection = this.consumeViewportScrollCorrection(tabId, scrollY - this.lastScrollY);
     const interaction = this.resolveScrollInteraction(this.lastScrollY, scrollY);
     this.lastScrollY = scrollY;
     this.lastBottomChromeScrollY = scrollY;
+    if (viewportCorrection) {
+      this.dependencies.bottomChromeScrollCoordinator.reset(tabId, scrollY);
+      this.dependencies.topImmersionSessionCoordinator.resetScrollBaseline(tabId, scrollY);
+      return;
+    }
     if (interaction.kind !== 'user') {
       AiraScrollOscProbe.markSignal(
         `global:${tabId}`, scrollY, scrollY - probePreviousY, 'skip_' + interaction.reason, interaction.reason
@@ -149,6 +163,55 @@ export class BrowserWebScrollInteractionCoordinator {
     );
     this.activatePerformanceForMove();
     this.applySmoothModeForScroll(facts, tabId);
+  }
+
+  handleViewportChanged(
+    tabId: string,
+    previous: BrowserWebViewportPresentationState,
+    next: BrowserWebViewportPresentationState
+  ): void {
+    const facts = this.shell.resolveFacts();
+    if (tabId === facts.activeTabId && facts.bottomToolbarPinnedBySafeArea === true) {
+      this.shell.applyBottomChromeDecision(this.dependencies.bottomChromeScrollCoordinator.handleWebScrollMove(
+        this.buildBottomChromeInput(facts, tabId, this.lastBottomChromeScrollY, false)
+      ));
+    }
+    const previousBottom = previous.reservedBottomInsetPx;
+    const nextBottom = next.reservedBottomInsetPx;
+    if (previous.fillParentHeight || next.fillParentHeight ||
+      previous.hostHeightPx !== next.hostHeightPx || (previousBottom <= 0 && nextBottom <= 0)) {
+      this.clearViewportScrollCorrection();
+      return;
+    }
+    const heightDelta = next.contentHeightPx - previous.contentHeightPx;
+    if (heightDelta === 0) return;
+    this.viewportCorrectionTabId = tabId;
+    // A taller viewport can clamp scrollY backwards at the document end. A
+    // shrinking viewport can move it forwards through scroll anchoring.
+    this.viewportCorrectionRemainingPx = -heightDelta;
+    this.viewportCorrectionUntilAt = Date.now() + VIEWPORT_SCROLL_CORRECTION_WINDOW_MS;
+  }
+
+  private consumeViewportScrollCorrection(tabId: string, delta: number): boolean {
+    if (tabId !== this.viewportCorrectionTabId || Date.now() > this.viewportCorrectionUntilAt) {
+      this.clearViewportScrollCorrection();
+      return false;
+    }
+    const remaining = this.viewportCorrectionRemainingPx;
+    if (delta === 0 || remaining === 0) return false;
+    if (delta * remaining <= 0 || Math.abs(delta) > Math.abs(remaining) + 1) {
+      // Different direction / beyond the geometry delta is genuine movement.
+      this.clearViewportScrollCorrection();
+      return false;
+    }
+    this.viewportCorrectionRemainingPx = Math.abs(delta) >= Math.abs(remaining) ? 0 : remaining - delta;
+    return true;
+  }
+
+  private clearViewportScrollCorrection(): void {
+    this.viewportCorrectionTabId = '';
+    this.viewportCorrectionRemainingPx = 0;
+    this.viewportCorrectionUntilAt = 0;
   }
 
   handleControllerAttached(tabId: string): void {
@@ -218,6 +281,7 @@ export class BrowserWebScrollInteractionCoordinator {
       return;
     }
     if (phase === 'down') {
+      this.clearViewportScrollCorrection();
       this.dependencies.recentActionManager.recordClick(Date.now());
       this.cancelPendingSettle();
       this.dependencies.bottomChromeScrollCoordinator.reset(tabId, this.lastBottomChromeScrollY);
@@ -236,6 +300,7 @@ export class BrowserWebScrollInteractionCoordinator {
   }
 
   resetForNavigation(tabId: string, scrollOffsetY: number = 0): void {
+    this.clearViewportScrollCorrection();
     const scrollY = this.normalizeScrollY(scrollOffsetY);
     sharedBrowserContinuationCoordinator.updateActiveTabScroll(tabId, scrollY);
     this.cancelPendingSettle();
@@ -263,6 +328,7 @@ export class BrowserWebScrollInteractionCoordinator {
   }
 
   handleShellDisappear(): void {
+    this.clearViewportScrollCorrection();
     const facts = this.shell.resolveFacts();
     this.flushContinuationScrollCheckpoint();
     this.cancelPendingSettle();
@@ -342,6 +408,7 @@ export class BrowserWebScrollInteractionCoordinator {
   ): BrowserBottomChromeWebScrollInput {
     return {
       tabId: tabId,
+      bottomToolbarPinnedBySafeArea: facts.bottomToolbarPinnedBySafeArea,
       scrollOffsetY: this.normalizeScrollY(scrollOffsetY),
       webPageVisible: facts.webPageVisible,
       addressFocused: facts.addressFocused,

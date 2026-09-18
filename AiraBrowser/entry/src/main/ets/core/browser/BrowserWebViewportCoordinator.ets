@@ -27,6 +27,7 @@ export interface BrowserWebViewportTopInsetAlignmentResult {
 export interface BrowserWebViewportLayerLayoutInput {
   hostHeightPx: number;
   visualTopInsetPx: number;
+  visualBottomInsetPx?: number;
   fullViewport: boolean;
   largeScreenShellActive: boolean;
   nativeVideoTakeoverActive: boolean;
@@ -40,6 +41,7 @@ export interface BrowserWebViewportVisibleTopChromeInput {
 
 export interface BrowserWebViewportPresentationState {
   hostHeightPx: number;
+  reservedBottomInsetPx: number;
   topSafeOverlayHeightPx: number;
   contentTopPx: number;
   contentHeightPx: number;
@@ -89,14 +91,20 @@ export class BrowserWebViewportCoordinator {
   }
 
   static resolveLayerLayout(input: BrowserWebViewportLayerLayoutInput): BrowserWebViewportPresentationState {
-    const hostHeightPx = Math.max(1, Math.ceil(input.hostHeightPx));
+    const availableHeightPx = Math.max(1, Math.ceil(input.hostHeightPx));
     const topInsetPx = input.fullViewport ? 0 : Math.max(0, Math.ceil(input.visualTopInsetPx));
-    const contentHeightPx = input.fullViewport ? hostHeightPx : Math.max(1, hostHeightPx - topInsetPx);
     const fillParentHeight = input.largeScreenShellActive || input.nativeVideoTakeoverActive;
+    const bottomInsetPx = input.fullViewport || fillParentHeight ? 0 :
+      Math.min(availableHeightPx - 1, Math.max(0, Math.ceil(input.visualBottomInsetPx ?? 0)));
+    // Reserve space outside the native viewport. From here on top immersion uses
+    // exactly the same geometry as an ordinary screen of this shorter height.
+    const hostHeightPx = availableHeightPx - bottomInsetPx;
+    const contentHeightPx = input.fullViewport ? hostHeightPx : Math.max(1, hostHeightPx - topInsetPx);
     const scrollHiddenTopBlurHeightPx = input.fullViewport || fillParentHeight || topInsetPx > 0
       ? 0 : Math.min(contentHeightPx, Math.max(0, input.scrollHiddenTopBlurHeightPx ?? 0));
     return {
       hostHeightPx,
+      reservedBottomInsetPx: bottomInsetPx,
       topSafeOverlayHeightPx: topInsetPx,
       contentTopPx: topInsetPx,
       contentHeightPx,
@@ -113,6 +121,7 @@ export class BrowserWebViewportCoordinator {
     input: BrowserWebViewportPresentationUpdateInput
   ): BrowserWebViewportPresentationState {
     if (input.current.hostHeightPx === input.next.hostHeightPx &&
+      input.current.reservedBottomInsetPx === input.next.reservedBottomInsetPx &&
       input.current.topSafeOverlayHeightPx === input.next.topSafeOverlayHeightPx &&
       input.current.contentTopPx === input.next.contentTopPx &&
       input.current.contentHeightPx === input.next.contentHeightPx &&

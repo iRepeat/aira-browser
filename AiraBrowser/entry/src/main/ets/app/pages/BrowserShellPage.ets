@@ -100,6 +100,7 @@ import { WebPageShareService } from '../../services/share/WebPageShareService';
 import { BrowserUserAgentClientHintsService } from '../../services/web/BrowserUserAgentClientHintsService';
 import { BrowserUserAgentRuntimeService } from '../../services/web/BrowserUserAgentRuntimeService';
 import { WebScrollSmoothModeService } from '../../services/web/WebScrollSmoothModeService';
+import { BrowserWebBottomSafeAreaCoordinator } from '../../core/browser/BrowserWebBottomSafeAreaCoordinator';
 import {
   DocumentViewerChromeContext,
   DocumentViewerFileInfo,
@@ -3468,6 +3469,8 @@ struct BrowserShellPage {
         assistantVideoTakeoverActive: this.isAssistantVideoTakeoverActive(),
         scrollOffsetY: this.browserWebScrollInteractionCoordinator.getLastScrollY(),
         addressFocused: this.webBottomAddressFocused,
+        bottomToolbarPinnedBySafeArea: this.webViewportPresentation.reservedBottomInsetPx > 0 &&
+          this.rootBottomAddressPanelDetent === 'low',
         bottomPanelInteractive: this.rootBottomAddressPanelDetent !== 'peek' &&
           !this.browserRootBottomPanelSessionCoordinator.isScrollPresentationActive(),
         statusBarVisible: this.webStatusBarVisible
@@ -4354,6 +4357,26 @@ struct BrowserShellPage {
     (): WebLinkContextMenuFixedActionApplication => this.webContextMenuActionApplication
   );
   private webScrollSmoothModeService: WebScrollSmoothModeService = new WebScrollSmoothModeService();
+  private webBottomSafeAreaInsetVp: number = 0;
+  private browserWebBottomSafeAreaCoordinator: BrowserWebBottomSafeAreaCoordinator =
+    new BrowserWebBottomSafeAreaCoordinator({
+      readFacts: () => ({
+        tabId: this.activeTabId,
+        url: this.tabScopedEventContextCoordinator.resolvePageUrl(this.activeTabId),
+        controller: this.browserRuntimeLifecyclePort.resolveController(this.activeTabId),
+        eligible: this.isWebPageVisible() && !this.isLargeScreenShellFamilyActive() &&
+          !this.shouldHideRootBottomChromeForImmersion() &&
+          !this.buildCurrentDocumentViewerChromeContext().policy.active &&
+          /^https?:\/\//i.test(this.tabScopedEventContextCoordinator.resolvePageUrl(this.activeTabId)),
+        suspended: this.rootKeyboardInsetVp > 0 || this.webBottomAddressFocused || this.showTabsSheet ||
+          this.readerModeSessionSnapshot.state.visible || this.novelReaderSnapshot.visible,
+        systemBottomInsetVp: this.homeBottomSafeInsetVp
+      }),
+      applyBottomInset: (insetVp: number): void => {
+        this.webBottomSafeAreaInsetVp = insetVp;
+        this.refreshWebViewportPresentation();
+      }
+    });
   private browserThemeModeCoordinator: BrowserThemeModeCoordinator =
     new BrowserThemeModeCoordinator(sharedPreferencesRepository);
   private homeShortcutOpenCoordinator: HomeShortcutOpenCoordinator = new HomeShortcutOpenCoordinator(
@@ -5503,6 +5526,7 @@ struct BrowserShellPage {
       addressFocused: this.webBottomAddressFocused,
       currentDetent: this.rootBottomAddressPanelDetent,
       currentPresentation: this.rootBottomPanelPresentationSnapshot.scrollPresentation,
+      bottomToolbarPinnedBySafeArea: this.webViewportPresentation.reservedBottomInsetPx > 0,
       tabsSheetVisible: this.showTabsSheet,
       webAppImmersiveMode: this.isWebAppImmersiveMode(),
       fullScreenModeEnabled: this.browserFullscreenSessionPresentation.fullScreenModeEnabled,
@@ -5871,6 +5895,7 @@ struct BrowserShellPage {
     }),
     setBrowserShellVisible: (visible: boolean): void => {
       this.isBrowserShellVisible = visible;
+      this.browserWebBottomSafeAreaCoordinator.setVisible(visible);
     },
     setStartupHomeSurfacePending: (pending: boolean): void => {
       this.startupHomeSurfacePending = pending;
@@ -5900,6 +5925,7 @@ struct BrowserShellPage {
     },
     applyExperimentSettings: (settings: BrowserExperimentSettings): void => {
       this.webScrollExperimentSettings = settings;
+      this.browserWebBottomSafeAreaCoordinator.setEnabled(settings.webBottomSafeAreaEnabled);
       this.webScrollSmoothModeRuntimeEnabled = settings.pauseWebAnimationsDuringScroll ||
         settings.reduceMediaMotionDuringScroll;
     },
@@ -6037,6 +6063,7 @@ struct BrowserShellPage {
   }
 
   aboutToDisappear(): void {
+    this.browserWebBottomSafeAreaCoordinator.dispose();
     this.rootBottomPanelToolbarSystemSheetRequested = false;
     this.clientUpdatePolicyUnsubscribe?.();
     this.clientUpdatePolicyUnsubscribe = undefined;
@@ -6060,10 +6087,12 @@ struct BrowserShellPage {
 
   onPageShow(): void {
     this.browserShellLifecycleCoordinator.handlePageShow();
+    this.browserWebBottomSafeAreaCoordinator.setVisible(true);
     void this.checkClientUpdatePolicy();
   }
 
   onPageHide(): void {
+    this.browserWebBottomSafeAreaCoordinator.setVisible(false);
     // Last reliable moment to persist the homepage frame before the process may
     // be suspended or killed; the cover needs it for the next cold start. This
     // path has no handoff to protect, so it may capture immediately.
@@ -6390,6 +6419,7 @@ struct BrowserShellPage {
       if (viewportChanged && this.showHomePage) {
         this.browserTabHomeCoordinator.refreshWallpaperPresentation();
       }
+      if (viewportChanged) this.browserWebBottomSafeAreaCoordinator.requestCheck(this.activeTabId);
     })
   }
 
@@ -6473,6 +6503,8 @@ struct BrowserShellPage {
   }
 
   private reconcileShellTabPresentation(): void {
+    this.browserWebBottomSafeAreaCoordinator.retainTabs(this.tabs.map((tab: BrowserTabState): string => tab.id));
+    this.browserWebBottomSafeAreaCoordinator.reconcile();
     if (this.showHomePage) {
       this.homeSurfacePaintedOnce = true;
     }
@@ -6646,6 +6678,8 @@ struct BrowserShellPage {
       backdropSnapshotId: WEB_BACKDROP_SNAPSHOT_ID,
       overlayVisible: this.pageFindBarState.visible && this.canOpenPageFind(),
       surfaceColor: this.getWebViewportBackdropColor(),
+      safeAreaColor: this.getWebViewportTopSafeAreaBackgroundColor(),
+      safeAreaColorTransitionDurationMs: WEB_TOP_SAFE_AREA_COLOR_TRANSITION_MS,
       surfaceOpacity: this.buildHostedWebLayerPresentationState().webSurfaceOpacity,
       surfaceScale: this.resolveWebSurfaceScale(),
       blurRadius: this.resolveWebSurfaceBlurRadius(),
@@ -7400,6 +7434,9 @@ struct BrowserShellPage {
     return BrowserWebViewportCoordinator.resolvePresentation({
       hostHeightPx: this.rootBottomPanelLayoutState.webHostHeight,
       visualTopInsetPx: visualTopInsetPx,
+      visualBottomInsetPx: this.webScrollExperimentSettings.webBottomSafeAreaEnabled &&
+        this.rootKeyboardInsetVp <= 0 && !this.webBottomAddressFocused &&
+        !this.shouldHideRootBottomChromeForImmersion() ? this.webBottomSafeAreaInsetVp : 0,
       fullViewport: this.buildCurrentDocumentViewerChromeContext().policy.fullViewport,
       largeScreenShellActive: this.isLargeScreenShellFamilyActive(),
       nativeVideoTakeoverActive: this.isAssistantVideoTakeoverActive(),
@@ -7419,6 +7456,9 @@ struct BrowserShellPage {
       next: this.resolveWebViewportPresentationState(visualTopInsetPx)
     });
     if (this.webViewportPresentation !== previousPresentation) {
+      this.browserWebScrollInteractionCoordinator.handleViewportChanged(
+        this.activeTabId, previousPresentation, this.webViewportPresentation
+      );
       AiraScrollOscProbe.markViewport(
         this.webStatusBarVisible,
         visualTopInsetPx,
@@ -8269,6 +8309,7 @@ struct BrowserShellPage {
   }
 
   private syncRootAddressKeyboardOverlayInset(): void {
+    this.browserWebBottomSafeAreaCoordinator.reconcile();
     if (!this.resolveRootBottomPanelAddressFocused()) {
       this.rootAddressKeyboardOverlayInsetVp = 0;
       return;
@@ -9924,13 +9965,19 @@ struct BrowserShellPage {
         this.browserWebTabsController.onBeforeWebBuild(tabId);
         this.browserWebTopImmersionSessionCoordinator.handleBeforeWebBuild(tabId);
         this.browserMediaRuntimeObservationApplicationCoordinator.beginDocument(tabId);
+        this.browserWebBottomSafeAreaCoordinator.handleDocumentBegin(tabId);
       },
-      onPageVisible: (tabId: string, _event: OnPageVisibleEvent) =>
-        this.browserWebTopImmersionSessionCoordinator.handlePageVisible(tabId),
-      onPageBegin: (tabId: string, event: OnPageBeginEvent) =>
-        this.browserWebPageLifecycleApplicationCoordinator.handlePageBegin(tabId, event),
+      onPageVisible: (tabId: string, _event: OnPageVisibleEvent) => {
+        this.browserWebTopImmersionSessionCoordinator.handlePageVisible(tabId);
+        this.browserWebBottomSafeAreaCoordinator.requestCheck(tabId);
+      },
+      onPageBegin: (tabId: string, event: OnPageBeginEvent) => {
+        this.browserWebBottomSafeAreaCoordinator.handleDocumentBegin(tabId);
+        this.browserWebPageLifecycleApplicationCoordinator.handlePageBegin(tabId, event);
+      },
       onPageEnd: (tabId: string, event: OnPageEndEvent) => {
         this.browserWebPageLifecycleApplicationCoordinator.handlePageEnd(tabId, event);
+        this.browserWebBottomSafeAreaCoordinator.requestCheck(tabId);
         this.novelReaderApplication.handlePageReady(
           this.novelReaderSession, tabId, this.activeTabId, this.isWebPageVisible(), event.url);
       },
@@ -9946,10 +9993,14 @@ struct BrowserShellPage {
         // Cheap field write: tells the automatic-sync scheduler the user is browsing so it holds
         // its RDB-heavy burst back instead of competing for the main thread mid-scroll.
         sharedBrowsingActivitySignal.markBrowsingInteraction();
+        this.browserWebBottomSafeAreaCoordinator.handleScroll(tabId);
         this.browserWebScrollInteractionCoordinator.handleScroll(tabId, event.yOffset);
       },
       onTouch: (tabId: string, event: TouchEvent) => {
         sharedBrowsingActivitySignal.markBrowsingInteraction();
+        if (event.type === TouchType.Down || event.type === TouchType.Up || event.type === TouchType.Cancel) {
+          this.browserWebBottomSafeAreaCoordinator.handleTouch(tabId, event.type === TouchType.Down);
+        }
         this.browserWebScrollInteractionCoordinator.handleTouchEvent(tabId, event.type);
       },
       onNavigationEntryCommitted: (tabId: string, details: LoadCommittedDetails) => {
@@ -9999,16 +10050,21 @@ struct BrowserShellPage {
       onDownloadStart: (tabId: string, event: OnDownloadStartEvent) => this.handleDownloadStart(tabId, event),
       onUserScriptInstallRequest: (_tabId: string, url: string) =>
         this.browserUserScriptApplicationCoordinator.handleInstallCandidate(url),
-      onHistoryApiUrlChange: (tabId: string, payloadJson: string) =>
-        this.browserWebPageLifecycleApplicationCoordinator.handleHistoryApiUrlChange(tabId, payloadJson),
+      onHistoryApiUrlChange: (tabId: string, payloadJson: string) => {
+        this.browserWebPageLifecycleApplicationCoordinator.handleHistoryApiUrlChange(tabId, payloadJson);
+        this.browserWebBottomSafeAreaCoordinator.requestCheck(tabId);
+      },
       onPageChromeThemeSignal: (tabId: string, payloadJson: string) => {
         this.browserPageChromeThemeSamplingCoordinator.handleThemeSignal(
           tabId,
           payloadJson
         );
       },
-      onPageBehaviorSignal: (tabId: string, payloadJson: string) =>
-        this.browserMediaRuntimeObservationApplicationCoordinator.handlePageBehaviorSignal(tabId, payloadJson),
+      onPageBehaviorSignal: (tabId: string, payloadJson: string) => {
+        if (!this.browserWebBottomSafeAreaCoordinator.handleSignal(tabId, payloadJson)) {
+          this.browserMediaRuntimeObservationApplicationCoordinator.handlePageBehaviorSignal(tabId, payloadJson);
+        }
+      },
       onAdBlockCosmeticHidden: (tabId: string, payloadJson: string) =>
         this.browserSiteControlsRuntimeCoordinator.handleAdBlockCosmeticHidden(tabId, payloadJson),
       onAdBlockManualHidden: (tabId: string, payloadJson: string) => {

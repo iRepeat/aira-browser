@@ -255,6 +255,7 @@ export const DEFAULT_BROWSER_EXPERIMENT_SETTINGS: BrowserExperimentSettings = {
   strengthenAdBlockingForSmoothScroll: false,
   pullRefreshEnabled: true,
   forceEnableWebZoom: false,
+  webBottomSafeAreaEnabled: false,
   smartGripTabsActionsEnabled: true,
   webVideoTakeoverEnabled: true,
   novelModeEnabled: true,
@@ -1170,6 +1171,9 @@ export class PreferencesRepository {
       forceEnableWebZoom: typeof settings?.forceEnableWebZoom === 'boolean'
         ? settings.forceEnableWebZoom
         : DEFAULT_BROWSER_EXPERIMENT_SETTINGS.forceEnableWebZoom,
+      webBottomSafeAreaEnabled: typeof settings?.webBottomSafeAreaEnabled === 'boolean'
+        ? settings?.webBottomSafeAreaEnabled
+        : DEFAULT_BROWSER_EXPERIMENT_SETTINGS.webBottomSafeAreaEnabled,
       smartGripTabsActionsEnabled: typeof settings?.smartGripTabsActionsEnabled === 'boolean'
         ? settings.smartGripTabsActionsEnabled
         : DEFAULT_BROWSER_EXPERIMENT_SETTINGS.smartGripTabsActionsEnabled,

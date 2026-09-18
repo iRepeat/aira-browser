@@ -29,6 +29,7 @@ export interface BrowserWebTopImmersionFacts {
   scrollOffsetY: number;
   addressFocused: boolean;
   bottomPanelInteractive: boolean;
+  bottomToolbarPinnedBySafeArea?: boolean;
   statusBarVisible: boolean;
 }
 
@@ -205,7 +206,7 @@ export class BrowserWebTopImmersionSessionCoordinator {
       scrollOffsetY: scrollOffsetY,
       webPageVisible: facts.webPageVisible,
       addressFocused: facts.addressFocused,
-      bottomPanelInteractive: facts.bottomPanelInteractive,
+      bottomPanelInteractive: facts.bottomPanelInteractive && facts.bottomToolbarPinnedBySafeArea !== true,
       showTabsSheet: facts.tabsSheetVisible,
       scrollImmersionEnabled: facts.scrollTopImmersionEnabled,
       currentStatusBarVisible: facts.statusBarVisible
@@ -220,7 +221,8 @@ export class BrowserWebTopImmersionSessionCoordinator {
       // scroll restores it. Preserve that scroll intent instead of treating the
       // fresh interactive fact as a manual panel reveal. Focus/sheets still snap.
       animate: this.isEligibleWebSurface(facts) && facts.scrollTopImmersionEnabled &&
-        !facts.addressFocused && (!facts.bottomPanelInteractive || bottomChromeRestoredByScroll)
+        !facts.addressFocused && (!facts.bottomPanelInteractive ||
+          facts.bottomToolbarPinnedBySafeArea === true || bottomChromeRestoredByScroll)
     });
   }
 

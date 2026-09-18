@@ -4,6 +4,7 @@ import {
 } from '../../../core/search/BrowserQuickSearchSwitchingCoordinator';
 import { BROWSER_THEME_STORAGE_DIVIDER_KEY } from '../../../core/theme/BrowserThemeStorageKeys';
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
+import { BrowserWebSafeAreaBackground } from './BrowserWebSafeAreaBackground';
 import { BrowserQuickSearchSwitchBar } from './BrowserQuickSearchSwitchBar';
 
 @Component
@@ -24,12 +25,10 @@ export struct BrowserWebTopChromeOverlay {
 
   build() {
     Stack({ alignContent: Alignment.BottomStart }) {
-      Column() {
-      }
-        .width('100%')
-        .height('100%')
-        .backgroundColor(this.surfaceColor)
-        .animation({ duration: this.colorTransitionDurationMs, curve: Curve.EaseOut })
+      BrowserWebSafeAreaBackground({
+        surfaceColor: this.surfaceColor,
+        colorTransitionDurationMs: this.colorTransitionDurationMs
+      })
 
       if (this.quickSearchPresentation.visible) {
         BrowserQuickSearchSwitchBar({

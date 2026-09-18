@@ -41,6 +41,7 @@ export interface BrowserBottomChromeHomeScrollDecision {
 
 export interface BrowserBottomChromeWebScrollInput {
   tabId: string;
+  bottomToolbarPinnedBySafeArea?: boolean;
   scrollOffsetY: number;
   webPageVisible: boolean;
   addressFocused: boolean;
@@ -244,6 +245,10 @@ export class BrowserBottomChromeScrollCoordinator {
     if (input.fullScreenModeEnabled) {
       return this.buildForcedWebDetentDecision(input, false, false, 'fullscreen_forced_peek');
     }
+    if (input.bottomToolbarPinnedBySafeArea === true) {
+      this.rememberBaseline(input.tabId, Math.max(0, Math.floor(input.scrollOffsetY)));
+      return this.buildPinnedToolbarDecision(input);
+    }
     if (input.currentDetent === 'peek') {
       const decision = this.recordManualPeekWebScrollMove(input);
       return {
@@ -277,6 +282,10 @@ export class BrowserBottomChromeScrollCoordinator {
     }
     if (input.fullScreenModeEnabled) {
       return this.buildForcedWebDetentDecision(input, false, false, 'fullscreen_forced_peek');
+    }
+    if (input.bottomToolbarPinnedBySafeArea === true) {
+      this.rememberBaseline(input.tabId, Math.max(0, Math.floor(input.scrollOffsetY)));
+      return this.buildPinnedToolbarDecision(input);
     }
     if (input.currentDetent === 'peek') {
       const decision = this.handleManualPeekWebScrollSettle(input, now);
@@ -403,6 +412,19 @@ export class BrowserBottomChromeScrollCoordinator {
       shouldClearAddressDraft,
       shouldSyncStatusBarStyle: changed,
       reason
+    };
+  }
+
+  private buildPinnedToolbarDecision(input: BrowserBottomChromeWebScrollInput): BrowserBottomChromeWebScrollDecision {
+    const detent: HomeSearchPanelDetent = input.currentDetent === 'peek' ? 'low' : input.currentDetent;
+    return {
+      detent: detent,
+      presentation: 'resting',
+      changed: input.currentPresentation !== 'resting' || input.currentDetent !== detent,
+      shouldClearAddressFocus: false,
+      shouldClearAddressDraft: false,
+      shouldSyncStatusBarStyle: false,
+      reason: 'bottom_safe_area_pinned'
     };
   }
 

@@ -1169,6 +1169,7 @@ export interface BrowserExperimentSettings {
   strengthenAdBlockingForSmoothScroll: boolean;
   pullRefreshEnabled: boolean;
   forceEnableWebZoom: boolean;
+  webBottomSafeAreaEnabled: boolean;
   smartGripTabsActionsEnabled: boolean;
   webVideoTakeoverEnabled: boolean;
   novelModeEnabled: boolean;

@@ -134,6 +134,9 @@ export class SettingsDetailActionResolver {
     if (action === 'toggle_pull_refresh') {
       return this.copyExperimentSettings(current, { pullRefreshEnabled: nextChecked });
     }
+    if (action === 'toggle_web_bottom_safe_area') {
+      return this.copyExperimentSettings(current, { webBottomSafeAreaEnabled: nextChecked });
+    }
     if (action === 'toggle_force_enable_web_zoom') {
       return this.copyExperimentSettings(current, { forceEnableWebZoom: nextChecked });
     }
@@ -190,6 +193,7 @@ export class SettingsDetailActionResolver {
         patch.strengthenAdBlockingForSmoothScroll ?? current.strengthenAdBlockingForSmoothScroll,
       pullRefreshEnabled: patch.pullRefreshEnabled ?? current.pullRefreshEnabled,
       forceEnableWebZoom: patch.forceEnableWebZoom ?? current.forceEnableWebZoom,
+      webBottomSafeAreaEnabled: patch.webBottomSafeAreaEnabled ?? current.webBottomSafeAreaEnabled,
       smartGripTabsActionsEnabled: patch.smartGripTabsActionsEnabled ?? current.smartGripTabsActionsEnabled,
       webVideoTakeoverEnabled: patch.webVideoTakeoverEnabled ?? current.webVideoTakeoverEnabled,
       novelModeEnabled: patch.novelModeEnabled ?? current.novelModeEnabled,

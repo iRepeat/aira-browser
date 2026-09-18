@@ -580,6 +580,9 @@ export class ArkPreferencesStorageAdapter implements PreferencesStorageAdapter {
         forceEnableWebZoom: typeof parsed.forceEnableWebZoom === 'boolean'
           ? parsed.forceEnableWebZoom
           : defaultValue.forceEnableWebZoom,
+        webBottomSafeAreaEnabled: typeof parsed.webBottomSafeAreaEnabled === 'boolean'
+          ? parsed.webBottomSafeAreaEnabled
+          : defaultValue.webBottomSafeAreaEnabled,
         smartGripTabsActionsEnabled: typeof parsed.smartGripTabsActionsEnabled === 'boolean'
           ? parsed.smartGripTabsActionsEnabled
           : defaultValue.smartGripTabsActionsEnabled,

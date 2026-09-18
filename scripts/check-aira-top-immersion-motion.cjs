@@ -8,6 +8,8 @@ const ts = require(process.env.DEVECO_TYPESCRIPT_PATH ||
 const root = path.resolve(__dirname, '..');
 const sourceRoot = path.join(root, 'AiraBrowser/entry/src/main/ets');
 const cache = new Map();
+let clockNow = 10000;
+class Clock extends Date { static now() { return clockNow; } }
 function load(relativePath) {
   const filename = path.join(sourceRoot, relativePath);
   if (cache.has(filename)) return cache.get(filename);
@@ -17,7 +19,7 @@ function load(relativePath) {
     fileName: filename
   }).outputText;
   vm.runInNewContext(code, {
-    module, exports: module.exports, Date,
+    module, exports: module.exports, Date: Clock,
     setTimeout: () => 1, clearTimeout() {},
     require(specifier) {
       if (specifier === '@kit.PerformanceAnalysisKit') return { hilog: { warn() {} } };
@@ -196,3 +198,250 @@ assert.doesNotMatch(renderer, /if\s*\(this\.presentation\.topSafeOverlayHeightPx
 assert.doesNotMatch(renderer, /\.animation\(/,
   'Do not apply unconditional animations to history-navigation geometry');
 console.log('Top immersion motion passed: scroll motion and safe-area blur; navigation and forced changes stay immediate.');
+
+// Execute the actual shell callback: bottom avoidance must retain the same scroll
+// animation as normal pages. Native chrome and Web bounds share one transaction.
+const shellSource = fs.readFileSync(path.join(sourceRoot, 'app/pages/BrowserShellPage.ets'), 'utf8');
+const hostStart = shellSource.indexOf('private browserWebTopImmersionSessionHost:');
+const callbackStart = shellSource.indexOf('applyPresentation:', hostStart) + 'applyPresentation:'.length;
+const callbackEnd = shellSource.indexOf(',\n    applyWindowVisibility:', callbackStart);
+assert.ok(hostStart >= 0 && callbackEnd > callbackStart);
+const callbackModule = { exports: {} };
+vm.runInNewContext(ts.transpileModule(
+  `exports.apply = function${shellSource.slice(callbackStart, callbackEnd).trim().replace('=> {', '{')};`,
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }
+).outputText, { exports: callbackModule.exports, Curve: { EaseOut: 'ease-out' }, BrowserWebViewportCoordinator });
+for (const bottomInset of [0, 101]) {
+  const geometryInput = { hostHeightPx: 844, visualTopInsetPx: 40, visualBottomInsetPx: bottomInset,
+    fullViewport: false, largeScreenShellActive: false, nativeVideoTakeoverActive: false };
+  let animationDuration = 0;
+  const writes = [];
+  const shell = {
+    webViewportVisualTopInsetInitialized: true, webViewportVisualTopInset: 40, webStatusBarVisible: true,
+    webViewportPresentation: BrowserWebViewportCoordinator.resolvePresentation(geometryInput),
+    getUIContext: () => ({ animateTo(options, apply) {
+      animationDuration = options.duration; apply(); animationDuration = 0;
+    } }),
+    refreshWebViewportPresentation(topInset) {
+      const previous = this.webViewportPresentation;
+      this.webViewportPresentation = BrowserWebViewportCoordinator.resolvePresentation({ ...geometryInput,
+        visualTopInsetPx: topInset });
+      writes.push({ previous, next: this.webViewportPresentation, animationDuration });
+    }
+  };
+  callbackModule.exports.apply.call(shell, false, 0, 'web-scroll', 180);
+  callbackModule.exports.apply.call(shell, true, 40, 'web-scroll', 180);
+  for (const write of writes) {
+    assert.equal(write.next.contentTopPx + write.next.contentHeightPx, 844 - bottomInset,
+      'The final native bottom edge stays fixed');
+    assert.equal(write.animationDuration, 180,
+      'Bottom avoidance must preserve the existing top immersion animation');
+  }
+}
+console.log('Combined safe areas: bottom avoidance preserves the top immersion animation.');
+
+// Bottom avoidance creates a shorter native screen. Its top-immersion geometry
+// must be identical to an ordinary viewport with that physical available height.
+for (const topInset of [0, 13, 40, 88]) {
+  const input = { hostHeightPx: 844, visualTopInsetPx: topInset, fullViewport: false,
+    largeScreenShellActive: false, nativeVideoTakeoverActive: false };
+  const reserved = BrowserWebViewportCoordinator.resolvePresentation({ ...input, visualBottomInsetPx: 101 });
+  const shorter = BrowserWebViewportCoordinator.resolvePresentation({ ...input, hostHeightPx: 743 });
+  assert.equal(reserved.hostHeightPx, shorter.hostHeightPx, 'shorten the native host, not only its Web child');
+  for (const field of ['contentTopPx', 'contentHeightPx', 'topSafeOverlayHeightPx', 'scrollHiddenTopBlurHeightPx']) {
+    assert.equal(reserved[field], shorter[field], `shorter native screen must preserve normal ${field}`);
+  }
+  assert.equal(reserved.reservedBottomInsetPx, 101);
+  assert.equal(reserved.contentTopPx + reserved.contentHeightPx, reserved.hostHeightPx);
+}
+assert.doesNotMatch(renderer, /\.renderFit\(/, 'do not create another special animation path for bottom avoidance');
+assert.match(renderer, /\.clip\(this\.presentation\.reservedBottomInsetPx > 0\)/,
+  'the shortened native viewport must also clip content to its bottom boundary');
+const phoneSurface = fs.readFileSync(path.join(sourceRoot, 'app/components/browser/BrowserPhonePrimarySurface.ets'), 'utf8');
+assert.match(phoneSurface, /if \(this\.webLayerMounted\) \{\s*Stack\(\{ alignContent: Alignment\.Top \}\)/,
+  'the shorter Web host must stay top-aligned, not centered inside the full-height phone slot');
+console.log('Combined safe areas: bottom reservation is equivalent to a shorter native viewport.');
+
+// Replay a root scroll-range correction after the Web viewport grows at the page end.
+// This correction is layout feedback, even while a real finger is still held down.
+for (const mode of ['single', 'split', 'new-touch', 'expired', 'larger-reversal', 'continued-down']) {
+  const facts = { ...fixture().facts, bottomPanelInteractive: true };
+  const pageHeight = 1200;
+  const geometryInput = { hostHeightPx: 844, visualTopInsetPx: 40, visualBottomInsetPx: 101,
+    fullViewport: false, largeScreenShellActive: false, nativeVideoTakeoverActive: false };
+  const transitions = [];
+  let bottomPresentation = 'resting';
+  let interaction;
+  const shell = {
+    webViewportVisualTopInsetInitialized: true, webViewportVisualTopInset: 40, webStatusBarVisible: true,
+    webViewportPresentation: BrowserWebViewportCoordinator.resolvePresentation(geometryInput),
+    getUIContext: () => ({ animateTo(_options, apply) { apply(); } }),
+    refreshWebViewportPresentation(topInset) {
+      const previous = this.webViewportPresentation;
+      this.webViewportPresentation = BrowserWebViewportCoordinator.resolvePresentation({ ...geometryInput,
+        visualTopInsetPx: topInset });
+      interaction.handleViewportChanged(facts.activeTabId, previous, this.webViewportPresentation);
+    }
+  };
+  const top = new BrowserWebTopImmersionSessionCoordinator({ resolveFacts: () => facts,
+    host: { resolveVisibleTopInsetPx: () => 40,
+      applyPresentation(visible, inset, source, duration) {
+        callbackModule.exports.apply.call(shell, visible, inset, source, duration);
+        facts.statusBarVisible = visible;
+        transitions.push(visible);
+      }, applyWindowVisibility: async () => true, scheduleSafeInsetSettle() {} }
+  });
+  interaction = new BrowserWebScrollInteractionCoordinator({
+    bottomChromeScrollCoordinator: new BrowserBottomChromeScrollCoordinator(),
+    topImmersionSessionCoordinator: top, recentActionManager: { recordClick() {} },
+    scrollPerformanceCoordinator: { createState: () => ({}), activateForMove: state => state },
+    smoothModeService: {}, runtimeLifecyclePort: {}
+  }, { resolveFacts: () => ({ activeTabId: facts.activeTabId, webPageVisible: true, addressFocused: false,
+      currentDetent: 'low', currentPresentation: bottomPresentation, tabsSheetVisible: false,
+      webAppImmersiveMode: false, fullScreenModeEnabled: false, smoothModeRuntimeEnabled: false,
+      experimentSettings: {} }),
+    applyBottomChromeDecision(decision) {
+      bottomPresentation = decision.presentation;
+      facts.bottomPanelInteractive = bottomPresentation === 'resting';
+    }
+  });
+  const scroll = y => { facts.scrollOffsetY = y; interaction.handleScroll(facts.activeTabId, y); };
+  interaction.handleTouch(facts.activeTabId, 'down');
+  interaction.handleTouch(facts.activeTabId, 'move');
+  scroll(450);
+  clockNow += 400;
+  scroll(pageHeight - shell.webViewportPresentation.contentHeightPx);
+  const clampedY = Math.min(facts.scrollOffsetY, pageHeight - shell.webViewportPresentation.contentHeightPx);
+  assert.ok(clampedY < facts.scrollOffsetY, 'expanding the viewport reduces the page-end scroll range');
+  if (mode === 'new-touch') {
+    clockNow += 400;
+    interaction.handleTouch(facts.activeTabId, 'down');
+    interaction.handleTouch(facts.activeTabId, 'move');
+    scroll(clampedY);
+    assert.deepEqual(transitions, [false, true], 'a new gesture must not inherit layout correction suppression');
+  } else if (mode === 'expired') {
+    clockNow += 700;
+    scroll(clampedY);
+    assert.deepEqual(transitions, [false, true], 'correction window must expire without a timer');
+  } else if (mode === 'larger-reversal') {
+    clockNow += 400;
+    scroll(clampedY - 40);
+    assert.deepEqual(transitions, [false, true], 'movement larger than the resize must not be swallowed');
+  } else if (mode === 'continued-down') {
+    clockNow += 400;
+    scroll(facts.scrollOffsetY + 10);
+    scroll(clampedY);
+    assert.deepEqual(transitions, [false, true], 'fresh downward movement ends the correction allowance');
+  } else {
+    clockNow += 200;
+    if (mode === 'split') {
+      scroll(clampedY + 20);
+      clockNow += 100;
+    }
+    scroll(clampedY);
+    assert.deepEqual(transitions, [false],
+      'Web resize scroll correction must not reveal the chrome and reverse the just-applied viewport geometry');
+    clockNow += 400;
+    scroll(clampedY - 40);
+    assert.deepEqual(transitions, [false, true], 'a subsequent genuine upward scroll must still restore chrome');
+  }
+}
+console.log('Combined safe areas: viewport feedback cannot reverse the user scroll direction.');
+
+const refreshStart = shellSource.indexOf('private refreshWebViewportPresentation(');
+const refreshEnd = shellSource.indexOf('private setWebBottomAddressFocused(', refreshStart);
+assert.match(shellSource.slice(refreshStart, refreshEnd),
+  /browserWebScrollInteractionCoordinator\.handleViewportChanged\(\s*this\.activeTabId, previousPresentation, this\.webViewportPresentation/,
+  'all published viewport changes must reach the scroll feedback owner');
+
+// A reserved native bottom strip owns a permanently visible resting toolbar,
+// while the top inset retains independent scroll immersion.
+for (const behavior of ['compact', 'hidden']) {
+  const item = fixture();
+  let pinned = true;
+  let bottomPresentation = behavior;
+  let currentDetent = 'low';
+  item.facts.bottomToolbarPinnedBySafeArea = true;
+  item.facts.bottomPanelInteractive = true;
+  const interaction = new BrowserWebScrollInteractionCoordinator({
+    bottomChromeScrollCoordinator: new BrowserBottomChromeScrollCoordinator({
+      applyPresentationDeltaPx: 28, restorePresentationDeltaPx: 24, transitionCooldownMs: 0
+    }),
+    topImmersionSessionCoordinator: item.coordinator,
+    recentActionManager: { recordClick() {} },
+    scrollPerformanceCoordinator: { createState: () => ({}), activateForMove: state => state },
+    smoothModeService: {}, runtimeLifecyclePort: {}
+  }, {
+    resolveFacts: () => ({ activeTabId: item.facts.activeTabId, webPageVisible: true,
+      addressFocused: false, currentDetent, currentPresentation: bottomPresentation,
+      bottomToolbarPinnedBySafeArea: pinned, tabsSheetVisible: false,
+      webAppImmersiveMode: false, fullScreenModeEnabled: false,
+      smoothModeRuntimeEnabled: false, experimentSettings: {} }),
+    applyBottomChromeDecision(decision) {
+      bottomPresentation = decision.presentation;
+      currentDetent = decision.detent;
+      item.facts.bottomPanelInteractive = bottomPresentation === 'resting';
+    }
+  });
+  interaction.applyBottomToolbarScrollBehavior(behavior, item.facts.activeTabId);
+  const viewport = { hostHeightPx: 844, visualTopInsetPx: 40, fullViewport: false,
+    largeScreenShellActive: false, nativeVideoTakeoverActive: false };
+  // A detection can arrive after a toolbar has already hidden; restore on applying
+  // the reservation, without requiring the user to touch or scroll again.
+  bottomPresentation = behavior;
+  interaction.handleViewportChanged(item.facts.activeTabId,
+    BrowserWebViewportCoordinator.resolvePresentation(viewport),
+    BrowserWebViewportCoordinator.resolvePresentation({ ...viewport, visualBottomInsetPx: 101 }));
+  assert.equal(bottomPresentation, 'resting', 'safe-area activation immediately restores the toolbar');
+  interaction.handleTouch(item.facts.activeTabId, 'down');
+  interaction.handleTouch(item.facts.activeTabId, 'move');
+  const scroll = y => { item.facts.scrollOffsetY = y; interaction.handleScroll(item.facts.activeTabId, y); };
+  for (const y of [0, 40, 90, 140]) {
+    clockNow += 400; scroll(y);
+    assert.equal(bottomPresentation, 'resting', `pinned toolbar must ignore ${behavior} on downward scroll`);
+  }
+  assert.deepEqual(item.updates.map(x => x.visible), [false], 'pinned resting toolbar must allow top immersion');
+  clockNow += 400; scroll(40);
+  assert.deepEqual(item.updates.map(x => x.visible), [false, true], 'top still reveals on upward scroll');
+  assert.ok(item.updates.every(x => x.durationMs === 180));
+  for (const delta of [60, -40, 80]) {
+    interaction.handleLocalScrollSignal(item.facts.activeTabId, JSON.stringify({
+      sourceId: 'nested-feed', scrollTop: 200, deltaY: delta, timestamp: clockNow
+    }));
+    assert.equal(bottomPresentation, 'resting', 'nested scrollers also keep the reserved toolbar visible');
+  }
+  for (const field of ['addressFocused', 'tabsSheetVisible']) {
+    const focused = fixture();
+    focused.facts.bottomToolbarPinnedBySafeArea = true;
+    focused.facts.bottomPanelInteractive = true;
+    focused.hide();
+    focused.facts[field] = true;
+    focused.scroll(0);
+    assert.equal(focused.updates.at(-1).visible, true, `${field} must still reveal top chrome`);
+    assert.equal(focused.updates.at(-1).durationMs, 0);
+  }
+  pinned = false;
+  item.facts.bottomToolbarPinnedBySafeArea = false;
+  interaction.handleTouch(item.facts.activeTabId, 'down');
+  interaction.handleTouch(item.facts.activeTabId, 'move');
+  clockNow += 400; scroll(100); // Re-establish root coordinates after the nested source.
+  clockNow += 400; scroll(160);
+  assert.equal(bottomPresentation, behavior, 'releasing the reservation restores the saved user scroll preference');
+}
+console.log('Combined safe areas: pinned bottom toolbar and animated top immersion remain independent.');
+
+for (const detent of ['peek', 'low', 'middle']) {
+  const input = { tabId: 'pinned', bottomToolbarPinnedBySafeArea: true, scrollOffsetY: 100,
+    webPageVisible: true, addressFocused: false, currentDetent: detent, currentPresentation: 'hidden',
+    presentationChangeAllowed: true, showTabsSheet: false, scrollBehavior: 'hidden',
+    webAppImmersiveMode: false, fullScreenModeEnabled: false };
+  const bottom = new BrowserBottomChromeScrollCoordinator();
+  for (const method of ['handleWebScrollMove', 'handleWebScrollSettle']) {
+    const decision = bottom[method](input);
+    assert.equal(decision.presentation, 'resting');
+    assert.equal(decision.detent, detent === 'peek' ? 'low' : detent,
+      'reservation restores the toolbar but preserves an explicitly expanded panel');
+  }
+  assert.equal(bottom.handleWebScrollMove({ ...input, fullScreenModeEnabled: true }).detent, 'peek',
+    'fullscreen remains authoritative');
+}

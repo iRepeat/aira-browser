@@ -110,6 +110,7 @@ export type SettingsDetailRowAction =
   'toggle_strengthen_ad_blocking_for_smooth_scroll' |
   'toggle_pull_refresh' |
   'toggle_force_enable_web_zoom' |
+  'toggle_web_bottom_safe_area' |
   'toggle_smart_grip_tabs_actions' |
   'toggle_web_video_takeover' |
   'toggle_novel_mode' |
@@ -246,6 +247,9 @@ export class SettingsDetailViewModel {
     if (previousSettings.pullRefreshEnabled !== nextSettings.pullRefreshEnabled) {
       return nextSettings.pullRefreshEnabled ? '下拉刷新已开启' : '下拉刷新已关闭';
     }
+    if (previousSettings.webBottomSafeAreaEnabled !== nextSettings.webBottomSafeAreaEnabled) {
+      return nextSettings.webBottomSafeAreaEnabled ? '网页底栏防遮挡已开启' : '网页底栏防遮挡已关闭';
+    }
     if (previousSettings.forceEnableWebZoom !== nextSettings.forceEnableWebZoom) {
       return nextSettings.forceEnableWebZoom ? '强制网页缩放已开启' : '强制网页缩放已关闭';
     }
@@ -318,6 +322,7 @@ export class SettingsDetailViewModel {
       strengthenAdBlockingForSmoothScroll: false,
       pullRefreshEnabled: false,
       forceEnableWebZoom: false,
+      webBottomSafeAreaEnabled: false,
       smartGripTabsActionsEnabled: true,
       webVideoTakeoverEnabled: true,
       novelModeEnabled: true,
@@ -1394,6 +1399,21 @@ export class SettingsDetailViewModel {
             )
           ],
           footerText: '下拉刷新会在普通网页顶部下拉时刷新当前页；强制网页缩放会在系统支持时忽略页面 viewport 里的缩放限制；智感握姿会在系统支持时识别握持手，用于优化单手操作布局。'
+        },
+        {
+          id: 'web_bottom_safe_area',
+          title: '网页适配',
+          rows: [
+            this.switchRow(
+              'web_bottom_safe_area',
+              '网页底栏防遮挡',
+              '',
+              'toggle_web_bottom_safe_area',
+              experiments.webBottomSafeAreaEnabled,
+              canEditDevicePreferences
+            )
+          ],
+          footerText: '自动留出空间，避免浏览器悬浮栏挡住网页底部按钮。仅用于手机布局，部分网站可能无法识别。'
         },
         {
           id: 'video_takeover',

@@ -3,6 +3,8 @@ import {
   BrowserWebViewportPresentationState
 } from '../../../core/browser/BrowserWebViewportCoordinator';
 
+import { BrowserWebSafeAreaBackground } from './BrowserWebSafeAreaBackground';
+
 // Same blur strength as the immersive settings, bookmark, and history lists.
 const WEB_SCROLL_TOP_BLUR_RADIUS: number = 20;
 
@@ -14,6 +16,7 @@ const WEB_SCROLL_TOP_BLUR_RADIUS: number = 20;
 export struct BrowserWebViewportSurfaceHost {
   @Prop presentation: BrowserWebViewportPresentationState = {
     hostHeightPx: 1,
+    reservedBottomInsetPx: 0,
     topSafeOverlayHeightPx: 0,
     contentTopPx: 0,
     contentHeightPx: 1,
@@ -23,6 +26,8 @@ export struct BrowserWebViewportSurfaceHost {
   @Prop backdropSnapshotId: string = '';
   @Prop overlayVisible: boolean = false;
   @Prop surfaceColor: ResourceColor = Color.Transparent;
+  @Prop safeAreaColor: ResourceColor = Color.White;
+  @Prop safeAreaColorTransitionDurationMs: number = 160;
   @Prop surfaceOpacity: number = 1;
   @Prop surfaceScale: number = 1;
   @Prop blurRadius: number = 0;
@@ -34,59 +39,78 @@ export struct BrowserWebViewportSurfaceHost {
   @BuilderParam overlayContent: () => void = this.emptyBuilder;
 
   build() {
-    RelativeContainer() {
-      Stack({ alignContent: Alignment.TopStart }) {
-        // Keep the clipped chrome mounted at zero height so both ends of a
-        // scroll-driven height transition exist in the same render tree.
-        this.topChrome()
+    Stack({ alignContent: Alignment.TopStart }) {
+      RelativeContainer() {
+        Stack({ alignContent: Alignment.TopStart }) {
+          // Keep the clipped chrome mounted at zero height so both ends of a
+          // scroll-driven height transition exist in the same render tree.
+          this.topChrome()
 
-        Column() {
-          this.content()
+          Column() {
+            this.content()
+          }
+          .width('100%')
+          .height(this.presentation.fillParentHeight ? '100%' : Math.max(1, this.presentation.contentHeightPx))
+          .position({
+            x: 0,
+            y: this.presentation.fillParentHeight ? 0 : this.presentation.contentTopPx
+          })
+          // No unconditional geometry animation: the immersion owner opts in only
+          // for scrolling. Native history restores still settle in one layout pass.
+          .clip(true)
+          .linearGradientBlur(this.presentation.scrollHiddenTopBlurHeightPx > 0 ? WEB_SCROLL_TOP_BLUR_RADIUS : 0, {
+            fractionStops: BrowserWebViewportCoordinator.resolveTopBlurFractionStops(this.presentation),
+            direction: GradientDirection.Bottom
+          })
+
+          this.loadingProgress()
         }
-        .width('100%')
-        .height(this.presentation.fillParentHeight ? '100%' : Math.max(1, this.presentation.contentHeightPx))
-        .position({
-          x: 0,
-          y: this.presentation.fillParentHeight ? 0 : this.presentation.contentTopPx
-        })
-        // No unconditional geometry animation: the immersion owner opts in only
-        // for scrolling. Native history restores still settle in one layout pass.
-        .clip(true)
-        .linearGradientBlur(this.presentation.scrollHiddenTopBlurHeightPx > 0 ? WEB_SCROLL_TOP_BLUR_RADIUS : 0, {
-          fractionStops: BrowserWebViewportCoordinator.resolveTopBlurFractionStops(this.presentation),
-          direction: GradientDirection.Bottom
-        })
-
-        this.loadingProgress()
-      }
-      .id(this.backdropSnapshotId)
-      .alignRules({
-        top: { anchor: '__container__', align: VerticalAlign.Top },
-        bottom: { anchor: '__container__', align: VerticalAlign.Bottom },
-        left: { anchor: '__container__', align: HorizontalAlign.Start },
-        right: { anchor: '__container__', align: HorizontalAlign.End }
-      })
-      .width('100%')
-      .height('100%')
-      .backgroundColor(this.surfaceColor)
-      .zIndex(0)
-
-      if (this.overlayVisible) {
-        Column() {
-          this.overlayContent()
-        }
-        .width('100%')
+        .id(this.backdropSnapshotId)
         .alignRules({
           top: { anchor: '__container__', align: VerticalAlign.Top },
+          bottom: { anchor: '__container__', align: VerticalAlign.Bottom },
           left: { anchor: '__container__', align: HorizontalAlign.Start },
           right: { anchor: '__container__', align: HorizontalAlign.End }
         })
-        .zIndex(20)
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.surfaceColor)
+        .zIndex(0)
+
+        if (this.overlayVisible) {
+          Column() {
+            this.overlayContent()
+          }
+          .width('100%')
+          .alignRules({
+            top: { anchor: '__container__', align: VerticalAlign.Top },
+            left: { anchor: '__container__', align: HorizontalAlign.Start },
+            right: { anchor: '__container__', align: HorizontalAlign.End }
+          })
+          .zIndex(20)
+        }
+      }
+      .width('100%')
+      .height(this.presentation.fillParentHeight ? '100%' : Math.max(1, this.presentation.hostHeightPx))
+      .clip(this.presentation.reservedBottomInsetPx > 0)
+      .backgroundColor(this.surfaceColor)
+
+      if (this.presentation.reservedBottomInsetPx > 0) {
+        Column() {
+          BrowserWebSafeAreaBackground({
+            surfaceColor: this.safeAreaColor,
+            colorTransitionDurationMs: this.safeAreaColorTransitionDurationMs
+          })
+        }
+        .width('100%')
+        .height(this.presentation.reservedBottomInsetPx)
+        .position({ x: 0, y: this.presentation.hostHeightPx })
+        .hitTestBehavior(HitTestMode.Block)
       }
     }
     .width('100%')
-    .height(this.presentation.fillParentHeight ? '100%' : Math.max(1, this.presentation.hostHeightPx))
-    .backgroundColor(this.surfaceColor)
+    .height(this.presentation.fillParentHeight ? '100%' :
+      this.presentation.hostHeightPx + this.presentation.reservedBottomInsetPx)
     .opacity(this.surfaceOpacity)
     .scale({
       x: this.surfaceScale,

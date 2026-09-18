@@ -431,6 +431,8 @@ const ADVANCED_TARGETS: SettingsDestinationCatalogTarget[] = [
     'pull_refresh', '', ['下滑刷新']),
   target('force_enable_web_zoom', 'experiments', 'experiments', '强制允许网页缩放',
     '高级 / 实验室 / 页面手势', 'row', 'force_enable_web_zoom', '', ['强制网页缩放']),
+  target('web_bottom_safe_area', 'experiments', 'experiments', '网页底栏防遮挡',
+    '高级 / 实验室 / 网页适配', 'row', 'web_bottom_safe_area', '', ['底部导航', '底栏避让', '安全距离', '网页底部安全区', '防遮挡']),
   target('smart_grip_tabs_actions', 'experiments', 'experiments', '智感握姿',
     '高级 / 实验室 / 页面手势', 'row', 'smart_grip_tabs_actions', '', ['握姿']),
   target('web_video_takeover', 'experiments', 'experiments', '网页视频接管',

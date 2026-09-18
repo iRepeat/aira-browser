@@ -263,6 +263,22 @@ The viewport owner publishes this visual effect separately from occupied space: 
 height. Visible chrome, always-hidden mode, fullscreen, WebApps that hide the safe area, native video takeover, and
 Large-Screen presentation do not enable it. The existing Web node stays mounted throughout.
 
+### Bottom avoidance uses a shorter native viewport
+
+On 2026-09-19 the user explicitly requested restoring the existing top-inset animation while fixing website bottom
+navigation jumping with bottom avoidance, and clarified that the bottom reservation should behave as a shorter native
+screen. The viewport owner now subtracts the bottom reservation from the entire native host, then applies the ordinary
+`contentHeight = hostHeight - topInset` geometry. The renderer clips that shortened host at its actual bottom edge, and the Phone Web slot explicitly top-aligns it. Both
+ordinary and bottom-reserved phone pages use the same top-immersion animation; there is no bottom-specific animation
+suppression or render-fit override. The user also requested keeping the browser toolbar visible whenever this space is
+reserved. Bottom chrome therefore stays resting for root/local scrolling and gesture settle, while the top-immersion
+owner allows a pinned low toolbar without treating it as an expanded/input panel. Releasing the reservation restores the
+saved scroll preference. No Web controller, per-tab slot, BuilderNode, Web render mode, navigation or BFCache policy changes.
+Regression checks cover ordinary-short-screen equivalence, animation dispatch and independent top/bottom scroll policy;
+real ArkWeb compositing and scroll smoothness remain device acceptance. The reserved strip is painted outside the
+shortened Web host using the same native background component, color and color-transition duration as the top safe area,
+so the retained homepage cannot show or receive touches through the strip.
+
 ## Authorized Large-Screen parent-relative Web viewport geometry revision
 
 On 2026-08-11 the user explicitly reported and authorized fixing a Large-Screen browser-shell defect where every Web

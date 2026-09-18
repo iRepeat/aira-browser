@@ -227,6 +227,7 @@ export class ArkWebAppProxyService {
       strengthenAdBlockingForSmoothScroll: settings.strengthenAdBlockingForSmoothScroll,
       pullRefreshEnabled: settings.pullRefreshEnabled,
       forceEnableWebZoom: settings.forceEnableWebZoom,
+      webBottomSafeAreaEnabled: settings.webBottomSafeAreaEnabled,
       smartGripTabsActionsEnabled: settings.smartGripTabsActionsEnabled,
       webVideoTakeoverEnabled: settings.webVideoTakeoverEnabled,
       novelModeEnabled: settings.novelModeEnabled,

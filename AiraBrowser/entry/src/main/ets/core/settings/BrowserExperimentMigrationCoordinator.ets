@@ -52,6 +52,7 @@ export class BrowserExperimentMigrationCoordinator {
       strengthenAdBlockingForSmoothScroll: preferences.experiments.strengthenAdBlockingForSmoothScroll,
       pullRefreshEnabled: preferences.experiments.pullRefreshEnabled,
       forceEnableWebZoom: preferences.experiments.forceEnableWebZoom,
+      webBottomSafeAreaEnabled: preferences.experiments.webBottomSafeAreaEnabled,
       smartGripTabsActionsEnabled: preferences.experiments.smartGripTabsActionsEnabled,
       webVideoTakeoverEnabled: true,
       novelModeEnabled: preferences.experiments.novelModeEnabled,
