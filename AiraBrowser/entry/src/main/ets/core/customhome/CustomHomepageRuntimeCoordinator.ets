@@ -114,6 +114,14 @@ export type CustomHomepageSurfaceAction =
   'open_homepage_settings' |
   'open_settings_center';
 
+/**
+ * The committed homepage document's own viewport, as measured from its Web node (vp).
+ */
+export interface CustomHomepageWebViewportSize {
+  width: number;
+  height: number;
+}
+
 export interface CustomHomepageLoadFailureState {
   visible: boolean;
   url: string;
@@ -390,6 +398,8 @@ export class CustomHomepageRuntimeCoordinator {
   private desiredGeneration: number = 0;
   private activeGeneration: number = 0;
   private committedGeneration: number = 0;
+  private measuredViewportWidth: number = 0;
+  private measuredViewportHeight: number = 0;
   private settledGeneration: number = 0;
   private desiredUrl: string = '';
   private desiredRenderKey: string = '';
@@ -696,6 +706,8 @@ export class CustomHomepageRuntimeCoordinator {
           this.applyTransition(this.handleFirstMeaningfulPaint(signal)),
         onScroll: (event: OnScrollEvent, eventGeneration: number): void =>
           this.handleScrollEvent(event, eventGeneration),
+        onViewportMeasured: (width: number, height: number, measuredGeneration: number): void =>
+          this.handleViewportMeasuredEvent(width, height, measuredGeneration),
         onLoadFinished: (signal: CustomHomepageHostedWebDocumentSignal): void =>
           this.applyTransition(this.handleLoadFinished(signal)),
         onWindowNew: (event: OnWindowNewEvent, eventGeneration: number): void =>
@@ -766,6 +778,15 @@ export class CustomHomepageRuntimeCoordinator {
       return;
     }
     this.executeShellEffect({ type: 'handle_scroll', event: event });
+  }
+
+  // Records the document's own laid-out size. The node reports on every layout, so the last
+  // measurement always belongs to the Web component currently on screen; rebuilding the node (a
+  // new generation) lays it out again and overwrites this.
+  private handleViewportMeasuredEvent(width: number, height: number, generation: number): void {
+    void generation;
+    this.measuredViewportWidth = Math.max(0, width);
+    this.measuredViewportHeight = Math.max(0, height);
   }
 
   private handleWindowNewEvent(event: OnWindowNewEvent, generation: number): void {
@@ -1058,6 +1079,26 @@ export class CustomHomepageRuntimeCoordinator {
       return '';
     }
     return `${buildBrowserTabWebComponentSnapshotId(CUSTOM_HOMEPAGE_PREVIEW_TAB_ID)}-${this.committedGeneration}`;
+  }
+
+  /**
+   * The committed document's own viewport as laid out on screen (vp), or `{ width: 0, height: 0 }`
+   * before the node has reported a measurement.
+   *
+   * The cold-start cover must be captured at this size. Both `webPageSnapshot` and the surface
+   * region re-lay the page out at the size they are given, so capturing at the shell viewport
+   * instead produced a frame whose content had been laid out against a height the document never
+   * had — the frame then read as stretched once it was scaled onto the screen.
+   */
+  getCommittedWebViewportSize(): CustomHomepageWebViewportSize {
+    if (!this.documentCommitted || this.committedGeneration <= 0 ||
+      this.measuredViewportWidth <= 0 || this.measuredViewportHeight <= 0) {
+      return { width: 0, height: 0 };
+    }
+    return {
+      width: this.measuredViewportWidth,
+      height: this.measuredViewportHeight
+    };
   }
 
   private executeScript(generation: number, script: string, action: string): void {

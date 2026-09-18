@@ -26,7 +26,10 @@ export interface CustomHomepageLaunchSnapshot {
   renderKey: string;
 }
 
-export const CUSTOM_HOMEPAGE_LAUNCH_SNAPSHOT_SCHEMA_VERSION: number = 1;
+// Bumped to 2 when covers became captures of the document's own viewport, normalized to the
+// surface's shape. A version-1 frame was captured at the shell viewport and its content had been
+// laid out against a height the document never had, so it must not be shown again.
+export const CUSTOM_HOMEPAGE_LAUNCH_SNAPSHOT_SCHEMA_VERSION: number = 2;
 // Frames are stored per render identity (theme included), so keeping an older one
 // does not crowd out the current theme — the only risk in showing one is a stale
 // layout. That risk is preferred over a blank flash: the frame is cross-faded out
@@ -36,11 +39,11 @@ export const CUSTOM_HOMEPAGE_LAUNCH_SNAPSHOT_SCHEMA_VERSION: number = 1;
 // light/dark flip overnight) still has a cover instead of falling back to a flash.
 export const CUSTOM_HOMEPAGE_LAUNCH_SNAPSHOT_TTL_MS: number = 30 * 24 * 60 * 60 * 1000;
 // How far the cover's shape may differ from the current viewport and still be
-// shown. A cover is displayed stretched to the viewport, so a frame captured at a
-// different shape (notably a 90° orientation flip) would render with the wrong
-// crop and read as a jump the moment the live page replaces it. The tolerance
-// leaves room for small measurement differences while rejecting an orientation
-// change, whose aspect ratio differs by far more than this.
+// shown. The frame is cropped to the surface's shape at capture time, so a frame
+// stored for a different shape (notably a 90° orientation flip) would be drawn
+// with the wrong crop and read as a jump the moment the live page replaces it.
+// The tolerance leaves room for small measurement differences while rejecting an
+// orientation change, whose aspect ratio differs by far more than this.
 const CUSTOM_HOMEPAGE_LAUNCH_SNAPSHOT_ASPECT_TOLERANCE: number = 0.12;
 
 export class CustomHomepageLaunchSnapshotViewModel {

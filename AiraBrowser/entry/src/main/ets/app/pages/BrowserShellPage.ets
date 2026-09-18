@@ -8515,12 +8515,28 @@ struct BrowserShellPage {
     if (controller === undefined || snapshotId.length <= 0) {
       return undefined;
     }
+    // Capture at the document's own measured viewport, not the shell's: the cover pipeline re-lays
+    // the page out at whatever size it is handed, so a height the document never had came back as
+    // a stretched cover. The shell viewport is only a fallback for the moment before the Web node
+    // has reported its first layout.
+    const documentViewport = this.customHomepageRuntimeCoordinator.getCommittedWebViewportSize();
     return await this.customHomepageLaunchSnapshotCaptureService.capture(
       controller,
       snapshotId,
-      this.rootViewportWidth,
-      this.rootViewportHeight
+      {
+        viewportWidth: documentViewport.width > 1 ? documentViewport.width : this.rootViewportWidth,
+        viewportHeight: documentViewport.height > 1 ? documentViewport.height : this.rootViewportHeight,
+        aspectRatio: this.resolveCustomHomepageLaunchSnapshotAspectRatio()
+      }
     );
+  }
+
+  // The surface the cover is drawn on is the shell itself, so the frame is normalized to its shape.
+  private resolveCustomHomepageLaunchSnapshotAspectRatio(): number {
+    if (this.rootViewportWidth <= 1 || this.rootViewportHeight <= 1) {
+      return 0;
+    }
+    return this.rootViewportWidth / this.rootViewportHeight;
   }
 
   private executeCustomHomepageShellEffect(effect: CustomHomepageRuntimeShellEffect): void {

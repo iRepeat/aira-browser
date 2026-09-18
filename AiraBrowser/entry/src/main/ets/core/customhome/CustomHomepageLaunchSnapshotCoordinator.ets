@@ -155,7 +155,13 @@ export class CustomHomepageLaunchSnapshotCoordinator {
         try {
           const pixelMap = await source.capture();
           if (pixelMap !== undefined) {
-            await this.store.persist(pixelMap, request.renderKey, request.themeMode);
+            try {
+              await this.store.persist(pixelMap, request.renderKey, request.themeMode);
+            } finally {
+              // The capture service hands over ownership; the store only reads the frame, so every
+              // capture used to strand one full-screen pixel map.
+              await pixelMap.release().catch((_error: Error): void => {});
+            }
           }
         } catch (error) {
           hilog.warn(LOG_DOMAIN, LOG_TAG, 'launch snapshot capture failed error=%{public}s', JSON.stringify(error));

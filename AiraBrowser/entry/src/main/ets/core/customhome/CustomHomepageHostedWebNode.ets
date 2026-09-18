@@ -31,6 +31,11 @@ interface CustomHomepageHostedWebCallbacks {
   onPageEnd: (event: OnPageEndEvent, signal: CustomHomepageHostedWebDocumentSignal) => void;
   onFirstMeaningfulPaint: (signal: CustomHomepageHostedWebDocumentSignal) => void;
   onScroll: (event: OnScrollEvent, generation: number) => void;
+  // The document's own measured viewport, in vp. The cold-start cover has to be captured at
+  // this size rather than at the shell viewport: `webPageSnapshot` and the surface region both
+  // re-lay the page out at the size they are given, so a size the document never had produces a
+  // frame that no longer matches what the user sees.
+  onViewportMeasured: (width: number, height: number, generation: number) => void;
   onLoadFinished: (signal: CustomHomepageHostedWebDocumentSignal) => void;
   onWindowNew: (event: OnWindowNewEvent, generation: number) => void;
   onErrorReceive: (event: OnErrorReceiveEvent, generation: number) => void;
@@ -72,6 +77,13 @@ function buildCustomHomepageDocumentSignal(
     kind: kind,
     generation: Math.max(0, Math.floor(config.documentGeneration))
   };
+}
+
+// `Area` dimensions arrive as `Length`; the Web node is always laid out at a plain number of vp.
+function resolveCustomHomepageAreaVp(value: Length): number {
+  const rawValue = `${value}`.replace('vp', '').replace('px', '');
+  const parsedValue = Number(rawValue);
+  return Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
 }
 
 function rejectCustomHomepageWindowNew(event: OnWindowNewEvent): void {
@@ -143,6 +155,7 @@ function resolveCustomHomepageHostedWebConfig(
       onPageEnd: config.callbacks.onPageEnd,
       onFirstMeaningfulPaint: config.callbacks.onFirstMeaningfulPaint,
       onScroll: config.callbacks.onScroll,
+      onViewportMeasured: config.callbacks.onViewportMeasured,
       onLoadFinished: config.callbacks.onLoadFinished,
       onWindowNew: config.callbacks.onWindowNew,
       onErrorReceive: config.callbacks.onErrorReceive
@@ -242,6 +255,13 @@ function CustomHomepageHostedWebBuilder(config: CustomHomepageHostedWebResolvedC
       })
       .onErrorReceive((event: OnErrorReceiveEvent): void => {
         config.callbacks.onErrorReceive(event, config.documentGeneration);
+      })
+      .onAreaChange((_oldArea: Area, newArea: Area): void => {
+        config.callbacks.onViewportMeasured(
+          resolveCustomHomepageAreaVp(newArea.width),
+          resolveCustomHomepageAreaVp(newArea.height),
+          config.documentGeneration
+        );
       })
   }
     .width('100%')
