@@ -1,6 +1,10 @@
 import {
+  BrowserWebViewportCoordinator,
   BrowserWebViewportPresentationState
 } from '../../../core/browser/BrowserWebViewportCoordinator';
+
+// Same blur strength as the immersive settings, bookmark, and history lists.
+const WEB_SCROLL_TOP_BLUR_RADIUS: number = 20;
 
 /**
  * Renders the complete Web viewport geometry projected by its coordinator.
@@ -13,7 +17,8 @@ export struct BrowserWebViewportSurfaceHost {
     topSafeOverlayHeightPx: 0,
     contentTopPx: 0,
     contentHeightPx: 1,
-    fillParentHeight: false
+    fillParentHeight: false,
+    scrollHiddenTopBlurHeightPx: 0
   };
   @Prop backdropSnapshotId: string = '';
   @Prop overlayVisible: boolean = false;
@@ -47,6 +52,10 @@ export struct BrowserWebViewportSurfaceHost {
         // No unconditional geometry animation: the immersion owner opts in only
         // for scrolling. Native history restores still settle in one layout pass.
         .clip(true)
+        .linearGradientBlur(this.presentation.scrollHiddenTopBlurHeightPx > 0 ? WEB_SCROLL_TOP_BLUR_RADIUS : 0, {
+          fractionStops: BrowserWebViewportCoordinator.resolveTopBlurFractionStops(this.presentation),
+          direction: GradientDirection.Bottom
+        })
 
         this.loadingProgress()
       }

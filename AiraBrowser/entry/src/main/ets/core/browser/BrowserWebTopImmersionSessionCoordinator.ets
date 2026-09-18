@@ -6,6 +6,7 @@ const TOP_IMMERSION_LOG_DOMAIN: number = 0x0000;
 // Keep the established device-log filter channel stable after moving ownership out of BrowserShellPage.
 const TOP_IMMERSION_DEVICE_LOG_TAG: string = 'BrowserShellPage';
 const TOP_IMMERSION_SCROLL_TRANSITION_MS: number = 180;
+const TOP_IMMERSION_BLUR_HEIGHT_SCALE: number = 1.5;
 
 type BrowserWebTopImmersionForcedReason =
   'none' |
@@ -101,6 +102,22 @@ export class BrowserWebTopImmersionSessionCoordinator {
       return cutoutTopInsetVp;
     }
     return Math.max(systemTopInsetVp, cutoutTopInsetVp);
+  }
+
+  resolveScrollHiddenTopBlurHeightVp(
+    geometryInsets: BrowserWindowWebTopGeometryInsets,
+    contentGapVp: number
+  ): number {
+    const facts = this.dependencies.resolveFacts();
+    if (!this.isEligibleWebSurface(facts) || !facts.scrollTopImmersionEnabled ||
+      facts.statusBarVisible || this.resolveForcedReason(facts) !== 'none' ||
+      this.visibilityOverride !== undefined) {
+      return 0;
+    }
+    // Extend the blur to 1.5 times the visible strip, excluding any quick-search
+    // row. Cutout geometry survives the status bar becoming hidden.
+    const safeStripHeightVp = Math.max(0, Math.ceil(geometryInsets.cutoutTopInsetVp + contentGapVp));
+    return safeStripHeightVp * TOP_IMMERSION_BLUR_HEIGHT_SCALE;
   }
 
   syncPolicy(source: string): void {

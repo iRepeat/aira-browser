@@ -257,6 +257,12 @@ No unconditional height/position animation is added to the Web viewport renderer
 `check-aira-top-immersion-motion.cjs` exercises the scroll and immediate application paths; device smoothness remains a
 manual acceptance check.
 
+Scroll-hidden ordinary phone Web content also uses the same top-to-bottom gradient blur as the immersive lists, with
+radius 20 and the gradient ending at 1.5 times the visible top strip's cutout + content-gap height. The quick-search row is excluded.
+The viewport owner publishes this visual effect separately from occupied space: content remains at top zero and full
+height. Visible chrome, always-hidden mode, fullscreen, WebApps that hide the safe area, native video takeover, and
+Large-Screen presentation do not enable it. The existing Web node stays mounted throughout.
+
 ## Authorized Large-Screen parent-relative Web viewport geometry revision
 
 On 2026-08-11 the user explicitly reported and authorized fixing a Large-Screen browser-shell defect where every Web

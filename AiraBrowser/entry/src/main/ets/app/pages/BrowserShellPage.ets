@@ -7402,7 +7402,11 @@ struct BrowserShellPage {
       visualTopInsetPx: visualTopInsetPx,
       fullViewport: this.buildCurrentDocumentViewerChromeContext().policy.fullViewport,
       largeScreenShellActive: this.isLargeScreenShellFamilyActive(),
-      nativeVideoTakeoverActive: this.isAssistantVideoTakeoverActive()
+      nativeVideoTakeoverActive: this.isAssistantVideoTakeoverActive(),
+      scrollHiddenTopBlurHeightPx: this.browserWebTopImmersionSessionCoordinator.resolveScrollHiddenTopBlurHeightVp(
+        this.browserWindowAvoidAreaCoordinator.readStoredWebTopGeometryInsets(this.getSharedStageStorage()),
+        WEB_TOP_CHROME_CONTENT_GAP_VP
+      )
     });
   }
 
