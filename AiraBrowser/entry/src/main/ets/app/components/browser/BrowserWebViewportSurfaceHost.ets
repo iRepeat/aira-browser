@@ -31,9 +31,9 @@ export struct BrowserWebViewportSurfaceHost {
   build() {
     RelativeContainer() {
       Stack({ alignContent: Alignment.TopStart }) {
-        if (this.presentation.topSafeOverlayHeightPx > 0) {
-          this.topChrome()
-        }
+        // Keep the clipped chrome mounted at zero height so both ends of a
+        // scroll-driven height transition exist in the same render tree.
+        this.topChrome()
 
         Column() {
           this.content()
@@ -44,9 +44,8 @@ export struct BrowserWebViewportSurfaceHost {
           x: 0,
           y: this.presentation.fillParentHeight ? 0 : this.presentation.contentTopPx
         })
-        // Web content geometry must settle in the same layout pass as history
-        // navigation. Animating height/top changes moves the scroll viewport
-        // while ArkWeb is restoring the target document.
+        // No unconditional geometry animation: the immersion owner opts in only
+        // for scrolling. Native history restores still settle in one layout pass.
         .clip(true)
 
         this.loadingProgress()

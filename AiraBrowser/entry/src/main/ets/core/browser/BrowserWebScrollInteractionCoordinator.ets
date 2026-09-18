@@ -142,7 +142,11 @@ export class BrowserWebScrollInteractionCoordinator {
       `global:${tabId}`, scrollY, scrollY - probePreviousY, decision.reason, interaction.reason
     );
     this.shell.applyBottomChromeDecision(decision);
-    this.dependencies.topImmersionSessionCoordinator.handleScroll(tabId, scrollY);
+    this.dependencies.topImmersionSessionCoordinator.handleScroll(
+      tabId,
+      scrollY,
+      decision.changed && decision.reason === 'scroll_reveal'
+    );
     this.activatePerformanceForMove();
     this.applySmoothModeForScroll(facts, tabId);
   }

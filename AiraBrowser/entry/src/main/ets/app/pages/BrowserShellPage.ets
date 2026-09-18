@@ -3421,14 +3421,22 @@ struct BrowserShellPage {
   };
   private browserWebTopImmersionSessionHost: BrowserWebTopImmersionSessionHost = {
     resolveVisibleTopInsetPx: (): number => this.getWebTopChromeStableInsetPx(),
-    applyPresentation: (visible: boolean, targetTopInsetPx: number, _source: string): void => {
+    applyPresentation: (visible: boolean, targetTopInsetPx: number, _source: string,
+      animationDurationMs: number): void => {
       if (!this.webViewportVisualTopInsetInitialized) {
         this.webViewportVisualTopInset = this.getWebViewportVisualTopInsetPx();
         this.webViewportVisualTopInsetInitialized = true;
       }
       this.webStatusBarVisible = visible;
-      this.webViewportVisualTopInset = targetTopInsetPx;
-      this.refreshWebViewportPresentation(targetTopInsetPx);
+      const applyGeometry = (): void => {
+        this.webViewportVisualTopInset = targetTopInsetPx;
+        this.refreshWebViewportPresentation(targetTopInsetPx);
+      };
+      if (animationDurationMs > 0) {
+        this.getUIContext().animateTo({ duration: animationDurationMs, curve: Curve.EaseOut }, applyGeometry);
+      } else {
+        applyGeometry();
+      }
     },
     applyWindowVisibility: (
       visible: boolean,

@@ -884,3 +884,4 @@ EOF
 fi
 
 echo 'Window-open/BFCache static contract passed.'
+node "${SCRIPT_DIR}/check-aira-top-immersion-motion.cjs"

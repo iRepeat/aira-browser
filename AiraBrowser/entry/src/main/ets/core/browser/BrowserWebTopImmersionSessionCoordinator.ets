@@ -5,6 +5,7 @@ import { BrowserWindowWebTopGeometryInsets } from './BrowserWindowAvoidAreaCoord
 const TOP_IMMERSION_LOG_DOMAIN: number = 0x0000;
 // Keep the established device-log filter channel stable after moving ownership out of BrowserShellPage.
 const TOP_IMMERSION_DEVICE_LOG_TAG: string = 'BrowserShellPage';
+const TOP_IMMERSION_SCROLL_TRANSITION_MS: number = 180;
 
 type BrowserWebTopImmersionForcedReason =
   'none' |
@@ -34,11 +35,13 @@ interface BrowserWebTopImmersionVisibilityRequest {
   respectForcedImmersion?: boolean;
   activeSurfaceReady?: boolean;
   resetScrollBaseline?: boolean;
+  animate?: boolean;
 }
 
 export interface BrowserWebTopImmersionSessionHost {
   resolveVisibleTopInsetPx: () => number;
-  applyPresentation: (visible: boolean, targetTopInsetPx: number, source: string) => void;
+  applyPresentation: (visible: boolean, targetTopInsetPx: number, source: string,
+    animationDurationMs: number) => void;
   applyWindowVisibility: (
     visible: boolean,
     source: string,
@@ -160,7 +163,7 @@ export class BrowserWebTopImmersionSessionCoordinator {
     this.syncPolicy(source);
   }
 
-  handleScroll(tabId: string, scrollOffsetY: number): void {
+  handleScroll(tabId: string, scrollOffsetY: number, bottomChromeRestoredByScroll: boolean = false): void {
     const facts = this.dependencies.resolveFacts();
     const host = this.dependencies.host;
     this.syncActiveSurface(facts);
@@ -195,7 +198,12 @@ export class BrowserWebTopImmersionSessionCoordinator {
     }
     this.requestVisibility(decision.statusBarVisible, facts, 'web-scroll', host, {
       respectForcedImmersion: true,
-      activeSurfaceReady: true
+      activeSurfaceReady: true,
+      // Bottom chrome applies first and is already interactive when an upward
+      // scroll restores it. Preserve that scroll intent instead of treating the
+      // fresh interactive fact as a manual panel reveal. Focus/sheets still snap.
+      animate: this.isEligibleWebSurface(facts) && facts.scrollTopImmersionEnabled &&
+        !facts.addressFocused && (!facts.bottomPanelInteractive || bottomChromeRestoredByScroll)
     });
   }
 
@@ -281,7 +289,7 @@ export class BrowserWebTopImmersionSessionCoordinator {
       return;
     }
     const targetTopInsetPx = Math.max(0, Math.ceil(this.dependencies.host.resolveVisibleTopInsetPx()));
-    this.dependencies.host.applyPresentation(true, targetTopInsetPx, source);
+    this.dependencies.host.applyPresentation(true, targetTopInsetPx, source, 0);
   }
 
   private requestVisibility(
@@ -315,7 +323,9 @@ export class BrowserWebTopImmersionSessionCoordinator {
       return;
     }
     this.pendingHide = undefined;
-    this.applyDesiredVisibility(nextVisible, source, host, requestGeneration);
+    const animationDurationMs = options.animate === true && forcedReason === 'none' &&
+      overrideVisible === undefined ? TOP_IMMERSION_SCROLL_TRANSITION_MS : 0;
+    this.applyDesiredVisibility(nextVisible, source, host, requestGeneration, animationDurationMs);
   }
 
   private resolveForcedReason(facts: BrowserWebTopImmersionFacts): BrowserWebTopImmersionForcedReason {
@@ -383,12 +393,13 @@ export class BrowserWebTopImmersionSessionCoordinator {
     visible: boolean,
     source: string,
     host: BrowserWebTopImmersionSessionHost,
-    requestGeneration: number
+    requestGeneration: number,
+    animationDurationMs: number
   ): void {
     const facts = this.dependencies.resolveFacts();
     if (facts.statusBarVisible !== visible) {
       const targetTopInsetPx = visible ? Math.max(0, Math.ceil(host.resolveVisibleTopInsetPx())) : 0;
-      host.applyPresentation(visible, targetTopInsetPx, source);
+      host.applyPresentation(visible, targetTopInsetPx, source, animationDurationMs);
     }
     this.enqueueWindowVisibility(visible, source, host, requestGeneration, false);
   }
@@ -444,7 +455,8 @@ export class BrowserWebTopImmersionSessionCoordinator {
           host.applyPresentation(
             true,
             host.resolveVisibleTopInsetPx(),
-            `${source}-fallback`
+            `${source}-fallback`,
+            0
           );
         }
         hilog.warn(

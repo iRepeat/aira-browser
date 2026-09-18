@@ -243,6 +243,20 @@ itself, and while both the Web surface host and media-takeover coordinator conte
 recorded by the guard. This is a narrow installation authorization for the user-approved orientation repair, not a
 general bypass: any further protected-file change still fails until separately authorized and truthfully recorded.
 
+## Scroll-driven top-inset motion
+
+On 2026-09-19, scroll-driven top immersion gains a 180ms EaseOut transition for the native top chrome height and
+Web viewport geometry. Only an eligible ordinary scroll hide/reveal requests animation from
+`BrowserWebTopImmersionSessionCoordinator`; focus, sheets, navigation, fullscreen, policy changes, and failure fallback
+continue to apply their geometry immediately. The page executes the owner's animation duration through `UIContext.animateTo`.
+The clipped top-chrome component remains mounted at zero height, so hiding does not remove it before the transition.
+When the same scroll restores the bottom toolbar, the scroll interaction owner forwards that intent after applying the
+bottom-chrome decision. The newly interactive toolbar therefore does not turn the top reveal into an immediate manual
+panel restore. The regression harness exercises the actual bottom-then-top call order for compact and hidden toolbars.
+No unconditional height/position animation is added to the Web viewport renderer, and no Web node or controller is replaced.
+`check-aira-top-immersion-motion.cjs` exercises the scroll and immediate application paths; device smoothness remains a
+manual acceptance check.
+
 ## Authorized Large-Screen parent-relative Web viewport geometry revision
 
 On 2026-08-11 the user explicitly reported and authorized fixing a Large-Screen browser-shell defect where every Web
