@@ -14,7 +14,7 @@ export const WEB_DAV_TARGET_ROLE_KEY: string = 'aira.sync.webdav.targetRole';
 export class WebdavProviderCatalog {
   listProviders(): WebdavProviderTemplate[] {
     return [
-      this.buildProvider('custom', '自定义服务', '', $r('sys.symbol.icloud_fill')),
+      this.buildProvider('custom', 'WebDAV 同步', '', $r('sys.symbol.icloud_fill')),
       this.buildProvider('jianguoyun', '坚果云', 'https://dav.jianguoyun.com/dav/',
         undefined, $r('app.media.webdav_provider_jianguoyun')),
       this.buildProvider('pcloud-us', 'pCloud (US)', 'https://webdav.pcloud.com/',

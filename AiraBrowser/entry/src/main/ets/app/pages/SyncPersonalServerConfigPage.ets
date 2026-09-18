@@ -72,7 +72,7 @@ struct SyncPersonalServerConfigPage {
   build() {
     Column() {
       SettingsHdsScaffold({
-        title: '个人服务器',
+        title: '私有化部署',
         backIconKind: 'back',
         pageBackground: this.storedPageBackgroundColor,
         headerButtonBackground: this.storedPressedBackgroundColor,
@@ -207,8 +207,8 @@ struct SyncPersonalServerConfigPage {
       this.statusText = this.activateExperienceAfterPair ? '已连接并开启同步' : '已连接';
       this.refreshSignal.bump();
       showCenteredAlertDialog({
-        title: '个人服务器已连接',
-        message: this.activateExperienceAfterPair ? '所选内容会通过这台个人服务器保持同步。' : '设备凭据已保存在本机。',
+        title: '私有化部署已连接',
+        message: this.activateExperienceAfterPair ? '所选内容会通过这台私有化部署保持同步。' : '设备凭据已保存在本机。',
         autoCancel: true,
         secondaryButton: { value: '完成', action: () => { this.navigationCoordinator.back(); } }
       });
@@ -234,7 +234,7 @@ struct SyncPersonalServerConfigPage {
   private confirmDisconnect(): void {
     showCenteredAlertDialog({
       title: '断开本机连接？',
-      message: '本机将删除个人服务器设备凭据并停止使用该实例同步。本机已有数据不会删除。',
+      message: '本机将删除私有化部署设备凭据并停止使用该实例同步。本机已有数据不会删除。',
       autoCancel: true,
       primaryButton: { value: '取消', action: () => {} },
       secondaryButton: { value: '断开', action: () => { this.disconnect(); } }

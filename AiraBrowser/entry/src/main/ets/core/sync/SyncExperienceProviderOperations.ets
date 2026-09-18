@@ -713,7 +713,7 @@ export class SyncExperienceProviderOperations {
       return 'WebDAV';
     }
     if (remoteKind === 'self_hosted') {
-      return '个人服务器';
+      return '私有化部署';
     }
     return '同步方式';
   }

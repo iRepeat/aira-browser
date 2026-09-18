@@ -31,7 +31,7 @@ interface SyncExperienceGoalDescriptor {
 const SYNC_EXPERIENCE_GOALS: SyncExperienceGoalDescriptor[] = [
   {
     id: 'aira_cloud',
-    title: '手机与电脑之间',
+    title: 'Aira 云同步',
     description: '通过浏览器插件在手机、Windows 和 Mac 之间跨系统同步。',
     requiresPro: true
   },
@@ -43,14 +43,14 @@ const SYNC_EXPERIENCE_GOALS: SyncExperienceGoalDescriptor[] = [
   },
   {
     id: 'webdav',
-    title: '使用自己的服务器',
+    title: 'WebDAV 同步',
     description: '连接你自己的 WebDAV 服务，保存并同步书签、主页收藏、小说书架和常用设置。',
     requiresPro: false
   },
   {
     id: 'self_hosted',
-    title: '个人服务器',
-    description: '连接你部署的 Aira 个人服务器，在自己的设备之间同步书签、历史记录、主页收藏、小说书架和常用设置。',
+    title: '私有化部署',
+    description: '连接你部署的 Aira 私有化服务器，在自己的设备之间同步书签、历史记录、主页收藏、小说书架和常用设置。',
     requiresPro: false
   }
 ];
@@ -76,10 +76,10 @@ function resolveDistributionSyncExperienceGoals(): SyncExperienceGoalDescriptor[
 function resolveDistributionGoalTitle(goal: SyncExperienceGoalDescriptor): string {
   if (AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity()) {
     if (goal.id === 'self_hosted') {
-      return '使用自己的服务器';
+      return '私有化部署';
     }
     if (goal.id === 'webdav') {
-      return 'WebDAV';
+      return 'WebDAV 同步';
     }
   }
   return goal.title;
@@ -244,13 +244,13 @@ export class SyncExperienceViewModel {
       if (!AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
         return '尚未选择';
       }
-      return '手机与电脑之间';
+      return 'Aira 云同步';
     }
     if (remoteKind === 'webdav') {
       return this.resolveWebdavProviderLabel(settings);
     }
     if (remoteKind === 'self_hosted') {
-      return AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity() ? '使用自己的服务器' : '个人服务器';
+      return '私有化部署';
     }
     return '尚未选择';
   }
@@ -266,7 +266,7 @@ export class SyncExperienceViewModel {
       return '尚未选择';
     }
     if (provider === 'self_hosted') {
-      return '个人服务器';
+      return '私有化部署';
     }
     return 'Aira 云';
   }
@@ -354,7 +354,7 @@ export class SyncExperienceViewModel {
         return '华为云空间书签同步已升级，请重新开启书签同步。本机书签和其他同步内容不受影响。';
       }
       if (activeProvider === 'aira_cloud' && !input.airaCloudEligible) {
-        return '手机与电脑之间的同步需要恢复 Aira Pro，或更改同步方式。';
+        return 'Aira 云同步需要恢复 Aira Pro，或更改同步方式。';
       }
       const bookmarkNeedsAttention = this.bookmarkNeedsAttention(input, activeProvider);
       const personalizationNeedsAttention = this.personalizationNeedsAttention(input, activeProvider);
@@ -456,7 +456,7 @@ export class SyncExperienceViewModel {
   private resolveWebdavProviderLabel(settings?: AiraSyncSettings): string {
     const endpoint = settings?.webdav.endpoint.trim() ?? '';
     if (endpoint.length <= 0) {
-      return AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity() ? 'WebDAV' : '使用自己的服务器';
+      return 'WebDAV 同步';
     }
     return this.webdavProviderCatalog.resolveProviderForEndpoint(endpoint).name;
   }

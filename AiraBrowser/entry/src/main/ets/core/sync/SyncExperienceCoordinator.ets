@@ -420,7 +420,7 @@ export class SyncExperienceCoordinator implements AiraCloudBookmarkV4BootstrapTr
           selfHosted.credentialId.trim().length <= 0 || selfHosted.deviceToken.trim().length <= 0) {
           return {
             type: 'configuration-required',
-            title: '连接个人服务器',
+            title: '连接私有化部署',
             message: '请先填写服务器地址并使用一次性配对码连接。',
             remoteKind: 'self_hosted',
             enableDefaultContent: needsInitialDomainActivation
@@ -779,7 +779,7 @@ export class SyncExperienceCoordinator implements AiraCloudBookmarkV4BootstrapTr
       if (accountUid.length <= 0) {
         return {
           type: 'configuration-required',
-          title: context.activeProvider === 'self_hosted' ? '请先连接个人服务器' : '请先登录华为账号',
+          title: context.activeProvider === 'self_hosted' ? '请先连接私有化部署' : '请先登录华为账号',
           message: '历史记录按当前选择的同步位置在设备之间保持一致。',
           remoteKind: context.activeProvider === 'self_hosted' ? 'self_hosted' : undefined
         };
@@ -834,7 +834,7 @@ export class SyncExperienceCoordinator implements AiraCloudBookmarkV4BootstrapTr
       return 'Aira 云';
     }
     if (provider === 'self_hosted') {
-      return '个人服务器';
+      return '私有化部署';
     }
     return '云端';
   }

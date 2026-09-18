@@ -120,7 +120,7 @@ export struct SyncGoalSelectionSheet {
 
             if (option.id === 'self_hosted') {
               BrowserSheetActionButton({
-                label: option.isSelected ? '管理个人服务器' : '连接个人服务器',
+                label: option.isSelected ? '管理私有化部署' : '连接私有化部署',
                 actionEnabled: !this.isPrivateSession && !this.isBusy,
                 fillAvailableWidth: false,
                 buttonWidth: '100%',

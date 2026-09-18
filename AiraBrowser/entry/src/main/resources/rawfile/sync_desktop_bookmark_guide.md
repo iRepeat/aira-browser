@@ -30,7 +30,7 @@ Aira 云同步、网页接力和跨设备标签页需要手机与电脑登录同
 
 ![Aira 浏览器同步页中的 WebDAV 入口]({{SYNC_DESKTOP_BOOKMARK_GUIDE_01_IMAGE}})
 
-3. 在「WebDAV 服务商」中选择你的服务商；如果列表里没有，就选自定义服务。
+3. 在「WebDAV 服务商」中选择你的服务商；如果列表里没有，就选「WebDAV 同步」通过自定义地址连接。
 4. 填写 WebDAV 地址、用户名和密码，然后点「启用 WebDAV 同步」。
 
 ![Aira 浏览器 WebDAV 地址、用户名、密码与启用按钮]({{SYNC_DESKTOP_BOOKMARK_GUIDE_02_IMAGE}})
