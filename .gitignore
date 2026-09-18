@@ -27,6 +27,7 @@ oh_modules/
 .planning/
 .codex/
 .codex-transfer/
+.zcode/
 scripts/setup-codex-workflow.sh
 scripts/install-codex-workflow-package.sh
 scripts/generate-aira-stroke-icons.js
