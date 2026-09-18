@@ -1,11 +1,13 @@
 import { AiraFeatureKey } from '../../common/constants/MembershipFeatureKeys';
 import {
   AiraFeatureQuota,
+  AiraLapsedProView,
   AiraMembershipState,
   AiraPlan,
   EntitlementDenyReason,
   EntitlementDecision,
-  EntitlementPrimaryAction
+  EntitlementPrimaryAction,
+  buildEmptyLapsedProView
 } from '../../common/models/MembershipModels';
 import {
   FeaturePolicy,
@@ -36,7 +38,8 @@ export class EntitlementService {
     featureKey: AiraFeatureKey,
     state: AiraMembershipState,
     quotas: AiraFeatureQuota[],
-    context: EntitlementContext
+    context: EntitlementContext,
+    lapsedPro: AiraLapsedProView = buildEmptyLapsedProView()
   ): EntitlementDecision {
     const policy = this.policyService.getPolicy(featureKey);
     if (policy === undefined) {
@@ -53,6 +56,19 @@ export class EntitlementService {
     const entitlementPlan = this.policyService.resolveEntitlementPlan(state.plan);
 
     if (policy.requiresPro && entitlementPlan !== 'pro') {
+      // An account whose Pro period already ended gets told that it lapsed, not
+      // that the feature needs Pro: the same renewal offer, framed as a
+      // restoration of something they had rather than a first-time upsell.
+      if (lapsedPro.expiredAt > 0) {
+        return this.buildDeniedDecision(
+          featureKey,
+          policy,
+          'pro_expired',
+          'Aira Pro 已过期',
+          `${policy.title} 已暂停，续费后立即恢复。`,
+          'open_pro'
+        );
+      }
       return this.buildDeniedDecision(
         featureKey,
         policy,

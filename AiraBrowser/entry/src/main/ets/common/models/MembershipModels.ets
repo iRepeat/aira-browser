@@ -18,6 +18,7 @@ export type EntitlementDenyReason =
   'login_required' |
   'club_required' |
   'pro_required' |
+  'pro_expired' |
   'quota_exceeded' |
   'offline_unknown' |
   'unsupported_context';
@@ -108,6 +109,38 @@ export function buildEmptyNewUserGiftView(): AiraNewUserGiftView {
     eligible: false,
     grantedAt: 0,
     grantDays: 0,
+    fetchedAt: 0
+  };
+}
+
+/**
+ * Server-owned record of a Pro entitlement that has already ended. A lapsed IAP
+ * subscription deletes the membership grant, so without this the service cannot
+ * tell an account that used to pay from one that never did. `expiresAt` is the
+ * instant the period ended and is what a one-time reminder is keyed on; it is
+ * only reported while the account is not currently Pro.
+ */
+export interface AiraLapsedProStateRecord {
+  expiresAt?: number;
+  source?: string;
+  productId?: string;
+}
+
+/** Resolved, account-scoped view of a lapsed Pro period for presentation. */
+export interface AiraLapsedProView {
+  uid: string;
+  expiredAt: number;
+  source: string;
+  productId: string;
+  fetchedAt: number;
+}
+
+export function buildEmptyLapsedProView(): AiraLapsedProView {
+  return {
+    uid: '',
+    expiredAt: 0,
+    source: '',
+    productId: '',
     fetchedAt: 0
   };
 }

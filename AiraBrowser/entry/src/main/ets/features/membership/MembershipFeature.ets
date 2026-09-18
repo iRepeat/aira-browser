@@ -3,6 +3,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   AiraAccountRecognition,
   AiraFeatureQuota,
+  AiraLapsedProStateRecord,
+  AiraLapsedProView,
   AiraMembershipEntitlementClaims,
   AiraMembershipState,
   AiraNewUserGiftStateRecord,
@@ -10,6 +12,7 @@ import {
   AiraSubscriptionStatus,
   EntitlementDecision,
   MembershipRepositorySnapshot,
+  buildEmptyLapsedProView,
   buildEmptyNewUserGiftView
 } from '../../common/models/MembershipModels';
 import { MembershipRepository } from '../../data/membership/MembershipRepository';
@@ -81,6 +84,7 @@ export class MembershipFeature {
   private syncConfigStore?: AiraSyncConfigStore;
   private stateChangeHandler?: MembershipStateChangeHandler;
   private newUserGift: AiraNewUserGiftView = buildEmptyNewUserGiftView();
+  private lapsedPro: AiraLapsedProView = buildEmptyLapsedProView();
   private remoteStateRefreshPromise?: Promise<AiraMembershipState>;
   private remoteStateRefreshUid: string = '';
   private remoteStateRefreshAttemptedAt: number = 0;
@@ -128,6 +132,9 @@ export class MembershipFeature {
     if (this.newUserGift.uid !== normalizedUid) {
       this.newUserGift = buildEmptyNewUserGiftView();
     }
+    if (this.lapsedPro.uid !== normalizedUid) {
+      this.lapsedPro = buildEmptyLapsedProView();
+    }
   }
 
   getState(): AiraMembershipState {
@@ -157,6 +164,29 @@ export class MembershipFeature {
       grantedAt: this.newUserGift.grantedAt,
       grantDays: this.newUserGift.grantDays,
       fetchedAt: this.newUserGift.fetchedAt
+    };
+  }
+
+  /**
+   * The account's most recent ended Pro period, as last reported by the hosted
+   * service. A lapsed subscription deletes the membership grant, so this is the
+   * only signal that separates "used to have Pro" from "never had Pro"; it is
+   * reported only while the current plan is not Pro.
+   */
+  getLapsedProState(): AiraLapsedProView {
+    if (!this.syncConfigStore?.isInitialized()) {
+      return buildEmptyLapsedProView();
+    }
+    const uid = this.getHuaweiUid();
+    if (uid.length <= 0 || this.lapsedPro.uid !== uid) {
+      return buildEmptyLapsedProView();
+    }
+    return {
+      uid: this.lapsedPro.uid,
+      expiredAt: this.lapsedPro.expiredAt,
+      source: this.lapsedPro.source,
+      productId: this.lapsedPro.productId,
+      fetchedAt: this.lapsedPro.fetchedAt
     };
   }
 
@@ -460,6 +490,7 @@ export class MembershipFeature {
         return this.getState();
       }
       this.captureNewUserGiftState(uid, remoteState.newUserGift ?? undefined, Date.now());
+      this.captureLapsedProState(uid, remoteState.lapsedPro ?? undefined, Date.now());
       hilog.info(
         MEMBERSHIP_FEATURE_LOG_DOMAIN,
         MEMBERSHIP_FEATURE_LOG_TAG,
@@ -600,7 +631,8 @@ export class MembershipFeature {
       featureKey,
       effectiveState,
       this.repository.getQuotaSnapshot(),
-      effectiveContext
+      effectiveContext,
+      this.getLapsedProState()
     );
   }
 
@@ -1167,6 +1199,25 @@ export class MembershipFeature {
         ? this.normalizeGiftDays(record.grantDays)
         : (previous?.grantDays ?? 0),
       fetchedAt: Date.now()
+    };
+  }
+
+  private captureLapsedProState(
+    uid: string,
+    record: AiraLapsedProStateRecord | undefined,
+    fetchedAt: number
+  ): void {
+    const normalizedUid = uid.trim();
+    if (normalizedUid.length <= 0) {
+      this.lapsedPro = buildEmptyLapsedProView();
+      return;
+    }
+    this.lapsedPro = {
+      uid: normalizedUid,
+      expiredAt: this.normalizeGiftTimestamp(record?.expiresAt),
+      source: `${record?.source ?? ''}`.trim().toLowerCase(),
+      productId: `${record?.productId ?? ''}`.trim(),
+      fetchedAt: fetchedAt
     };
   }
 

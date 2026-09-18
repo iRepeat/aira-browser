@@ -61,6 +61,7 @@ import {
 } from '../search/SearchEngineSelectionCoordinator';
 import { ReleaseNoticePresentationCoordinator } from '../update/ReleaseNoticePresentationCoordinator';
 import { NewUserGiftCoordinator } from '../membership/NewUserGiftCoordinator';
+import { RenewalReminderCoordinator } from '../membership/RenewalReminderCoordinator';
 import { HomeWallpaperCoordinator, HomeWallpaperRefreshResult } from '../wallpaper/HomeWallpaperCoordinator';
 import { HomeWallpaperInteractionColorViewModel } from '../wallpaper/HomeWallpaperInteractionColorViewModel';
 import {
@@ -255,6 +256,7 @@ interface BrowserTabHomeDependencies {
   appReviewPromptCoordinator: AppReviewPromptCoordinator;
   resolveReleaseNoticePresentationCoordinator: () => ReleaseNoticePresentationCoordinator;
   resolveNewUserGiftCoordinator: () => NewUserGiftCoordinator;
+  resolveRenewalReminderCoordinator: () => RenewalReminderCoordinator;
   resolveTabsOverviewSessionCoordinator: () => BrowserTabsOverviewSessionCoordinator;
   resolveHomePresentationSessionCoordinator: () => BrowserHomePresentationSessionCoordinator;
   resolveRootBottomPanelSessionCoordinator: () => BrowserRootBottomPanelSessionCoordinator;
@@ -420,6 +422,7 @@ export class BrowserTabHomeCoordinator {
     this.dependencies.appReviewPromptCoordinator.scheduleEvaluation();
     this.dependencies.resolveReleaseNoticePresentationCoordinator().scheduleEvaluation();
     this.dependencies.resolveNewUserGiftCoordinator().scheduleEvaluation();
+    this.dependencies.resolveRenewalReminderCoordinator().scheduleEvaluation();
   }
 
   buildResponsiveLayoutState(

@@ -742,6 +742,15 @@ import {
   FeatureGateSnapshot
 } from '../../core/membership/FeatureGateCoordinator';
 import {
+  AiraProPurchaseCoordinator,
+  AiraProPurchaseFlowHostAdapter
+} from '../../core/membership/AiraProPurchaseCoordinator';
+import {
+  RenewalReminderCoordinator,
+  RenewalReminderShellFacts
+} from '../../core/membership/RenewalReminderCoordinator';
+import { sharedRenewalReminderRepository } from '../../data/membership/RenewalReminderRepository';
+import {
   createHiddenNewUserGiftSnapshot,
   NewUserGiftAction,
   NewUserGiftCoordinator,
@@ -2422,6 +2431,48 @@ struct BrowserShellPage {
     },
     FEATURE_GATE_OVERLAY_OPEN_DELAY_MS,
     FEATURE_GATE_OVERLAY_ANIMATION_DURATION_MS
+  );
+  /**
+   * The Pro gate can complete a purchase without leaving the surface, so the
+   * shell owns a purchase flow of its own; the membership page keeps its
+   * separate instance because the two are never on screen at once.
+   */
+  private featureGatePurchaseCoordinator: AiraProPurchaseCoordinator =
+    new AiraProPurchaseCoordinator(sharedMembershipFeature);
+  private featureGatePurchaseHost: AiraProPurchaseFlowHostAdapter = new AiraProPurchaseFlowHostAdapter(
+    (): void => {
+      // A completed purchase changes the plan, so the gate that triggered it is
+      // no longer valid; drop it and let the next evaluation re-decide.
+      this.featureGateCoordinator.handleAction('dismiss');
+    },
+    (): void => {
+      this.showNativeToast('请先使用华为账号登录后再购买 Aira Pro。');
+    },
+    (message: string): void => {
+      this.showNativeToast(message);
+    }
+  );
+  /**
+   * Unprompted "your Pro period ended" reminder. It reuses the feature-gate
+   * surface, and it is the only path that consumes the once-per-lapse
+   * do-not-disturb record.
+   */
+  private renewalReminderCoordinator: RenewalReminderCoordinator = new RenewalReminderCoordinator(
+    sharedMembershipFeature,
+    sharedRenewalReminderRepository,
+    this.browserTransientSurfaceCoordinator,
+    this.featureGateCoordinator,
+    {
+      resolveFacts: (): RenewalReminderShellFacts => {
+        const boundary = this.tabScopedEventContextCoordinator.resolveCurrentBoundary();
+        return {
+          appVisible: this.isBrowserShellVisible,
+          homeVisible: this.showHomePage,
+          privacyMode: boundary.privacyMode,
+          promptBlockingFacts: this.buildTransientPromptBlockingFacts()
+        };
+      }
+    }
   );
   private browserActiveTabRuntimeRestoreHost: BrowserActiveTabRuntimeRestoreHost = {
     resolveFacts: () => ({
@@ -4520,6 +4571,8 @@ struct BrowserShellPage {
         this.releaseNoticePresentationCoordinator,
       resolveNewUserGiftCoordinator: (): NewUserGiftCoordinator =>
         this.newUserGiftCoordinator,
+      resolveRenewalReminderCoordinator: (): RenewalReminderCoordinator =>
+        this.renewalReminderCoordinator,
       resolveTabsOverviewSessionCoordinator: (): BrowserTabsOverviewSessionCoordinator =>
         this.tabsOverviewSessionCoordinator,
       resolveHomePresentationSessionCoordinator: (): BrowserHomePresentationSessionCoordinator =>
@@ -8015,6 +8068,7 @@ struct BrowserShellPage {
         this.browserQrScanCoordinator.handleSurfaceDismissed('wifi_credentials');
       } else if (update.surfaceId === 'feature_gate') {
         this.featureGateCoordinator.handleSurfaceDismissed();
+        this.renewalReminderCoordinator.handleSurfaceDismissed();
       } else if (update.surfaceId === 'new_user_gift') {
         this.newUserGiftCoordinator.handleSurfaceDismissed();
       }
@@ -8025,6 +8079,19 @@ struct BrowserShellPage {
       // The announcement is only spent once it actually reaches the user; an
       // abandoned mount must not consume the one-time notice.
       this.newUserGiftCoordinator.handleSurfaceRevealed();
+    }
+    if (update.lane === 'custom_bottom' &&
+      update.reason === 'reveal' &&
+      update.surfaceId === 'feature_gate') {
+      // Same rule for the renewal reminder: only a sheet that reached the user
+      // consumes the once-per-lapse record.
+      this.renewalReminderCoordinator.handleSurfaceRevealed();
+    }
+    if (!update.snapshot.blocksAutomaticPrompts) {
+      // The reminder can only present on a free lane. Without this it would be
+      // decided once at startup and lost forever if anything held the lane at
+      // that moment, so re-decide whenever the lane clears.
+      this.renewalReminderCoordinator.scheduleEvaluation();
     }
     if (update.lane === 'custom_bottom' && update.chromePlan !== undefined) {
       this.applyRootBottomPanelSessionChromePlan(update.chromePlan);
@@ -8067,7 +8134,14 @@ struct BrowserShellPage {
         state: this.featureGateSnapshot,
         layoutMode: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
         onAction: (action: FeatureGateAction) => {
+          if (action === 'purchase_plan') {
+            this.startFeatureGatePurchase();
+            return;
+          }
           this.featureGateCoordinator.handleAction(action);
+        },
+        onSelectPlan: (planId: string): void => {
+          this.featureGateCoordinator.selectRenewalPlan(planId);
         }
       })
     } else if (this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceId === 'new_user_gift') {
@@ -9578,6 +9652,31 @@ struct BrowserShellPage {
     });
   }
 
+  /**
+   * Buys the plan the renewal gate currently has selected. The gate only offers
+   * this action when it built a renewal payload, so the selected id is real.
+   */
+  private startFeatureGatePurchase(): void {
+    const planId = this.featureGateCoordinator.resolveSelectedRenewalPlanId();
+    if (planId.length === 0) {
+      return;
+    }
+    const boundary = this.tabScopedEventContextCoordinator.resolveCurrentBoundary();
+    void this.featureGatePurchaseCoordinator.startPurchaseFlow(
+      getContext(this) as common.UIAbilityContext,
+      planId,
+      sharedMembershipFeature.getState().userId,
+      this.featureGatePurchaseHost,
+      {
+        profileId: boundary.profileId,
+        privacyMode: boundary.privacyMode,
+        dataScope: boundary.dataScope
+      }
+    ).catch((error: Error): void => {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'Aira Pro renewal purchase failed: %{public}s', JSON.stringify(error));
+    });
+  }
+
   private showNativeToast(message: string): void {
     try {
       this.getUIContext().getPromptAction().showToast({
@@ -10235,6 +10334,7 @@ struct BrowserShellPage {
     this.browserWebPageToolsCoordinator.reset();
     this.releaseNoticePresentationCoordinator.handleShellReset();
     this.newUserGiftCoordinator.handleShellReset();
+    this.renewalReminderCoordinator.handleShellReset();
     this.applyBrowserSystemSheetDisappearEffect(systemSheetResetEffect);
     this.appReviewPromptCoordinator.handleShellReset();
     this.articleReadingSession.resetSpeechVoicePickerState();

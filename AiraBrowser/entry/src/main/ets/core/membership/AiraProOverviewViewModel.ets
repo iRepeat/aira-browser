@@ -18,6 +18,7 @@ import {
   BrowserPrivacyEffectPolicyService
 } from '../../services/privacy/BrowserPrivacyEffectPolicyService';
 import { AIRA_DISTRIBUTION_CAPABILITY_OWNER } from '../../common/config/AiraDistributionCapabilityOwner';
+import { AIRA_PRO_BENEFITS } from './AiraProBenefitCatalog';
 
 const AIRA_PRO_SUBSCRIPTION_ACTION_TEXT: string = '立即订阅';
 const AIRA_PRO_SUBSCRIPTION_CONSENT_ACTION_TEXT: string = '同意协议后立即订阅';
@@ -97,32 +98,7 @@ export class AiraProOverviewViewModel {
     return {
       title: this.resolveHeroTitle(membershipState),
       subtitle: this.resolveHeroSubtitle(membershipState),
-      benefits: [
-        {
-          id: 'cross_system_bookmark_sync',
-          title: 'Aira 云书签同步',
-          description: '使用 Aira 官方托管服务，在手机与电脑之间同步书签',
-          tutorialText: ''
-        },
-        {
-          id: 'page_handoff',
-          title: 'Aira 云网页接力',
-          description: '通过 Aira 官方托管服务，将当前网页推送至其他设备',
-          tutorialText: '查看教程'
-        },
-        {
-          id: 'cross_device_tabs',
-          title: 'Aira 云跨设备标签页',
-          description: '通过 Aira 官方托管服务查看并打开其他在线设备的标签页',
-          tutorialText: '查看教程'
-        },
-        {
-          id: 'aira_cloud_history',
-          title: 'Aira 云历史同步',
-          description: '使用 Aira 官方托管服务，在手机与电脑之间同步浏览历史',
-          tutorialText: ''
-        }
-      ],
+      benefits: AIRA_PRO_BENEFITS,
       plans: plans,
       proValue: this.resolveProValue(membershipState),
       proActivatedActionText: this.resolveActivatedActionText(membershipState),

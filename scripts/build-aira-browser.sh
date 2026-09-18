@@ -36,6 +36,7 @@ SYNC_PROVIDER_SWITCH_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-provider
 HISTORY_SYNC_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-history-sync-contract.sh"
 BOOKMARK_SNAPSHOT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bookmark-snapshot-contract.sh"
 NEW_USER_GIFT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-new-user-gift-contract.sh"
+PRO_RENEWAL_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-pro-renewal-contract.sh"
 SYNC_CLOSED_LOOP_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-closed-loop.cjs"
 HUAWEI_APP_IDENTITY_RESOLVER="${REPO_ROOT}/scripts/huawei-app-identity.js"
 HUAWEI_APP_IDENTITY_TEST="${REPO_ROOT}/scripts/huawei-app-identity.test.js"
@@ -318,6 +319,11 @@ if [ ! -x "${NEW_USER_GIFT_GUARD_SCRIPT}" ]; then
 fi
 
 "${NEW_USER_GIFT_GUARD_SCRIPT}"
+if [ ! -x "${PRO_RENEWAL_GUARD_SCRIPT}" ]; then
+  fail "Pro renewal contract guard not executable: ${PRO_RENEWAL_GUARD_SCRIPT}"
+fi
+
+"${PRO_RENEWAL_GUARD_SCRIPT}"
 if [ ! -x "${SYNC_CLOSED_LOOP_GUARD_SCRIPT}" ]; then
   fail "Sync closed-loop guard not executable: ${SYNC_CLOSED_LOOP_GUARD_SCRIPT}"
 fi
