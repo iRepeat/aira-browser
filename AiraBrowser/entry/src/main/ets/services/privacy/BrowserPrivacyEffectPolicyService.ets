@@ -36,6 +36,7 @@ export type BrowserPrivacyEffectIntent =
   'membership_purchase' |
   'membership_restore_purchase' |
   'membership_subscription_management' |
+  'membership_gift_grant' |
   'history_visit_write' |
   'regular_profile_management_read' |
   'regular_profile_management_navigation' |
@@ -177,6 +178,11 @@ const BROWSER_PRIVACY_EFFECT_CATALOG: BrowserPrivacyEffectCatalogEntry[] = [
   },
   {
     intent: 'membership_subscription_management',
+    classification: 'remote_account_sync_mutation',
+    targetScope: 'remote_account_sync_state'
+  },
+  {
+    intent: 'membership_gift_grant',
     classification: 'remote_account_sync_mutation',
     targetScope: 'remote_account_sync_state'
   },

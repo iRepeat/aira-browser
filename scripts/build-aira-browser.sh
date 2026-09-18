@@ -35,6 +35,7 @@ SYNC_FIRST_ACTIVATION_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-first-a
 SYNC_PROVIDER_SWITCH_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-provider-switch-contract.sh"
 HISTORY_SYNC_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-history-sync-contract.sh"
 BOOKMARK_SNAPSHOT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bookmark-snapshot-contract.sh"
+NEW_USER_GIFT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-new-user-gift-contract.sh"
 SYNC_CLOSED_LOOP_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-closed-loop.cjs"
 HUAWEI_APP_IDENTITY_RESOLVER="${REPO_ROOT}/scripts/huawei-app-identity.js"
 HUAWEI_APP_IDENTITY_TEST="${REPO_ROOT}/scripts/huawei-app-identity.test.js"
@@ -312,6 +313,11 @@ if [ ! -x "${BOOKMARK_SNAPSHOT_GUARD_SCRIPT}" ]; then
 fi
 
 "${BOOKMARK_SNAPSHOT_GUARD_SCRIPT}"
+if [ ! -x "${NEW_USER_GIFT_GUARD_SCRIPT}" ]; then
+  fail "New User Gift contract guard not executable: ${NEW_USER_GIFT_GUARD_SCRIPT}"
+fi
+
+"${NEW_USER_GIFT_GUARD_SCRIPT}"
 if [ ! -x "${SYNC_CLOSED_LOOP_GUARD_SCRIPT}" ]; then
   fail "Sync closed-loop guard not executable: ${SYNC_CLOSED_LOOP_GUARD_SCRIPT}"
 fi

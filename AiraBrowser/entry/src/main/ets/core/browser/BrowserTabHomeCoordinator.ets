@@ -60,6 +60,7 @@ import {
   SearchEngineSelectionSnapshot
 } from '../search/SearchEngineSelectionCoordinator';
 import { ReleaseNoticePresentationCoordinator } from '../update/ReleaseNoticePresentationCoordinator';
+import { NewUserGiftCoordinator } from '../membership/NewUserGiftCoordinator';
 import { HomeWallpaperCoordinator, HomeWallpaperRefreshResult } from '../wallpaper/HomeWallpaperCoordinator';
 import { HomeWallpaperInteractionColorViewModel } from '../wallpaper/HomeWallpaperInteractionColorViewModel';
 import {
@@ -253,6 +254,7 @@ interface BrowserTabHomeDependencies {
   searchSuggestionCoordinator: BrowserSearchSuggestionCoordinator;
   appReviewPromptCoordinator: AppReviewPromptCoordinator;
   resolveReleaseNoticePresentationCoordinator: () => ReleaseNoticePresentationCoordinator;
+  resolveNewUserGiftCoordinator: () => NewUserGiftCoordinator;
   resolveTabsOverviewSessionCoordinator: () => BrowserTabsOverviewSessionCoordinator;
   resolveHomePresentationSessionCoordinator: () => BrowserHomePresentationSessionCoordinator;
   resolveRootBottomPanelSessionCoordinator: () => BrowserRootBottomPanelSessionCoordinator;
@@ -417,6 +419,7 @@ export class BrowserTabHomeCoordinator {
   schedulePromptEvaluations(): void {
     this.dependencies.appReviewPromptCoordinator.scheduleEvaluation();
     this.dependencies.resolveReleaseNoticePresentationCoordinator().scheduleEvaluation();
+    this.dependencies.resolveNewUserGiftCoordinator().scheduleEvaluation();
   }
 
   buildResponsiveLayoutState(

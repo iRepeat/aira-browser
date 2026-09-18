@@ -4,6 +4,7 @@ import {
   AIRA_DISTRIBUTION_CAPABILITY_OWNER,
   AIRA_HOSTED_API_BASE_URL
 } from '../../common/config/AiraDistributionCapabilityOwner';
+import { AiraNewUserGiftStateRecord } from '../../common/models/MembershipModels';
 
 const AIRA_MEMBERSHIP_STATE_ENDPOINT: string = AIRA_HOSTED_API_BASE_URL + '/membership/state';
 const AIRA_ACCOUNT_PROFILE_ENDPOINT: string = AIRA_HOSTED_API_BASE_URL + '/account/profile';
@@ -55,6 +56,7 @@ export interface AiraMembershipStateResponseBody {
   recognitions?: string[];
   membershipGrant?: AiraMembershipGrantResponseRecord | null;
   entitlementProof?: string | null;
+  newUserGift?: AiraNewUserGiftStateRecord | null;
 }
 
 export interface AiraMembershipStateHttpAdapter {

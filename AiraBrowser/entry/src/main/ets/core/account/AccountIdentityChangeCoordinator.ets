@@ -1,5 +1,6 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { SyncSettingsRefreshSignal } from '../sync/SyncSettingsRefreshSignal';
+import { NewUserGiftRefreshSignal } from '../membership/NewUserGiftRefreshSignal';
 import { ActivityRepository } from '../../data/activity/ActivityRepository';
 import { MembershipFeature } from '../../features/membership/MembershipFeature';
 
@@ -20,6 +21,7 @@ export class AccountIdentityChangeCoordinator {
   private membershipFeature: MembershipFeature;
   private activityRepository: ActivityRepository;
   private syncSettingsRefreshSignal: SyncSettingsRefreshSignal;
+  private newUserGiftRefreshSignal: NewUserGiftRefreshSignal;
   private activityFlushHandler?: AccountActivityFlushHandler;
   private personalizationSyncHandler?: AccountPersonalizationSyncHandler;
   private identityReconcileHandler?: AccountIdentityReconcileHandler;
@@ -32,7 +34,8 @@ export class AccountIdentityChangeCoordinator {
     syncSettingsRefreshSignal: SyncSettingsRefreshSignal = new SyncSettingsRefreshSignal(),
     activityFlushHandler?: AccountActivityFlushHandler,
     personalizationSyncHandler?: AccountPersonalizationSyncHandler,
-    identityReconcileHandler?: AccountIdentityReconcileHandler
+    identityReconcileHandler?: AccountIdentityReconcileHandler,
+    newUserGiftRefreshSignal: NewUserGiftRefreshSignal = new NewUserGiftRefreshSignal()
   ) {
     this.membershipFeature = membershipFeature;
     this.activityRepository = activityRepository;
@@ -40,6 +43,7 @@ export class AccountIdentityChangeCoordinator {
     this.activityFlushHandler = activityFlushHandler;
     this.personalizationSyncHandler = personalizationSyncHandler;
     this.identityReconcileHandler = identityReconcileHandler;
+    this.newUserGiftRefreshSignal = newUserGiftRefreshSignal;
   }
 
   handleHuaweiIdentityChanged(uid: string, options: AccountIdentityChangeOptions = {}): Promise<void> {
@@ -88,6 +92,9 @@ export class AccountIdentityChangeCoordinator {
     await this.reconcileIdentityDomains(uid);
     this.syncPersonalizationIfNeeded(uid, options);
     this.bumpSettingsSignalIfNeeded(options);
+    // Membership state is authoritative for the gift, and it has just been
+    // refreshed above, so the prompt evaluator can read it immediately.
+    this.newUserGiftRefreshSignal.bump();
   }
 
   private normalizeOptions(options: AccountIdentityChangeOptions): Required<AccountIdentityChangeOptions> {

@@ -139,6 +139,7 @@ import {
   sharedBrowserProxyRuntimeRefreshCoordinator,
   sharedActivityTracker,
   sharedAppReviewPromptRepository,
+  sharedNewUserGiftRepository,
   sharedReleaseNoticeCoordinator,
   sharedClientUpdatePolicyService,
   sharedAiraCloudBookmarkV4BootstrapRuntime,
@@ -741,10 +742,19 @@ import {
   FeatureGateSnapshot
 } from '../../core/membership/FeatureGateCoordinator';
 import {
+  createHiddenNewUserGiftSnapshot,
+  NewUserGiftAction,
+  NewUserGiftCoordinator,
+  NewUserGiftShellFacts,
+  NewUserGiftSnapshot
+} from '../../core/membership/NewUserGiftCoordinator';
+import { AIRA_NEW_USER_GIFT_REVISION_KEY } from '../../core/membership/NewUserGiftRefreshSignal';
+import {
   CrossDeviceTabPresenceEntryHost,
   sharedCrossDeviceTabPresenceCoordinator
 } from '../../core/deviceTabs/CrossDeviceTabPresenceCoordinator';
 import { FeatureGateOverlay } from '../components/browser/FeatureGateOverlay';
+import { NewUserGiftOverlay } from '../components/browser/NewUserGiftOverlay';
 import {
   isBrowserNewWindowTestUrl,
   resolveBrowserNewWindowTestTitle
@@ -4508,6 +4518,8 @@ struct BrowserShellPage {
       appReviewPromptCoordinator: this.appReviewPromptCoordinator,
       resolveReleaseNoticePresentationCoordinator: (): ReleaseNoticePresentationCoordinator =>
         this.releaseNoticePresentationCoordinator,
+      resolveNewUserGiftCoordinator: (): NewUserGiftCoordinator =>
+        this.newUserGiftCoordinator,
       resolveTabsOverviewSessionCoordinator: (): BrowserTabsOverviewSessionCoordinator =>
         this.tabsOverviewSessionCoordinator,
       resolveHomePresentationSessionCoordinator: (): BrowserHomePresentationSessionCoordinator =>
@@ -4982,6 +4994,25 @@ struct BrowserShellPage {
         }
       }
     );
+  private newUserGiftCoordinator: NewUserGiftCoordinator = new NewUserGiftCoordinator(
+    sharedMembershipFeature,
+    sharedNewUserGiftRepository,
+    this.browserTransientSurfaceCoordinator,
+    {
+      resolveFacts: (): NewUserGiftShellFacts => {
+        return {
+          dataScope: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().dataScope,
+          privacyMode: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().privacyMode,
+          appVisible: this.isBrowserShellVisible,
+          promptBlockingFacts: this.buildTransientPromptBlockingFacts()
+        };
+      },
+      publishState: (snapshot: NewUserGiftSnapshot): void => {
+        this.newUserGiftSnapshot = snapshot;
+      },
+      showToast: (message: string): void => this.showNativeToast(message)
+    }
+  );
   private siteCustomizationRuntimeRefreshCoordinator: SiteCustomizationRuntimeRefreshCoordinator =
     new SiteCustomizationRuntimeRefreshCoordinator();
   private browserUserAgentActionSink: BrowserUserAgentActionSink = {
@@ -5303,6 +5334,9 @@ struct BrowserShellPage {
   @State browserQrScanSessionSnapshot: BrowserQrScanSessionSnapshot =
     DEFAULT_BROWSER_QR_SCAN_SESSION_SNAPSHOT;
   @State releaseNoticeState: ReleaseNoticeUiState = this.releaseNoticePresentationCoordinator.getSnapshot();
+  @State newUserGiftSnapshot: NewUserGiftSnapshot = createHiddenNewUserGiftSnapshot();
+  @StorageProp(AIRA_NEW_USER_GIFT_REVISION_KEY) @Watch('handleNewUserGiftRefreshSignal')
+  private newUserGiftRefreshRevision: number = 0;
   @State clientUpdatePolicyState: ClientUpdatePolicyState = sharedClientUpdatePolicyService.getSnapshot();
   @StorageProp(AIRA_CLOUD_BOOKMARK_V4_BOOTSTRAP_REVISION_KEY) @Watch('refreshAiraCloudBookmarkV4BootstrapState')
   private airaCloudBookmarkV4BootstrapRevision: number = 0;
@@ -5751,6 +5785,7 @@ struct BrowserShellPage {
     userScriptApplicationCoordinator: this.browserUserScriptApplicationCoordinator,
     transientSurfaceCoordinator: this.browserTransientSurfaceCoordinator,
     featureGateCoordinator: this.featureGateCoordinator,
+    newUserGiftCoordinator: this.newUserGiftCoordinator,
     homeShortcutStateCoordinator: this.homeShortcutStateCoordinator,
     releaseNoticePresentationCoordinator: this.releaseNoticePresentationCoordinator,
     unifiedLinkApplicationCoordinator: this.browserUnifiedLinkApplicationCoordinator,
@@ -6444,6 +6479,14 @@ struct BrowserShellPage {
 
   private refreshAiraCloudBookmarkV4BootstrapState(): void {
     this.airaCloudBookmarkV4BootstrapState = sharedAiraCloudBookmarkV4BootstrapRuntime.getViewState();
+  }
+
+  /**
+   * A resolved account identity is the only thing that can make the new-user
+   * gift claimable, so re-evaluate when the identity change owner raises it.
+   */
+  private handleNewUserGiftRefreshSignal(): void {
+    this.newUserGiftCoordinator.scheduleEvaluation();
   }
 
   private startAiraCloudBookmarkV4Bootstrap(): void {
@@ -7972,6 +8015,8 @@ struct BrowserShellPage {
         this.browserQrScanCoordinator.handleSurfaceDismissed('wifi_credentials');
       } else if (update.surfaceId === 'feature_gate') {
         this.featureGateCoordinator.handleSurfaceDismissed();
+      } else if (update.surfaceId === 'new_user_gift') {
+        this.newUserGiftCoordinator.handleSurfaceDismissed();
       }
     }
     if (update.lane === 'custom_bottom' && update.chromePlan !== undefined) {
@@ -8016,6 +8061,15 @@ struct BrowserShellPage {
         layoutMode: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
         onAction: (action: FeatureGateAction) => {
           this.featureGateCoordinator.handleAction(action);
+        }
+      })
+    } else if (this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceId === 'new_user_gift') {
+      NewUserGiftOverlay({
+        visible: this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceVisible,
+        state: this.newUserGiftSnapshot,
+        layoutMode: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
+        onAction: (action: NewUserGiftAction) => {
+          this.newUserGiftCoordinator.handleAction(action);
         }
       })
     } else if (this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceId === 'bookmark_folder_selection') {
@@ -10157,6 +10211,7 @@ struct BrowserShellPage {
     this.browserQrScanCoordinator.resetSession();
     this.browserWebPageToolsCoordinator.reset();
     this.releaseNoticePresentationCoordinator.handleShellReset();
+    this.newUserGiftCoordinator.handleShellReset();
     this.applyBrowserSystemSheetDisappearEffect(systemSheetResetEffect);
     this.appReviewPromptCoordinator.handleShellReset();
     this.articleReadingSession.resetSpeechVoicePickerState();

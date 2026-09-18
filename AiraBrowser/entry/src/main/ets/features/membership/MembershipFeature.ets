@@ -5,9 +5,12 @@ import {
   AiraFeatureQuota,
   AiraMembershipEntitlementClaims,
   AiraMembershipState,
+  AiraNewUserGiftStateRecord,
+  AiraNewUserGiftView,
   AiraSubscriptionStatus,
   EntitlementDecision,
-  MembershipRepositorySnapshot
+  MembershipRepositorySnapshot,
+  buildEmptyNewUserGiftView
 } from '../../common/models/MembershipModels';
 import { MembershipRepository } from '../../data/membership/MembershipRepository';
 import {
@@ -22,6 +25,7 @@ import {
   AiraMembershipStateResponseBody
 } from '../../services/membership/AiraMembershipStateFunctionService';
 import { MembershipQuotaService } from '../../services/membership/MembershipQuotaService';
+import { AiraNewUserGiftFunctionService } from '../../services/membership/AiraNewUserGiftFunctionService';
 import {
   MEMBERSHIP_REFRESH_DEFAULT_FRESH_MS,
   MEMBERSHIP_REFRESH_RETRY_COOLDOWN_MS
@@ -58,6 +62,13 @@ interface MembershipAccountScope {
   generation: number;
 }
 
+export interface AiraNewUserGiftEnsureResult {
+  ok: boolean;
+  code: string;
+  message: string;
+  state?: AiraMembershipState;
+}
+
 export class MembershipFeature {
   private repository: MembershipRepository;
   private entitlementService: EntitlementService;
@@ -66,8 +77,10 @@ export class MembershipFeature {
   private membershipEntitlementProofService: MembershipEntitlementProofService;
   private privacyEffectPolicy: BrowserPrivacyEffectPolicyService;
   private profileBoundaryService: BrowserProfileBoundaryService;
+  private newUserGiftService: AiraNewUserGiftFunctionService;
   private syncConfigStore?: AiraSyncConfigStore;
   private stateChangeHandler?: MembershipStateChangeHandler;
+  private newUserGift: AiraNewUserGiftView = buildEmptyNewUserGiftView();
   private remoteStateRefreshPromise?: Promise<AiraMembershipState>;
   private remoteStateRefreshUid: string = '';
   private remoteStateRefreshAttemptedAt: number = 0;
@@ -85,7 +98,8 @@ export class MembershipFeature {
     syncConfigStore?: AiraSyncConfigStore,
     membershipEntitlementProofService: MembershipEntitlementProofService = new MembershipEntitlementProofService(),
     privacyEffectPolicy: BrowserPrivacyEffectPolicyService = new BrowserPrivacyEffectPolicyService(),
-    profileBoundaryService: BrowserProfileBoundaryService = new BrowserProfileBoundaryService()
+    profileBoundaryService: BrowserProfileBoundaryService = new BrowserProfileBoundaryService(),
+    newUserGiftService: AiraNewUserGiftFunctionService = new AiraNewUserGiftFunctionService()
   ) {
     this.repository = repository;
     this.entitlementService = entitlementService;
@@ -95,6 +109,7 @@ export class MembershipFeature {
     this.privacyEffectPolicy = privacyEffectPolicy;
     this.profileBoundaryService = profileBoundaryService;
     this.syncConfigStore = syncConfigStore;
+    this.newUserGiftService = newUserGiftService;
   }
 
   setStateChangeHandler(handler: MembershipStateChangeHandler): void {
@@ -110,6 +125,9 @@ export class MembershipFeature {
     this.accountScopeGeneration += 1;
     this.invalidateEntitlementRequests();
     this.accountProfileRequestGeneration += 1;
+    if (this.newUserGift.uid !== normalizedUid) {
+      this.newUserGift = buildEmptyNewUserGiftView();
+    }
   }
 
   getState(): AiraMembershipState {
@@ -118,6 +136,122 @@ export class MembershipFeature {
 
   getQuotaSnapshot(): AiraFeatureQuota[] {
     return this.repository.getQuotaSnapshot();
+  }
+
+  /**
+   * New-user gift facts as last reported by the hosted service, scoped to the
+   * currently resolved account. A different or absent account reads as
+   * ineligible so a stale descriptor can never target the wrong uid.
+   */
+  getNewUserGiftState(): AiraNewUserGiftView {
+    if (!this.syncConfigStore?.isInitialized()) {
+      return buildEmptyNewUserGiftView();
+    }
+    const uid = this.getHuaweiUid();
+    if (uid.length <= 0 || this.newUserGift.uid !== uid) {
+      return buildEmptyNewUserGiftView();
+    }
+    return {
+      uid: this.newUserGift.uid,
+      eligible: this.newUserGift.eligible,
+      grantedAt: this.newUserGift.grantedAt,
+      grantDays: this.newUserGift.grantDays,
+      fetchedAt: this.newUserGift.fetchedAt
+    };
+  }
+
+  /**
+   * Ensures the welcome gift exists for the resolved account. The hosted
+   * service grants automatically for an eligible new account, so this is an
+   * idempotent ensure rather than a user-triggered award: the presentation
+   * never decides whether the user receives the month of Pro.
+   */
+  async ensureNewUserGift(boundaryInput: BrowserDataBoundaryInput): Promise<AiraNewUserGiftEnsureResult> {
+    if (!this.isEffectAllowed('membership_gift_grant', boundaryInput, 'remote_account_sync_state')) {
+      return {
+        ok: false,
+        code: 'private_session_blocked',
+        message: '请回到普通会话后再同步新用户会员。'
+      };
+    }
+    await this.repository.initialize();
+    await this.initializeSyncConfigIfAvailable();
+    const uid = this.getHuaweiUid();
+    if (uid.length <= 0) {
+      return {
+        ok: false,
+        code: 'login_required',
+        message: '请先使用华为账号登录。'
+      };
+    }
+    const accountScope = this.captureAccountScope(uid);
+    const response = await this.newUserGiftService.ensureNewUserGift(uid);
+    if (response.ok !== true) {
+      hilog.warn(
+        MEMBERSHIP_FEATURE_LOG_DOMAIN,
+        MEMBERSHIP_FEATURE_LOG_TAG,
+        'new user gift ensure rejected uidSuffix=%{public}s code=%{public}s',
+        this.maskUid(uid),
+        response.code ?? ''
+      );
+      return {
+        ok: false,
+        code: response.code?.trim() ?? 'gift_ensure_failed',
+        message: response.message?.trim() ?? '新用户会员暂时未能同步，请稍后再试。'
+      };
+    }
+    if (!this.isCurrentAccountScope(accountScope)) {
+      return {
+        ok: false,
+        code: 'account_changed',
+        message: '账号已切换，请稍后重试。'
+      };
+    }
+    const committedSnapshot = await this.repository.updateSnapshotIf(
+      (): boolean => this.isCurrentAccountScope(accountScope),
+      (snapshot: MembershipRepositorySnapshot): MembershipRepositorySnapshot => {
+        const accountState = this.buildStateForUid(snapshot.state, uid);
+        const nextState = this.buildStateFromGrant(accountState, response.membershipGrant ?? undefined);
+        const syncedAt = Date.now();
+        nextState.lastSyncedAt = syncedAt;
+        nextState.updatedAt = syncedAt;
+        return {
+          state: nextState,
+          quotas: snapshot.quotas
+        };
+      }
+    );
+    if (committedSnapshot === undefined || !this.isCurrentAccountScope(accountScope)) {
+      return {
+        ok: false,
+        code: 'account_changed',
+        message: '账号已切换，请稍后重试。'
+      };
+    }
+    // The grant is already committed server-side, so the authoritative
+    // descriptor is recorded even if the echoed grant is not Pro; otherwise a
+    // consumed one-time grant would be reported as missing on every later read.
+    // A response that omits the descriptor still means the grant was applied,
+    // so the known eligibility is kept rather than cleared.
+    this.captureGrantedNewUserGiftState(
+      uid,
+      response.newUserGift ?? undefined,
+      committedSnapshot.state.plan === 'pro'
+    );
+    if (committedSnapshot.state.plan !== 'pro') {
+      return {
+        ok: false,
+        code: 'grant_not_applied',
+        message: '新用户会员未能生效，请稍后在会员页恢复。'
+      };
+    }
+    this.notifyStateChanged(committedSnapshot.state);
+    return {
+      ok: true,
+      code: 'gift_granted',
+      message: '已获得新用户会员',
+      state: committedSnapshot.state
+    };
   }
 
   async loadState(): Promise<AiraMembershipState> {
@@ -325,6 +459,7 @@ export class MembershipFeature {
         !this.isCurrentEntitlementRequest(accountScope, entitlementRequestGeneration)) {
         return this.getState();
       }
+      this.captureNewUserGiftState(uid, remoteState.newUserGift ?? undefined, Date.now());
       hilog.info(
         MEMBERSHIP_FEATURE_LOG_DOMAIN,
         MEMBERSHIP_FEATURE_LOG_TAG,
@@ -981,6 +1116,72 @@ export class MembershipFeature {
       lastSyncedAt: previous.lastSyncedAt,
       updatedAt: Date.now()
     };
+  }
+
+  private captureNewUserGiftState(
+    uid: string,
+    record: AiraNewUserGiftStateRecord | undefined,
+    fetchedAt: number
+  ): void {
+    const normalizedUid = uid.trim();
+    if (normalizedUid.length <= 0) {
+      this.newUserGift = buildEmptyNewUserGiftView();
+      return;
+    }
+    this.newUserGift = {
+      uid: normalizedUid,
+      eligible: record?.eligible === true,
+      grantedAt: this.normalizeGiftTimestamp(record?.grantedAt),
+      grantDays: this.normalizeGiftDays(record?.grantDays),
+      fetchedAt: fetchedAt
+    };
+  }
+
+  /**
+   * Records the descriptor returned by a successful grant. The grant already
+   * happened, so a response without an echoed descriptor must not look like a
+   * non-new account, which would drop the announcement for a real new user.
+   * `grantedAt` is only advanced when the committed plan really is Pro, so the
+   * announcement can never claim a grant that did not land.
+   */
+  private captureGrantedNewUserGiftState(
+    uid: string,
+    record: AiraNewUserGiftStateRecord | undefined,
+    planIsPro: boolean
+  ): void {
+    const normalizedUid = uid.trim();
+    if (normalizedUid.length <= 0) {
+      this.newUserGift = buildEmptyNewUserGiftView();
+      return;
+    }
+    const previous = this.newUserGift.uid === normalizedUid ? this.newUserGift : undefined;
+    const echoedGrantedAt = this.normalizeGiftTimestamp(record?.grantedAt);
+    const grantedAt = echoedGrantedAt > 0
+      ? echoedGrantedAt
+      : (planIsPro ? (previous?.grantedAt !== undefined && previous.grantedAt > 0 ? previous.grantedAt : Date.now()) : 0);
+    this.newUserGift = {
+      uid: normalizedUid,
+      eligible: record === undefined ? previous?.eligible === true : record.eligible !== false,
+      grantedAt: grantedAt,
+      grantDays: record?.grantDays !== undefined && record.grantDays > 0
+        ? this.normalizeGiftDays(record.grantDays)
+        : (previous?.grantDays ?? 0),
+      fetchedAt: Date.now()
+    };
+  }
+
+  private normalizeGiftTimestamp(value: number | undefined): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.max(0, Math.floor(value));
+  }
+
+  private normalizeGiftDays(value: number | undefined): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.max(0, Math.floor(value));
   }
 
   private resolveAccountRecognition(

@@ -543,6 +543,7 @@ export type BrowserRootBottomPanelTransientSheetOwner =
   'reader_speech_player' |
   'bookmark_folder_selection' |
   'feature_gate' |
+  'new_user_gift' |
   'userscript_page_actions' |
   'wifi_qr_result' |
   'resource_candidates' |

@@ -80,6 +80,38 @@ export interface AiraMembershipEntitlementProofRecord {
   proof: string;
 }
 
+/**
+ * Server-owned new-user gift state. The welcome gift is applied automatically
+ * for an eligible new account, so `grantedAt` becomes non-zero once the server
+ * has committed it; the client never grants entitlement and never gates the
+ * grant on a user action. `eligible` marks the account as a new user so the
+ * announcement can be shown once.
+ */
+export interface AiraNewUserGiftStateRecord {
+  eligible?: boolean;
+  grantedAt?: number;
+  grantDays?: number;
+}
+
+/** Resolved, account-scoped view of the new-user gift for presentation. */
+export interface AiraNewUserGiftView {
+  uid: string;
+  eligible: boolean;
+  grantedAt: number;
+  grantDays: number;
+  fetchedAt: number;
+}
+
+export function buildEmptyNewUserGiftView(): AiraNewUserGiftView {
+  return {
+    uid: '',
+    eligible: false,
+    grantedAt: 0,
+    grantDays: 0,
+    fetchedAt: 0
+  };
+}
+
 export interface MembershipRepositorySnapshot {
   state: AiraMembershipState;
   quotas: AiraFeatureQuota[];

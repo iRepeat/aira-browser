@@ -153,6 +153,7 @@ import {
 import { RecentlyClosedTabSnapshotStore } from '../../data/repositories/RecentlyClosedTabSnapshotStore';
 import { RdbOfflinePageRepository } from '../../data/offline/OfflinePageRepository';
 import { MembershipRepository } from '../../data/membership/MembershipRepository';
+import { NewUserGiftRepository } from '../../data/membership/NewUserGiftRepository';
 import { MembershipFeature } from '../../features/membership/MembershipFeature';
 import { HistoryFeature } from '../../features/history/HistoryFeature';
 import { sharedDesktopCardSearchEngineService } from
@@ -432,6 +433,7 @@ BookmarkMutationService.configureDefaultSyncPendingMarker((changedAt: number) =>
   return sharedSyncExperienceCoordinator.recordBookmarkMutation(changedAt);
 });
 export const sharedMembershipRepository: MembershipRepository = new MembershipRepository();
+export const sharedNewUserGiftRepository: NewUserGiftRepository = new NewUserGiftRepository();
 export const sharedMembershipFeature: MembershipFeature =
   new MembershipFeature(sharedMembershipRepository, undefined, undefined, undefined, sharedAiraSyncConfigStore);
 const sharedUserScriptPackageLifecycleCoordinator: UserScriptPackageLifecycleCoordinator =
@@ -934,6 +936,9 @@ function buildBrowserRuntimeIdleWarmupTasks(): BrowserRuntimeIdleWarmupTask[] {
   }, {
     id: 'release_notice_runtime',
     run: () => initializeReleaseNoticeRuntimeSafely()
+  }, {
+    id: 'new_user_gift_runtime',
+    run: () => sharedNewUserGiftRepository.initialize()
   }, {
     id: 'settings_notice_repository',
     run: () => sharedSettingsNoticeDismissalRepository.initialize().then(() => undefined)
