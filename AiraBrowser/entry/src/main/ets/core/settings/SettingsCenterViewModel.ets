@@ -29,6 +29,7 @@ export type SettingsCenterDestination =
   'appearance_toolbar' |
   'experiments' |
   'sync' |
+  'cross_device_link' |
   'about';
 
 export interface SettingsCenterRowState {
@@ -84,6 +85,12 @@ export class SettingsCenterViewModel {
       '同步',
       this.getFullModeRequiredValue(isFullServiceMode),
       isFullServiceMode
+    ));
+    accountRows.push(this.buildRow(
+      'cross_device_link',
+      '跨系统互联',
+      '',
+      canReadDevicePreferences && isFullServiceMode
     ));
     return {
       appProxyNotice: this.buildAppProxyNotice(appProxyEnabled),
@@ -216,6 +223,8 @@ export class SettingsCenterViewModel {
         return $r('sys.symbol.wand_and_stars_fill');
       case 'sync':
         return $r('sys.symbol.icloud_fill');
+      case 'cross_device_link':
+        return $r('sys.symbol.link');
       case 'about':
         return $r('sys.symbol.info_circle_fill');
       default:
@@ -258,6 +267,8 @@ export class SettingsCenterViewModel {
         return 'settings.userAgent';
       case 'appearance_toolbar':
         return 'settings.appearance';
+      case 'cross_device_link':
+        return 'browser.toolbar.sendToDesktop';
       case 'experiments':
         return 'settings.experiments';
       case 'sync':

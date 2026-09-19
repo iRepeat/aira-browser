@@ -59,6 +59,8 @@ import {
   SYNC_ADDITIONAL_BACKUP_ROUTE,
   SYNC_ADVANCED_SETTINGS_ROUTE,
   SYNC_DESKTOP_BOOKMARK_GUIDE_ROUTE,
+  CROSS_DEVICE_LINK_ROUTE,
+  CROSS_DEVICE_LINK_SETUP_ROUTE,
   SYNC_PERSONAL_SERVER_CONFIG_ROUTE,
   SYNC_SETTINGS_ROUTE,
   SYNC_WEBDAV_CONFIG_ROUTE,
@@ -96,6 +98,7 @@ export interface SettingsRouteParams extends BrowserBoundaryRouteState {
   returnHomeToken?: string;
   syncTargetRole?: 'active' | 'additional_backup';
   syncActivateExperience?: string;
+  crossDeviceLinkProvider?: string;
   shortcutId?: string;
   settingsTargetId?: string;
   settingsRevealTargetId?: string;
@@ -250,6 +253,9 @@ export class SettingsNavigationCoordinator {
     }
     if (destination === 'sync') {
       return this.pushUrlCommitted(SYNC_SETTINGS_ROUTE, params);
+    }
+    if (destination === 'cross_device_link') {
+      return this.pushUrlCommitted(CROSS_DEVICE_LINK_ROUTE, params);
     }
     if (destination === 'aira_pro') {
       if (!AIRA_DISTRIBUTION_CAPABILITY_OWNER.isOfficial()) {
@@ -617,6 +623,19 @@ export class SettingsNavigationCoordinator {
     params.syncTargetRole = targetRole;
     params.syncActivateExperience = activateExperience && targetRole === 'active' ? 'true' : 'false';
     this.pushUrl(SYNC_WEBDAV_CONFIG_ROUTE, params);
+  }
+
+  /**
+   * The install and pairing recipe as its own level. The mode travels with the route,
+   * so the sub-page does not have to read sync state to know which recipe to show.
+   */
+  openCrossDeviceLinkSetup(boundary: BrowserBoundaryRouteState, providerKind: string): void {
+    if (!this.canOpenOptionalServiceRoute()) {
+      return;
+    }
+    const params = this.buildParams(boundary);
+    params.crossDeviceLinkProvider = providerKind;
+    this.pushUrl(CROSS_DEVICE_LINK_SETUP_ROUTE, params);
   }
 
   openSyncPersonalServerConfig(

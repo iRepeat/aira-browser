@@ -54,6 +54,7 @@ import browserWebTopSafeAreaColorTest from './BrowserWebTopSafeAreaColor.test';
 import browserSearchEnginePopupLayoutViewModelTest from './BrowserSearchEnginePopupLayoutViewModel.test';
 import browserTabsOverviewSwipeDismissPolicyTest from './BrowserTabsOverviewSwipeDismissPolicy.test';
 import bottomToolbarGuideCoordinatorTest from './BottomToolbarGuideCoordinator.test';
+import crossDeviceLinkViewModelTest from './CrossDeviceLinkViewModel.test';
 
 export default function tests(): void {
   userScriptValueStateStoreTest();
@@ -110,4 +111,5 @@ export default function tests(): void {
   browserSearchEnginePopupLayoutViewModelTest();
   browserTabsOverviewSwipeDismissPolicyTest();
   bottomToolbarGuideCoordinatorTest();
+  crossDeviceLinkViewModelTest();
 }

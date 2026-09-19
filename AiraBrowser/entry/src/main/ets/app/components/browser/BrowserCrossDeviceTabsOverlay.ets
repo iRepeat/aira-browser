@@ -62,6 +62,11 @@ export struct BrowserCrossDeviceTabsSheet {
   @State private loading: boolean = false;
 
   onOpenRemoteTab: (url: string, title: string) => void = (_url: string, _title: string) => {};
+  /**
+   * Optional: show one computer only. Empty means every online computer, which is what
+   * the tab manager wants; a caller that already listed the computers passes its id.
+   */
+  @Prop deviceIdFilter: string = '';
 
   aboutToAppear(): void {
     this.siteIconListPresenter.bindDomainUpdates(
@@ -86,6 +91,16 @@ export struct BrowserCrossDeviceTabsSheet {
     .alignItems(HorizontalAlign.Start)
   }
 
+  private resolveVisibleDevices(): CrossDeviceTabPresenceDevice[] {
+    const filter = this.deviceIdFilter.trim();
+    if (filter.length === 0) {
+      return this.panelState.devices;
+    }
+    return this.panelState.devices.filter((device: CrossDeviceTabPresenceDevice): boolean => {
+      return device.deviceId === filter;
+    });
+  }
+
   @Builder
   private buildRemoteDeviceContent() {
     Column() {
@@ -95,11 +110,11 @@ export struct BrowserCrossDeviceTabsSheet {
         this.buildMessageState(this.panelState.message, false)
       } else if (this.panelState.status === 'error') {
         this.buildMessageState(this.panelState.message, false)
-      } else if (this.panelState.devices.length === 0) {
+      } else if (this.resolveVisibleDevices().length === 0) {
         this.buildMessageState('当前没有在线电脑', false)
       } else {
         List({ space: 12 }) {
-          ForEach(this.panelState.devices, (device: CrossDeviceTabPresenceDevice) => {
+          ForEach(this.resolveVisibleDevices(), (device: CrossDeviceTabPresenceDevice) => {
             ListItem() {
               this.buildDeviceGroup(device)
             }
