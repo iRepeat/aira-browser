@@ -21,6 +21,7 @@ export type BrowserShellBackAction =
   'dismiss_wifi_qr_result' |
   'dismiss_feature_gate' |
   'dismiss_new_user_gift' |
+  'dismiss_bottom_toolbar_guide' |
   'handle_home_shortcut_selection_back' |
   'close_desktop_login_sheet' |
   'close_system_sheet' |
@@ -135,6 +136,9 @@ export class BrowserShellBackCoordinator {
     }
     if (target.surfaceId === 'new_user_gift') {
       return 'dismiss_new_user_gift';
+    }
+    if (target.surfaceId === 'bottom_toolbar_guide') {
+      return 'dismiss_bottom_toolbar_guide';
     }
     return 'pass_through';
   }

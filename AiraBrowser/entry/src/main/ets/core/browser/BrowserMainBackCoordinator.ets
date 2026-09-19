@@ -2,6 +2,7 @@ import { ManualElementHideRuntimeCoordinator } from '../adblock/ManualElementHid
 import { CustomHomepageRuntimeCoordinator } from '../customhome/CustomHomepageRuntimeCoordinator';
 import { FeatureGateCoordinator } from '../membership/FeatureGateCoordinator';
 import { NewUserGiftCoordinator } from '../membership/NewUserGiftCoordinator';
+import { BottomToolbarGuideCoordinator } from '../onboarding/BottomToolbarGuideCoordinator';
 import { AppProxyQuickSheetCoordinator } from '../settings/AppProxyQuickSheetCoordinator';
 import { HomeShortcutStateCoordinator } from '../shortcuts/HomeShortcutStateCoordinator';
 import { WebpageTranslationCoordinator } from '../translation/WebpageTranslationCoordinator';
@@ -53,6 +54,7 @@ export interface BrowserMainBackDependencies {
   transientSurfaceCoordinator: BrowserTransientSurfaceCoordinator;
   featureGateCoordinator: FeatureGateCoordinator;
   newUserGiftCoordinator: NewUserGiftCoordinator;
+  bottomToolbarGuideCoordinator: BottomToolbarGuideCoordinator;
   homeShortcutStateCoordinator: HomeShortcutStateCoordinator;
   releaseNoticePresentationCoordinator: ReleaseNoticePresentationCoordinator;
   unifiedLinkApplicationCoordinator: BrowserUnifiedLinkApplicationCoordinator;
@@ -177,6 +179,9 @@ export class BrowserMainBackCoordinator {
         return true;
       case 'dismiss_new_user_gift':
         this.dependencies.newUserGiftCoordinator.handleAction('dismiss');
+        return true;
+      case 'dismiss_bottom_toolbar_guide':
+        this.dependencies.bottomToolbarGuideCoordinator.handleAction('acknowledge');
         return true;
       case 'handle_home_shortcut_selection_back':
         this.dependencies.homeShortcutStateCoordinator.handleSelectionBack();

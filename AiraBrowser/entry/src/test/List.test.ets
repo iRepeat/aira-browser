@@ -53,6 +53,7 @@ import startupWelcomeIntroTest from './StartupWelcomeIntro.test';
 import browserWebTopSafeAreaColorTest from './BrowserWebTopSafeAreaColor.test';
 import browserSearchEnginePopupLayoutViewModelTest from './BrowserSearchEnginePopupLayoutViewModel.test';
 import browserTabsOverviewSwipeDismissPolicyTest from './BrowserTabsOverviewSwipeDismissPolicy.test';
+import bottomToolbarGuideCoordinatorTest from './BottomToolbarGuideCoordinator.test';
 
 export default function tests(): void {
   userScriptValueStateStoreTest();
@@ -108,4 +109,5 @@ export default function tests(): void {
   browserWebTopSafeAreaColorTest();
   browserSearchEnginePopupLayoutViewModelTest();
   browserTabsOverviewSwipeDismissPolicyTest();
+  bottomToolbarGuideCoordinatorTest();
 }

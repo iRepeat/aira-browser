@@ -37,6 +37,7 @@ HISTORY_SYNC_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-history-sync-contract
 BOOKMARK_SNAPSHOT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bookmark-snapshot-contract.sh"
 NEW_USER_GIFT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-new-user-gift-contract.sh"
 PRO_RENEWAL_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-pro-renewal-contract.sh"
+BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bottom-toolbar-guide-contract.sh"
 SYNC_CLOSED_LOOP_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-closed-loop.cjs"
 HUAWEI_APP_IDENTITY_RESOLVER="${REPO_ROOT}/scripts/huawei-app-identity.js"
 HUAWEI_APP_IDENTITY_TEST="${REPO_ROOT}/scripts/huawei-app-identity.test.js"
@@ -324,6 +325,11 @@ if [ ! -x "${PRO_RENEWAL_GUARD_SCRIPT}" ]; then
 fi
 
 "${PRO_RENEWAL_GUARD_SCRIPT}"
+if [ ! -x "${BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT}" ]; then
+  fail "Bottom Toolbar Guide contract guard not executable: ${BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT}"
+fi
+
+"${BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT}"
 if [ ! -x "${SYNC_CLOSED_LOOP_GUARD_SCRIPT}" ]; then
   fail "Sync closed-loop guard not executable: ${SYNC_CLOSED_LOOP_GUARD_SCRIPT}"
 fi

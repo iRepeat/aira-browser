@@ -544,6 +544,7 @@ export type BrowserRootBottomPanelTransientSheetOwner =
   'bookmark_folder_selection' |
   'feature_gate' |
   'new_user_gift' |
+  'bottom_toolbar_guide' |
   'userscript_page_actions' |
   'wifi_qr_result' |
   'resource_candidates' |

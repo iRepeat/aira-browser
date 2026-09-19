@@ -141,6 +141,7 @@ import {
   sharedActivityTracker,
   sharedAppReviewPromptRepository,
   sharedNewUserGiftRepository,
+  sharedBottomToolbarGuideRepository,
   sharedReleaseNoticeCoordinator,
   sharedClientUpdatePolicyService,
   sharedAiraCloudBookmarkV4BootstrapRuntime,
@@ -542,7 +543,9 @@ import {
   BrowserTransientPromptBlockingFacts,
   BrowserTransientSurfaceCoordinator,
   BrowserTransientSurfaceId,
+  BrowserTransientSurfacePresentationRequest,
   BrowserTransientSurfaceSnapshot,
+  BrowserTransientSurfaceToken,
   BrowserTransientSurfaceUpdate
 } from '../../core/browser/BrowserTransientSurfaceCoordinator';
 import {
@@ -760,11 +763,20 @@ import {
 } from '../../core/membership/NewUserGiftCoordinator';
 import { AIRA_NEW_USER_GIFT_REVISION_KEY } from '../../core/membership/NewUserGiftRefreshSignal';
 import {
+  BottomToolbarGuideAction,
+  BottomToolbarGuideCoordinator,
+  BottomToolbarGuideShellFacts,
+  BottomToolbarGuideSnapshot,
+  BottomToolbarGuideSurface,
+  createHiddenBottomToolbarGuideSnapshot
+} from '../../core/onboarding/BottomToolbarGuideCoordinator';
+import {
   CrossDeviceTabPresenceEntryHost,
   sharedCrossDeviceTabPresenceCoordinator
 } from '../../core/deviceTabs/CrossDeviceTabPresenceCoordinator';
 import { FeatureGateOverlay } from '../components/browser/FeatureGateOverlay';
 import { NewUserGiftOverlay } from '../components/browser/NewUserGiftOverlay';
+import { BottomToolbarGuideOverlay } from '../components/onboarding/BottomToolbarGuideOverlay';
 import {
   isBrowserNewWindowTestUrl,
   resolveBrowserNewWindowTestTitle
@@ -5099,6 +5111,32 @@ struct BrowserShellPage {
       showToast: (message: string): void => this.showNativeToast(message)
     }
   );
+  private bottomToolbarGuideSurface: BottomToolbarGuideSurface = {
+    present: (request: BrowserTransientSurfacePresentationRequest): BrowserTransientSurfaceToken =>
+      this.browserTransientSurfaceCoordinator.present(request),
+    dismiss: (id: BrowserTransientSurfaceId): void => {
+      this.browserTransientSurfaceCoordinator.dismiss(id);
+    },
+    isReleaseNoticeBlocked: (facts: BrowserTransientPromptBlockingFacts): boolean =>
+      this.browserTransientSurfaceCoordinator.isReleaseNoticeBlocked(facts)
+  };
+  private bottomToolbarGuideCoordinator: BottomToolbarGuideCoordinator = new BottomToolbarGuideCoordinator(
+    sharedBottomToolbarGuideRepository,
+    this.bottomToolbarGuideSurface,
+    {
+      resolveFacts: (): BottomToolbarGuideShellFacts => {
+        return {
+          shellFamily: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
+          appVisible: this.isBrowserShellVisible,
+          privacyMode: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().privacyMode,
+          promptBlockingFacts: this.buildTransientPromptBlockingFacts()
+        };
+      },
+      publishState: (snapshot: BottomToolbarGuideSnapshot): void => {
+        this.bottomToolbarGuideSnapshot = snapshot;
+      }
+    }
+  );
   private siteCustomizationRuntimeRefreshCoordinator: SiteCustomizationRuntimeRefreshCoordinator =
     new SiteCustomizationRuntimeRefreshCoordinator();
   private browserUserAgentActionSink: BrowserUserAgentActionSink = {
@@ -5421,6 +5459,7 @@ struct BrowserShellPage {
     DEFAULT_BROWSER_QR_SCAN_SESSION_SNAPSHOT;
   @State releaseNoticeState: ReleaseNoticeUiState = this.releaseNoticePresentationCoordinator.getSnapshot();
   @State newUserGiftSnapshot: NewUserGiftSnapshot = createHiddenNewUserGiftSnapshot();
+  @State bottomToolbarGuideSnapshot: BottomToolbarGuideSnapshot = createHiddenBottomToolbarGuideSnapshot();
   @StorageProp(AIRA_NEW_USER_GIFT_REVISION_KEY) @Watch('handleNewUserGiftRefreshSignal')
   private newUserGiftRefreshRevision: number = 0;
   @State clientUpdatePolicyState: ClientUpdatePolicyState = sharedClientUpdatePolicyService.getSnapshot();
@@ -5873,6 +5912,7 @@ struct BrowserShellPage {
     transientSurfaceCoordinator: this.browserTransientSurfaceCoordinator,
     featureGateCoordinator: this.featureGateCoordinator,
     newUserGiftCoordinator: this.newUserGiftCoordinator,
+    bottomToolbarGuideCoordinator: this.bottomToolbarGuideCoordinator,
     homeShortcutStateCoordinator: this.homeShortcutStateCoordinator,
     releaseNoticePresentationCoordinator: this.releaseNoticePresentationCoordinator,
     unifiedLinkApplicationCoordinator: this.browserUnifiedLinkApplicationCoordinator,
@@ -8125,6 +8165,8 @@ struct BrowserShellPage {
         this.renewalReminderCoordinator.handleSurfaceDismissed();
       } else if (update.surfaceId === 'new_user_gift') {
         this.newUserGiftCoordinator.handleSurfaceDismissed();
+      } else if (update.surfaceId === 'bottom_toolbar_guide') {
+        this.bottomToolbarGuideCoordinator.handleSurfaceDismissed();
       }
     }
     if (update.lane === 'custom_bottom' &&
@@ -8133,6 +8175,13 @@ struct BrowserShellPage {
       // The announcement is only spent once it actually reaches the user; an
       // abandoned mount must not consume the one-time notice.
       this.newUserGiftCoordinator.handleSurfaceRevealed();
+    }
+    if (update.lane === 'custom_bottom' &&
+      update.reason === 'reveal' &&
+      update.surfaceId === 'bottom_toolbar_guide') {
+      // Same rule for the toolbar lesson: only a card that reached the user
+      // spends the one-time guide.
+      this.bottomToolbarGuideCoordinator.handleSurfaceRevealed();
     }
     if (update.lane === 'custom_bottom' &&
       update.reason === 'reveal' &&
@@ -8146,6 +8195,9 @@ struct BrowserShellPage {
       // decided once at startup and lost forever if anything held the lane at
       // that moment, so re-decide whenever the lane clears.
       this.renewalReminderCoordinator.scheduleEvaluation();
+      // The toolbar lesson waits the same way: it is armed by the first Web page
+      // that loads and must not be dropped by a prompt holding the lane then.
+      this.bottomToolbarGuideCoordinator.scheduleEvaluation();
     }
     if (update.lane === 'custom_bottom' && update.chromePlan !== undefined) {
       this.applyRootBottomPanelSessionChromePlan(update.chromePlan);
@@ -8205,6 +8257,15 @@ struct BrowserShellPage {
         layoutMode: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
         onAction: (action: NewUserGiftAction) => {
           this.newUserGiftCoordinator.handleAction(action);
+        }
+      })
+    } else if (this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceId === 'bottom_toolbar_guide') {
+      BottomToolbarGuideOverlay({
+        visible: this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceVisible,
+        state: this.bottomToolbarGuideSnapshot,
+        layoutMode: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
+        onAction: (action: BottomToolbarGuideAction) => {
+          this.bottomToolbarGuideCoordinator.handleAction(action);
         }
       })
     } else if (this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceId === 'bookmark_folder_selection') {
@@ -9982,6 +10043,9 @@ struct BrowserShellPage {
         this.browserWebBottomSafeAreaCoordinator.requestCheck(tabId);
         this.novelReaderApplication.handlePageReady(
           this.novelReaderSession, tabId, this.activeTabId, this.isWebPageVisible(), event.url);
+        if (this.shouldHandleActiveWebTab(tabId)) {
+          this.bottomToolbarGuideCoordinator.handleWebPageLoadCompleted();
+        }
       },
       onNativeMediaPlayerObserved: (tabId: string, mediaInfo: webview.MediaInfo) =>
         this.browserMediaRuntimeObservationApplicationCoordinator.handleNativeMediaPlayerObserved(tabId, mediaInfo),
@@ -10404,6 +10468,7 @@ struct BrowserShellPage {
     this.browserWebPageToolsCoordinator.reset();
     this.releaseNoticePresentationCoordinator.handleShellReset();
     this.newUserGiftCoordinator.handleShellReset();
+    this.bottomToolbarGuideCoordinator.handleShellReset();
     this.renewalReminderCoordinator.handleShellReset();
     this.applyBrowserSystemSheetDisappearEffect(systemSheetResetEffect);
     this.appReviewPromptCoordinator.handleShellReset();

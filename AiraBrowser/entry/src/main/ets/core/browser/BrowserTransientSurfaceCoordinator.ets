@@ -16,7 +16,8 @@ export type BrowserTransientSurfaceId =
   'resource_candidates' |
   'wifi_qr_result' |
   'feature_gate' |
-  'new_user_gift';
+  'new_user_gift' |
+  'bottom_toolbar_guide';
 
 export type BrowserTransientSurfacePhase = 'opening' | 'visible' | 'closing';
 export type BrowserTransientSurfaceBackDisposition = 'none' | 'dismiss' | 'delegate_feature';
@@ -650,6 +651,7 @@ export class BrowserTransientSurfaceCoordinator {
       id === 'userscript_page_actions' ||
       id === 'feature_gate' ||
       id === 'new_user_gift' ||
+      id === 'bottom_toolbar_guide' ||
       id === 'bookmark_folder_selection' ||
       id === 'translation_target_language' ||
       id === 'web_page_tools' ||
@@ -733,7 +735,8 @@ export class BrowserTransientSurfaceCoordinator {
   }
 
   private resolvePresentationPriority(id: BrowserTransientSurfaceId): number {
-    if (id === 'feature_gate' || id === 'wifi_qr_result' || id === 'new_user_gift') {
+    if (id === 'feature_gate' || id === 'wifi_qr_result' || id === 'new_user_gift' ||
+      id === 'bottom_toolbar_guide') {
       return 400;
     }
     return 300;
