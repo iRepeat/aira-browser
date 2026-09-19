@@ -438,9 +438,18 @@ export class AiraWebdavRemoteStore implements AiraSyncRemoteStore {
       response = await this.request('GET', path);
     }
     this.assertSuccess(response, path);
+    const etag = this.readHeaderValue(response.headers, 'etag');
+    if (response.body.trim().length <= 0) {
+      // A provider that answers a first LOCK by creating a lock-null resource leaves a 0-byte
+      // file where the snapshot belongs. That file holds no snapshot, so report an empty remote
+      // state instead of failing to parse the placeholder the lock itself just created. The
+      // ETag is still remembered so an If-None-Match 304 keeps reporting the same empty state.
+      this.rememberSnapshotRead(null, etag);
+      return { file: null, etag: etag };
+    }
     const read: AiraWebdavSnapshotRead = {
       file: this.parseSnapshotFile(response.body),
-      etag: this.readHeaderValue(response.headers, 'etag')
+      etag: etag
     };
     this.rememberSnapshotRead(read.file, read.etag);
     return read;

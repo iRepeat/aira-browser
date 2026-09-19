@@ -62,10 +62,23 @@ export class WebdavConditionalJsonSnapshotStore<T extends Object> {
       return { snapshot: null, revision: '' };
     }
     this.assertSuccess(response, this.options.filePath);
+    if (this.isEmptyPayload(response.body)) {
+      // An empty body is never a snapshot. It is what an exclusive LOCK leaves behind on a
+      // provider that materialises a lock-null resource (fnOS, and anything built on SabreDAV's
+      // Locks plugin): the lock creates the file the caller is about to write, so the re-read
+      // inside the lock sees its own 0-byte placeholder. Reporting "no remote snapshot" here
+      // keeps that placeholder from failing a parse and wedging every later sync on it; the
+      // revision stays empty, so the next write is a create that replaces the placeholder.
+      return { snapshot: null, revision: '' };
+    }
     return {
       snapshot: this.parseSnapshot(response.body),
       revision: this.headerValue(response.headers, 'etag')
     };
+  }
+
+  private isEmptyPayload(payload: string): boolean {
+    return payload.trim().length <= 0;
   }
 
   async writeSnapshot(
