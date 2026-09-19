@@ -70,6 +70,14 @@ require_pattern "${COORDINATOR_REL}" "handleSurfaceRevealed\\(\\)" \
   "the lesson must be spent only once the card actually reveals."
 require_pattern "${COORDINATOR_REL}" "facts\\.shellFamily !== 'phone'" \
   "the lesson explains the phone gesture and must not present on the large-screen shell."
+require_pattern "${COORDINATOR_REL}" "facts\\.deviceFormFactor === 'pc'" \
+  "a desktop must never be taught a gesture it has no toolbar for."
+require_pattern "${COORDINATOR_REL}" "facts\\.deviceFormFactor === 'two_in_one'" \
+  "a 2in1 device runs the phone shell and must be excluded the same way."
+require_pattern "${SHELL_PAGE_REL}" "resolveGuideDeviceFormFactor" \
+  "the shell must project the platform device class into the lesson facts."
+require_pattern "${SHELL_PAGE_REL}" "resolvePlatformDeviceType\\(\\)" \
+  "the device class must come from the platform input service, not a shell guess."
 require_pattern "${COORDINATOR_REL}" "isReleaseNoticeBlocked\\(facts\\.promptBlockingFacts\\)" \
   "the lesson must yield the lane to prompts that already hold it."
 # A custom bottom surface mounts asynchronously, so the reveal guard must key off

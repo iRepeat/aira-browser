@@ -31,8 +31,11 @@ loading. Deciding once at that instant would silently lose the lesson, so the co
 and re-decides whenever a Web page finishes loading or the lane clears, and only a card that reached the user ends the
 question.
 
-The lesson is phone-only. The large-screen shell has its own toolbar that is not swiped away, so presenting this copy
-there would teach a gesture the user cannot perform.
+The lesson is phone-only, and phone-only means the device, not the shell it happens to run: Huawei maps tablets and 2in1
+devices into a PC UI and Aira falls back to its phone adapter when the large-screen shell is unavailable, so a desktop
+can present as the phone shell. The lesson therefore also refuses the platform device classes `pc` and `two_in_one`,
+because a desktop has no bottom floating toolbar to swipe away. Tablets that genuinely run the touch shell keep the
+lesson.
 
 ## Alternatives Considered
 

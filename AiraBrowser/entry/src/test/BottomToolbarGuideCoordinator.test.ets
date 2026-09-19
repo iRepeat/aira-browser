@@ -102,6 +102,7 @@ class FixtureBottomToolbarGuideSurface implements BottomToolbarGuideSurface {
 class FixtureBottomToolbarGuideShell implements BottomToolbarGuideShell {
   facts: BottomToolbarGuideShellFacts = {
     shellFamily: 'phone',
+    deviceFormFactor: 'phone',
     appVisible: true,
     privacyMode: 'normal',
     promptBlockingFacts: buildIdlePromptBlockingFacts()
@@ -183,6 +184,27 @@ export default function bottomToolbarGuideCoordinatorTest(): void {
 
       fixture.surface.automaticPromptBlocked = false;
       fixture.coordinator.scheduleEvaluation();
+      await flushEvaluation();
+      expect(fixture.surface.presentRequests.length).assertEqual(1);
+    });
+
+    it('never teaches the gesture on a desktop that only looks like a phone shell', 0, async () => {
+      const fixture = buildGuideFixture();
+      // A PC and a 2in1 device fall back to the phone shell, and neither has a bottom
+      // floating toolbar to swipe away.
+      fixture.shell.facts.deviceFormFactor = 'pc';
+
+      fixture.coordinator.handleWebPageLoadCompleted();
+      await flushEvaluation();
+      expect(fixture.surface.presentRequests.length).assertEqual(0);
+
+      fixture.shell.facts.deviceFormFactor = 'two_in_one';
+      fixture.coordinator.handleWebPageLoadCompleted();
+      await flushEvaluation();
+      expect(fixture.surface.presentRequests.length).assertEqual(0);
+
+      fixture.shell.facts.deviceFormFactor = 'tablet';
+      fixture.coordinator.handleWebPageLoadCompleted();
       await flushEvaluation();
       expect(fixture.surface.presentRequests.length).assertEqual(1);
     });

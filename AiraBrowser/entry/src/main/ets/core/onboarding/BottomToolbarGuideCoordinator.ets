@@ -5,6 +5,7 @@ import {
   BrowserTransientSurfaceToken
 } from '../browser/BrowserTransientSurfaceCoordinator';
 import { BottomToolbarGuideRepository } from '../../data/onboarding/BottomToolbarGuideRepository';
+import { BrowserDeviceFormFactor } from '../browser/BrowserDeviceFormFactorCoordinator';
 
 export type BottomToolbarGuideAction = 'acknowledge' | 'never_show_again';
 
@@ -28,6 +29,12 @@ export function createHiddenBottomToolbarGuideSnapshot(): BottomToolbarGuideSnap
 
 export interface BottomToolbarGuideShellFacts {
   shellFamily: 'phone' | 'large_screen';
+  /**
+   * What the platform says the device is, before the shell falls back to its phone
+   * adapter. A PC and a 2in1 device can end up on the phone shell, so the shell family
+   * alone cannot tell them apart from a phone.
+   */
+  deviceFormFactor: BrowserDeviceFormFactor;
   appVisible: boolean;
   privacyMode: string;
   promptBlockingFacts: BrowserTransientPromptBlockingFacts;
@@ -192,6 +199,11 @@ export class BottomToolbarGuideCoordinator {
     }
     const facts = this.shell.resolveFacts();
     if (facts.shellFamily !== 'phone') {
+      return false;
+    }
+    // A desktop has no bottom floating toolbar to swipe away, so the lesson would be
+    // teaching a gesture the device cannot perform.
+    if (facts.deviceFormFactor === 'pc' || facts.deviceFormFactor === 'two_in_one') {
       return false;
     }
     if (!facts.appVisible || facts.privacyMode === 'private') {
