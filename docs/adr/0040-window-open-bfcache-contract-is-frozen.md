@@ -257,6 +257,15 @@ No unconditional height/position animation is added to the Web viewport renderer
 `check-aira-top-immersion-motion.cjs` exercises the scroll and immediate application paths; device smoothness remains a
 manual acceptance check.
 
+The scroll interaction owner handles the bounded scroll-position correction caused by a top-inset resize for both
+ordinary pages and pages with bottom avoidance. Requiring a bottom reservation left ordinary pages vulnerable to
+page-end clamping being treated as reverse user input, restoring bottom chrome and then revealing the top again.
+The regression replays that callback sequence through both chrome owners: one hide remains one hide while its
+180ms animation is retained. Split corrections, inertial continuation, middle-of-page scrolling, expiry, new gestures,
+and reversals beyond the correction allowance are covered. This remains a bounded inference from offsets and geometry:
+ArkWeb's `OnScrollEvent` exposes positions but no cause, so a small same-gesture reversal can still resemble layout
+feedback. The test does not establish compositor smoothness or resolve the separate reported fixed-navbar bounce.
+
 Scroll-hidden ordinary phone Web content also uses the same top-to-bottom gradient blur as the immersive lists, with
 radius 20 and the gradient ending at 1.5 times the visible top strip's cutout + content-gap height. The quick-search row is excluded.
 The viewport owner publishes this visual effect separately from occupied space: content remains at top zero and full

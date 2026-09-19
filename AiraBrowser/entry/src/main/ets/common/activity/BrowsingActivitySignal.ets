@@ -7,7 +7,7 @@
  * overlaps the user actively scrolling a heavy page, the two compete for the ArkTS main thread and
  * the scroll stutters.
  *
- * The Web scroll path marks interaction here; sync scheduling and its cooperative throttle consult
+ * Web gestures and native settings scrolling mark interaction here; sync scheduling and its cooperative throttle consult
  * it and hold maintenance work back until the user pauses. Nothing is dropped — the work runs at
  * the next quiet moment, and every wait has an upper bound so a long scroll cannot starve sync.
  *

@@ -1,11 +1,9 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { HistorySyncMergeService } from '../main/ets/services/sync/HistorySyncMergeService';
 import {
   hasHuaweiHistoryLocalWork,
   resolveHuaweiHistoryRemoteReadPlan,
   shouldLoadUnchangedHuaweiHistoryReplica,
-  shouldSkipUnchangedHuaweiHistoryRemote,
-  shouldUseCachedHuaweiHistoryRemote
+  shouldSkipUnchangedHuaweiHistoryRemote
 } from '../main/ets/services/sync/HuaweiSpaceHistorySyncRunner';
 import {
   HISTORY_STARTUP_QUIET_MS,
@@ -16,25 +14,7 @@ import { huaweiHistoryPhysicalTable } from
   '../main/ets/data/sync/HuaweiSpaceHistorySnapshotCodec';
 
 export default function huaweiSpaceHistoryCloudReadGateTest(): void {
-  describe('Huawei history cached remote gate', () => {
-    const mergeService = new HistorySyncMergeService();
-
-    it('reuses the confirmed remote after the first ordinary cloud read', 0, () => {
-      expect(shouldUseCachedHuaweiHistoryRemote(
-        true,
-        'uid-a',
-        'uid-a',
-        mergeService.emptyState()
-      )).assertTrue();
-    });
-
-    it('still reads cloud for provider transitions, another account, or a cold cache', 0, () => {
-      const cached = mergeService.emptyState();
-      expect(shouldUseCachedHuaweiHistoryRemote(false, 'uid-a', 'uid-a', cached)).assertFalse();
-      expect(shouldUseCachedHuaweiHistoryRemote(true, 'uid-a', 'uid-b', cached)).assertFalse();
-      expect(shouldUseCachedHuaweiHistoryRemote(true, 'uid-a', 'uid-a', undefined)).assertFalse();
-    });
-
+  describe('Huawei history durable Head gate', () => {
     it('skips unchanged Huawei History when local enrollment is empty and heads match', 0, () => {
       expect(shouldSkipUnchangedHuaweiHistoryRemote(0, false, 'abc', 'abc')).assertTrue();
       expect(shouldSkipUnchangedHuaweiHistoryRemote(1, false, 'abc', 'abc')).assertFalse();

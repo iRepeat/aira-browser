@@ -377,9 +377,23 @@ export class SyncExperienceAutomaticRuntime {
     }
     let sourceResult: HistorySyncRunResult | undefined = undefined;
     if (source !== undefined) {
-      sourceResult = await this.historySyncService.runForProvider(source, 'source_transition');
+      // Refresh the old source when possible, but its availability must not trap
+      // the user there. The target still merges and confirms the durable local
+      // state (including deletion frontiers) before the Provider can change.
+      try {
+        sourceResult = await this.historySyncService.runForProvider(source, 'source_transition');
+      } catch (error) {
+        sourceResult = {
+          ok: false,
+          appliedChangeCount: 0,
+          uploadedMutationCount: 0,
+          message: error instanceof Error ? error.message : '原同步方式的历史记录暂时无法取回。'
+        };
+      }
       if (!sourceResult.ok) {
-        return sourceResult;
+        hilog.warn(DOMAIN, TAG,
+          'History Provider transition continues with local state source=%{public}s target=%{public}s reason=%{public}s',
+          source, target, sourceResult.message);
       }
     }
     const targetResult = await this.historySyncService.runForProvider(target, 'target_transition');
@@ -392,7 +406,10 @@ export class SyncExperienceAutomaticRuntime {
       ok: targetResult.ok,
       appliedChangeCount: (sourceResult?.appliedChangeCount ?? 0) + targetResult.appliedChangeCount,
       uploadedMutationCount: (sourceResult?.uploadedMutationCount ?? 0) + targetResult.uploadedMutationCount,
-      message: targetResult.message
+      message: targetResult.ok && sourceResult?.ok === false
+        ? `${targetResult.message}\n原同步方式的历史记录未能完整取回，已使用本机已有记录与目标合并。` +
+          '未取回的记录仍保留在原同步方式。'
+        : targetResult.message
     };
   }
 
@@ -571,6 +588,7 @@ export class SyncExperienceAutomaticRuntime {
   }
 
   notifyAppContentReady(): void {
+    AiraSyncJankProbe.startCapture('cold_start');
     AiraSyncJankProbe.mark('content_ready');
     this.appForeground = true;
     if (this.historyStartupQuietUntil <= 0) {
@@ -587,6 +605,7 @@ export class SyncExperienceAutomaticRuntime {
   }
 
   notifyAppForeground(): void {
+    AiraSyncJankProbe.startCapture('foreground');
     AiraSyncJankProbe.mark('app_foreground');
     this.appForeground = true;
     this.startNetworkRecovery();
@@ -600,6 +619,7 @@ export class SyncExperienceAutomaticRuntime {
   }
 
   notifyAppBackground(): void {
+    AiraSyncJankProbe.stopCapture('background');
     this.appForeground = false;
     this.cancelHuaweiSpaceTransportWarmupTimer();
     this.cancelAutomaticDrainTimer();
@@ -782,6 +802,9 @@ export class SyncExperienceAutomaticRuntime {
     if (request.kind === 'automatic' && request.automaticGeneration !== this.automaticGeneration) {
       return {};
     }
+    const diagnosticRun = AiraSyncJankProbe.beginRun(
+      request.kind, this.getActiveProviderKind(), request.mode
+    );
     const executeStartedAt = Date.now();
     let remainderPersonalization = false;
     let remainderHistory = false;
@@ -920,6 +943,7 @@ export class SyncExperienceAutomaticRuntime {
         );
       }
       AiraSyncJankProbe.endExtra('execute_request', executeStartedAt, `kind=${request.kind}`);
+      AiraSyncJankProbe.endRun(diagnosticRun);
     }
   }
 
@@ -1003,6 +1027,8 @@ export class SyncExperienceAutomaticRuntime {
     reason: SyncExperienceBookmarkAutomaticReason,
     executionScope: SyncExperienceBookmarkExecutionScope
   ): Promise<SyncBookmarkDomainRunOutcome | undefined> {
+    const diagnosticStage = AiraSyncJankProbe.beginStage('bookmark_domain_scope');
+    try {
     if (automatic && reason !== 'periodic' && !await this.hasBookmarkPendingChanges()) {
       this.stopNetworkRecoveryIfInactive();
       return undefined;
@@ -1064,6 +1090,9 @@ export class SyncExperienceAutomaticRuntime {
     );
     this.stopNetworkRecoveryIfInactive();
     return outcome;
+    } finally {
+      AiraSyncJankProbe.endStage(diagnosticStage);
+    }
   }
 
   private async executePersonalizationDomain(
@@ -1071,6 +1100,8 @@ export class SyncExperienceAutomaticRuntime {
     automatic: boolean,
     reason: SyncExperiencePersonalizationAutomaticReason
   ): Promise<SyncPersonalizationDomainRunOutcome> {
+    const diagnosticStage = AiraSyncJankProbe.beginStage('personalization_domain_scope');
+    try {
     this.personalizationLastAttemptAt = this.clock.now();
     const startRevision = this.personalizationChangeRevision;
     const providerIdentity = this.resolveDomainProviderIdentity('personalization');
@@ -1114,12 +1145,17 @@ export class SyncExperienceAutomaticRuntime {
       );
     }
     return outcome;
+    } finally {
+      AiraSyncJankProbe.endStage(diagnosticStage);
+    }
   }
 
   private async executeHistoryDomain(
     automatic: boolean,
     reason: SyncExperienceHistoryAutomaticReason
   ): Promise<HistorySyncRunResult> {
+    const diagnosticStage = AiraSyncJankProbe.beginStage('history_domain_scope');
+    try {
     const startRevision = this.historyChangeRevision;
     const providerIdentity = this.resolveHistoryProviderIdentity();
     const domainStartedAt = Date.now();
@@ -1149,7 +1185,9 @@ export class SyncExperienceAutomaticRuntime {
       return result;
     }
     this.historyConsecutiveFailureCount += 1;
-    this.historyAutomaticNotBefore = 0;
+    // Keep the retry deadline when membership/foreground notifications replace the timer.
+    // Clearing it lets frequent state refreshes turn every validation failure into a 5 s loop.
+    this.historyAutomaticNotBefore = this.clock.now() + this.resolveHistoryRetryDelayMs();
     if (automatic) {
       if (this.manualHistoryCoverageCount <= 0) {
         this.scheduleHistoryIfActive('retry', this.resolveHistoryRetryDelayMs());
@@ -1164,6 +1202,9 @@ export class SyncExperienceAutomaticRuntime {
     }
     this.stopNetworkRecoveryIfInactive();
     return result;
+    } finally {
+      AiraSyncJankProbe.endStage(diagnosticStage);
+    }
   }
 
   private resolveDomainProviderIdentity(domain: 'bookmark' | 'personalization'): string {
@@ -1715,7 +1756,7 @@ export class SyncExperienceAutomaticRuntime {
       this.historyStartupQuietUntil,
       this.clock.now()
     );
-    const effectiveDelay = reason === 'local_change'
+    const effectiveDelay = reason === 'local_change' && this.historyConsecutiveFailureCount === 0
       ? quietDelay
       : Math.max(quietDelay, this.remainingAutomaticDelay(this.historyAutomaticNotBefore));
     this.cancelHistoryTimer();

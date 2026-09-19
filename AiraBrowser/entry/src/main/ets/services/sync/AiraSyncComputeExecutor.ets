@@ -1,3 +1,5 @@
+import { application } from '@kit.AbilityKit';
+import { HuaweiHistoryReplicaReader, HuaweiHistoryDatabasePlan } from '../../data/sync/HuaweiHistoryReplicaReader';
 import { taskpool, util } from '@kit.ArkTS';
 import {
   HuaweiSpaceHistorySyncState
@@ -112,11 +114,27 @@ export interface HuaweiHistoryReplicaPackedOutcome {
   mergedBuffer: ArrayBuffer;
   projection: AiraHistoryRemoteWriteProjection;
   errorMessage: string;
+  computeDetail?: string;
 }
 
 interface AiraHistoryReplicaLitePackedOutcome {
   projection?: AiraHistoryRemoteWriteProjection;
   errorMessage: string;
+  computeDetail?: string;
+}
+
+@Concurrent
+function planHuaweiHistoryReplicaLiteDatabase(
+  localDatabaseName: string, rowBuffer: ArrayBuffer,
+  uid: string, deviceId: string, knownHeadUpdatedAt: number
+): HuaweiHistoryDatabasePlan {
+  // TaskPool rejects a returned Promise ("Can't return Promise in pending state"), so this
+  // entry stays synchronous and the reader uses the platform's sync RDB APIs for a taskpool
+  // thread. The worker also resolves its own application context, because a Context is not
+  // serializable across TaskPool. rowBuffer holds the packed replica rows (a transferable
+  // ArrayBuffer); the worker reads the non-distributed local database itself.
+  return HuaweiHistoryReplicaReader.plan(application.getApplicationContext(), localDatabaseName,
+    rowBuffer, uid, deviceId, knownHeadUpdatedAt);
 }
 
 @Concurrent
@@ -129,13 +147,18 @@ function planHuaweiHistoryReplicaLitePacked(
   now: number
 ): AiraHistoryReplicaLitePackedOutcome {
   try {
+    const startedAt = Date.now();
     const rows = AiraHistoryTaskpoolTransferCodec.decodeRows(rowBuffer);
     const local = AiraHistoryTaskpoolTransferCodec.decodeState(localBuffer);
+    const unpackedAt = Date.now();
     const projection = new HuaweiSpaceHistorySnapshotCodec(uid, deviceId)
       .buildProjectionReusingHead(local, rows, dirtyBucketIndexes, now);
+    const projectedAt = Date.now();
     return {
       projection: AiraHistoryTaskpoolTransferCodec.leanProjection(projection),
-      errorMessage: ''
+      errorMessage: '',
+      computeDetail: `unpackMs=${unpackedAt - startedAt} projectionMs=${projectedAt - unpackedAt}` +
+        ` totalMs=${projectedAt - startedAt} rows=${rows.length} visits=${local.visits.length}`
     };
   } catch (error) {
     const candidate = error as Error;
@@ -201,13 +224,22 @@ function planHuaweiHistoryReplicaPacked(
   now: number
 ): HuaweiHistoryReplicaPackedOutcome {
   try {
-    const current = new HuaweiSpaceHistorySnapshotCodec(uid, deviceId)
-      .decodeRows(AiraHistoryTaskpoolTransferCodec.decodeRows(rowBuffer), now);
+    const startedAt = Date.now();
+    const rows = AiraHistoryTaskpoolTransferCodec.decodeRows(rowBuffer);
     const local = AiraHistoryTaskpoolTransferCodec.decodeState(localBuffer);
+    const unpackedAt = Date.now();
+    const current = new HuaweiSpaceHistorySnapshotCodec(uid, deviceId)
+      .decodeRows(rows, now);
+    const decodedAt = Date.now();
     const mergeService = new HistorySyncMergeService();
     const merged = mergeService.mergeKeepingPreferredVisits(current.state, local, now);
+    const mergedAt = Date.now();
     const localApplyRequired = !mergeService.sameState(merged, local);
     const remoteWriteRequired = !mergeService.sameState(merged, current.state);
+    const comparedAt = Date.now();
+    const computeDetail = `unpackMs=${unpackedAt - startedAt} decodeMs=${decodedAt - unpackedAt}` +
+      ` mergeMs=${mergedAt - decodedAt} compareMs=${comparedAt - mergedAt}` +
+      ` rows=${rows.length} visits=${local.visits.length}`;
     if (!localApplyRequired && !remoteWriteRequired) {
       return {
         localApplyRequired: false,
@@ -222,17 +254,23 @@ function planHuaweiHistoryReplicaPacked(
           targetGeneration: 0,
           targetStateChecksum: ''
         },
-        errorMessage: ''
+        errorMessage: '',
+        computeDetail: `${computeDetail} totalMs=${comparedAt - startedAt}`
       };
     }
     const projection = new HuaweiSpaceHistorySnapshotCodec(uid, deviceId)
       .buildProjection(merged, current, now);
+    const projectedAt = Date.now();
+    const mergedBuffer = AiraHistoryTaskpoolTransferCodec.encodeState(merged);
+    const encodedAt = Date.now();
     return {
       localApplyRequired: localApplyRequired,
       remoteWriteRequired: remoteWriteRequired,
-      mergedBuffer: AiraHistoryTaskpoolTransferCodec.encodeState(merged),
+      mergedBuffer: mergedBuffer,
       projection: AiraHistoryTaskpoolTransferCodec.leanProjection(projection),
-      errorMessage: ''
+      errorMessage: '',
+      computeDetail: `${computeDetail} projectionMs=${projectedAt - comparedAt}` +
+        ` encodeMs=${encodedAt - projectedAt} totalMs=${encodedAt - startedAt}`
     };
   } catch (error) {
     const candidate = error as Error;
@@ -439,9 +477,12 @@ function estimateTransferStringBytes(value: string): number {
   return text.length * 2 + 32;
 }
 
-function estimateHuaweiHistoryStateTransferBytes(state: HuaweiSpaceHistorySyncState): number {
+async function estimateHuaweiHistoryStateTransferBytes(
+  state: HuaweiSpaceHistorySyncState, throttle: AiraSyncWorkThrottleService
+): Promise<number> {
   let total = 64;
-  state.visits.forEach((visit): void => {
+  let processed = 0;
+  for (const visit of state.visits) {
     total += 128 +
       estimateTransferStringBytes(visit.visitId) +
       estimateTransferStringBytes(visit.clientId) +
@@ -452,25 +493,32 @@ function estimateHuaweiHistoryStateTransferBytes(state: HuaweiSpaceHistorySyncSt
       estimateTransferStringBytes(visit.referrer) +
       estimateTransferStringBytes(visit.deviceName) +
       estimateTransferStringBytes(visit.source);
-  });
-  state.tombstones.forEach((value): void => {
+    await throttle.afterBatchItem(++processed);
+  }
+  for (const value of state.tombstones) {
     total += 64 + estimateTransferStringBytes(value.visitId);
-  });
-  state.deleteRanges.forEach((value): void => {
+    await throttle.afterBatchItem(++processed);
+  }
+  for (const value of state.deleteRanges) {
     total += 96 + estimateTransferStringBytes(value.rangeId) + estimateTransferStringBytes(value.url);
-  });
+    await throttle.afterBatchItem(++processed);
+  }
   return total + 128 + estimateTransferStringBytes(state.retentionFrontier.boundaryVisitId);
 }
 
-function estimateHuaweiHistoryRowsTransferBytes(rows: HuaweiSpaceHistoryRow[]): number {
+async function estimateHuaweiHistoryRowsTransferBytes(
+  rows: HuaweiSpaceHistoryRow[], throttle: AiraSyncWorkThrottleService
+): Promise<number> {
   let total = 64;
-  rows.forEach((row: HuaweiSpaceHistoryRow): void => {
+  let processed = 0;
+  for (const row of rows) {
     total += 128 +
       estimateTransferStringBytes(row.rowId) +
       estimateTransferStringBytes(row.recordKind) +
       estimateTransferStringBytes(row.logicalId) +
       estimateTransferStringBytes(row.data);
-  });
+    await throttle.afterBatchItem(++processed);
+  }
   return total;
 }
 
@@ -494,7 +542,7 @@ function resolveHuaweiHistoryRemoteStateDecodeOutcome(
 export class AiraSyncComputeExecutor {
   private readonly cooperativeThrottle: AiraSyncWorkThrottleService = new AiraSyncWorkThrottleService(
     undefined,
-    { batchSize: 250, batchPauseMs: 16, stagePauseMs: 16 }
+    { batchSize: 250 }
   );
 
   /**
@@ -511,7 +559,7 @@ export class AiraSyncComputeExecutor {
     rows: HuaweiSpaceHistoryRow[]
   ): Promise<AiraHistoryRemoteStateDecode> {
     const now = Date.now();
-    const estimatedBytes = estimateHuaweiHistoryRowsTransferBytes(rows);
+    const estimatedBytes = await estimateHuaweiHistoryRowsTransferBytes(rows, this.cooperativeThrottle);
     if (!fitsTaskpoolPackPreflightBudget(estimatedBytes)) {
       try {
         const mirror = await new HuaweiSpaceHistorySnapshotCodec(uid, deviceId)
@@ -560,7 +608,9 @@ export class AiraSyncComputeExecutor {
   ): Promise<AiraHistoryRemoteStateDecode> {
     const now = Date.now();
     if (!fitsTaskpoolTransferBudget(rowBuffer.byteLength)) {
-      const rows = AiraHistoryTaskpoolTransferCodec.decodeRows(rowBuffer);
+      const rows = await AiraHistoryTaskpoolTransferCodec.decodeRowsCooperatively(
+        rowBuffer, this.cooperativeThrottle
+      );
       try {
         const mirror = await new HuaweiSpaceHistorySnapshotCodec(uid, deviceId)
           .decodeRowsCooperatively(rows, this.cooperativeThrottle, now);
@@ -587,6 +637,23 @@ export class AiraSyncComputeExecutor {
   }
 
 
+  async planHuaweiHistoryReplicaLiteDatabase(
+    localDatabaseName: string, rowBuffer: ArrayBuffer,
+    uid: string, deviceId: string, knownHeadUpdatedAt: number
+  ): Promise<HuaweiHistoryDatabasePlan> {
+    const startedAt = Date.now();
+    const task = new taskpool.Task('aira-sync-history-replica-lite-database',
+      planHuaweiHistoryReplicaLiteDatabase, localDatabaseName, rowBuffer, uid, deviceId, knownHeadUpdatedAt);
+    task.setTransferList([rowBuffer]);
+    const outcome = await taskpool.execute(task, taskpool.Priority.LOW) as HuaweiHistoryDatabasePlan;
+    AiraSyncJankProbe.endExtra('history_replica_database_taskpool', startedAt,
+      `error=${outcome.errorMessage.length > 0 ? 1 : 0}`);
+    if (outcome.computeDetail !== undefined) {
+      AiraSyncJankProbe.markExtra('history_replica_database_compute', outcome.computeDetail);
+    }
+    return outcome;
+  }
+
   async planHuaweiHistoryReplicaLitePacked(
     uid: string,
     deviceId: string,
@@ -595,9 +662,11 @@ export class AiraSyncComputeExecutor {
     dirtyBucketIndexes: number[]
   ): Promise<AiraHistoryRemoteWriteProjection | undefined> {
     const localBuffer = await this.packHuaweiHistoryStateForTransfer(local);
-    if (!fitsTaskpoolTransferBudget(rowBuffer.byteLength + localBuffer.byteLength)) {
-      return undefined;
-    }
+    // These buffers move ownership, as in the full replica task below. A size-only
+    // rejection used to send the same large buffers to that more expensive task,
+    // adding another local read/pack and decoding every device's replica. Attempt
+    // the lite task first; its actual transfer/validation failure still falls back.
+    const transferBytes = rowBuffer.byteLength + localBuffer.byteLength;
     const dirtyBuffer = dirtyBucketIndexes.slice();
     const task = new taskpool.Task(
       'aira-sync-history-replica-lite-packed',
@@ -615,14 +684,19 @@ export class AiraSyncComputeExecutor {
     try {
       outcome = await taskpool.execute(task, taskpool.Priority.LOW) as AiraHistoryReplicaLitePackedOutcome;
     } catch (_error) {
-      AiraSyncJankProbe.endExtra('history_replica_lite_taskpool', startedAt, 'error=throw');
+      AiraSyncJankProbe.endExtra('history_replica_lite_taskpool', startedAt, `error=throw bytes=${transferBytes}`);
       return undefined;
     }
     AiraSyncJankProbe.endExtra(
       'history_replica_lite_taskpool',
       startedAt,
-      `error=${outcome.errorMessage.length > 0 ? 1 : 0} dirty=${dirtyBuffer.length}`
+      `error=${outcome.errorMessage.length > 0 ? 1 : 0} dirty=${dirtyBuffer.length} bytes=${transferBytes}`
     );
+    if (outcome.computeDetail !== undefined) {
+      // Worker-local probe state has no active capture. Return timings and emit
+      // on the caller so they retain the manual/automatic run identifier.
+      AiraSyncJankProbe.markExtra('history_replica_lite_compute', outcome.computeDetail);
+    }
     if (outcome.errorMessage.length > 0 || outcome.projection === undefined) {
       return undefined;
     }
@@ -653,6 +727,9 @@ export class AiraSyncComputeExecutor {
       startedAt,
       `error=${outcome.errorMessage.length > 0 ? 1 : 0} write=${outcome.remoteWriteRequired ? 1 : 0}`
     );
+    if (outcome.computeDetail !== undefined) {
+      AiraSyncJankProbe.markExtra('history_replica_full_compute', outcome.computeDetail);
+    }
     return outcome;
   }
 
@@ -660,8 +737,8 @@ export class AiraSyncComputeExecutor {
     remote: HuaweiSpaceHistorySyncState,
     local: HuaweiSpaceHistorySyncState
   ): Promise<AiraHistoryInitialMergePlan> {
-    const estimatedBytes = estimateHuaweiHistoryStateTransferBytes(remote) +
-      estimateHuaweiHistoryStateTransferBytes(local);
+    const estimatedBytes = await estimateHuaweiHistoryStateTransferBytes(remote, this.cooperativeThrottle) +
+      await estimateHuaweiHistoryStateTransferBytes(local, this.cooperativeThrottle);
     if (!fitsTaskpoolTransferBudget(estimatedBytes)) {
       return this.planHuaweiHistoryInitialMergeCooperatively(remote, local);
     }
@@ -710,7 +787,7 @@ export class AiraSyncComputeExecutor {
       };
     }
     const unpackStartedAt = Date.now();
-    const merged = AiraHistoryTaskpoolTransferCodec.decodeState(outcome.mergedBuffer);
+    const merged = await this.decodeHuaweiHistoryTransferredState(outcome.mergedBuffer);
     AiraSyncJankProbe.endExtra(
       'history_merge_unpack',
       unpackStartedAt,
@@ -923,20 +1000,26 @@ export class AiraSyncComputeExecutor {
     };
   }
 
+  async decodeHuaweiHistoryTransferredState(buffer: ArrayBuffer): Promise<HuaweiSpaceHistorySyncState> {
+    return AiraHistoryTaskpoolTransferCodec.decodeStateCooperatively(buffer, this.cooperativeThrottle);
+  }
+
   private async packHuaweiHistoryRowsForTransfer(
     rows: HuaweiSpaceHistoryRow[]
   ): Promise<ArrayBuffer> {
-    const packed = AiraHistoryTaskpoolTransferCodec.encodeRows(rows);
-    await this.cooperativeThrottle.afterStage();
-    return packed;
+    return AiraHistoryTaskpoolTransferCodec.encodeRowsCooperatively(rows, this.cooperativeThrottle);
   }
 
   private async packHuaweiHistoryStateForTransfer(
     state: HuaweiSpaceHistorySyncState
   ): Promise<ArrayBuffer> {
-    const packed = AiraHistoryTaskpoolTransferCodec.encodeState(state);
-    await this.cooperativeThrottle.afterStage();
-    return packed;
+    return AiraSyncJankProbe.measure('history_state_pack', async (): Promise<ArrayBuffer> => {
+      this.cooperativeThrottle.takeYieldStats();
+      const packed = await AiraHistoryTaskpoolTransferCodec.encodeStateCooperatively(state, this.cooperativeThrottle);
+      AiraSyncJankProbe.markExtra('history_state_pack_work',
+        `bytes=${packed.byteLength} visits=${state.visits.length} ${this.cooperativeThrottle.takeYieldStats()}`);
+      return packed;
+    });
   }
 
 }

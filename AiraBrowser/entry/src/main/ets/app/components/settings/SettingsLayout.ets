@@ -4,6 +4,7 @@ import {
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { APP_STANDARD_HORIZONTAL_PADDING } from '../common/AppLayoutTokens';
+import { sharedBrowsingActivitySignal } from '../../../common/activity/BrowsingActivitySignal';
 
 const SETTINGS_SECTION_TITLE_LEFT_PADDING: number = 6;
 const SETTINGS_GROUP_CORNER_RADIUS: number = 22;
@@ -48,6 +49,11 @@ export struct SettingsScrollBody {
     .scrollable(this.scrollEnabled ? ScrollDirection.Vertical : ScrollDirection.None)
     .enableScrollInteraction(this.scrollInteractionEnabled)
     .scrollBar(BarState.Auto)
+    .onDidScroll((xOffset: number, yOffset: number): void => {
+      if (xOffset !== 0 || yOffset !== 0) {
+        sharedBrowsingActivitySignal.markBrowsingInteraction();
+      }
+    })
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     // No linearGradientBlur here on purpose. With it, a sheet overlaying this
     // container flashed the region it covered blank for one frame on dismiss;
@@ -105,6 +111,11 @@ export struct SettingsPresentationScrollBody {
     .scrollable(this.scrollEnabled ? ScrollDirection.Vertical : ScrollDirection.None)
     .enableScrollInteraction(this.scrollInteractionEnabled)
     .scrollBar(BarState.Auto)
+    .onDidScroll((xOffset: number, yOffset: number): void => {
+      if (xOffset !== 0 || yOffset !== 0) {
+        sharedBrowsingActivitySignal.markBrowsingInteraction();
+      }
+    })
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     .clip(this.desktopPresentation || this.clipContent)
   }

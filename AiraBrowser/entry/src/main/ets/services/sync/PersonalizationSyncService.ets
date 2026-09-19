@@ -347,18 +347,18 @@ export class PersonalizationSyncService {
     let completedRevision: string = '';
     try {
       for (let attempt = 0; attempt < PERSONALIZATION_SYNC_WRITE_MAX_ATTEMPTS; attempt += 1) {
-        const remoteState = await this.readValidatedRemoteState(remoteStore, '同步源');
+        const remoteState = await AiraSyncJankProbe.measure('personalization_remote_read', () => this.readValidatedRemoteState(remoteStore, '同步源'));
         await this.workThrottle.afterStage();
         config = this.configStore.getConfig();
-        const localBaseSnapshot = await this.snapshotService.buildLocalSnapshot(
+        const localBaseSnapshot = await AiraSyncJankProbe.measure('personalization_local_snapshot', () => this.snapshotService.buildLocalSnapshot(
           deviceId,
           config,
           Date.now(),
           this.resolveAccountUid(settings)
-        );
+        ));
         completedLocalSnapshot = localBaseSnapshot;
         await this.workThrottle.afterStage();
-        mergeResult = await this.mergeRemoteHeads(localBaseSnapshot, remoteState, config, mergeIntent);
+        mergeResult = await AiraSyncJankProbe.measure('personalization_merge', () => this.mergeRemoteHeads(localBaseSnapshot, remoteState, config, mergeIntent));
         await this.workThrottle.afterStage();
         if (!mergeResult.shouldUpload) {
           completedRevision = remoteState.revision;
@@ -369,18 +369,18 @@ export class PersonalizationSyncService {
             mergeResult.snapshot,
             '待写入同步源的'
           );
-          const writeResult = await remoteStore.writeSnapshot(
+          const writeResult = await AiraSyncJankProbe.measure('personalization_remote_write', () => remoteStore.writeSnapshot(
             deviceId,
             outgoingSnapshot,
             remoteState.revision
-          );
+          ));
           const writtenRevision = this.requireConfirmedRevision(writeResult.revision, '同步源');
-          const confirmedState = await this.confirmRemoteSnapshot(
+          const confirmedState = await AiraSyncJankProbe.measure('personalization_remote_confirm', () => this.confirmRemoteSnapshot(
             remoteStore,
             outgoingSnapshot,
             writtenRevision,
             '同步源'
-          );
+          ));
           completedRevision = confirmedState.revision;
           break;
         } catch (error) {
@@ -401,25 +401,30 @@ export class PersonalizationSyncService {
         config
       );
       if (localApplyItemIds.length > 0) {
-        await this.applyMergedSnapshot(completedMergeResult.snapshot, localApplyItemIds);
+        await AiraSyncJankProbe.measure('personalization_local_apply', () => this.applyMergedSnapshot(completedMergeResult.snapshot, localApplyItemIds));
       }
       if (localApplyItemIds.length > 0 || completedMergeResult.shouldUpload) {
-        await this.configStore.saveSectionStates(
+        await AiraSyncJankProbe.measure('personalization_persist', () => this.configStore.saveSectionStates(
           this.snapshotService.buildLocalSectionStates(completedMergeResult.snapshot, config),
           Date.now(),
           this.snapshotService.buildLocalDeletionStates(completedMergeResult.snapshot, config)
-        );
+        ));
       }
       const bookshelfSelection: NovelBookshelfSyncSelectionState =
         await this.initializeNovelBookshelfSelection();
       if (bookshelfSelection.enabled && this.novelBookshelfSyncModule !== undefined) {
-        bookshelfResult = await this.novelBookshelfSyncModule.sync(
-          activeProvider,
-          settings,
-          deviceId,
-          'active',
-          mergeIntent
-        );
+        const bookshelfSpan = AiraSyncJankProbe.beginStage('novel_bookshelf_sync');
+        try {
+          bookshelfResult = await this.novelBookshelfSyncModule.sync(
+            activeProvider,
+            settings,
+            deviceId,
+            'active',
+            mergeIntent
+          );
+        } finally {
+          AiraSyncJankProbe.endStage(bookshelfSpan);
+        }
       }
       await this.syncConfigStore.saveProviderRuntimeState(
         activeProvider,
@@ -437,14 +442,14 @@ export class PersonalizationSyncService {
     const completedMergeResult = mergeResult as PersonalizationSyncMergeResult;
     const backupFailureCount = options.skipBackupWrites === true
       ? 0
-      : await this.writeBackupSnapshots(
+      : await AiraSyncJankProbe.measure('personalization_backup', () => this.writeBackupSnapshots(
         settings,
         deviceId,
         completedMergeResult.snapshot,
         config,
         options.forceBackupWrites === true,
         bookshelfResult?.snapshot
-      );
+      ));
     const appliedRemoteCount: number = completedMergeResult.appliedRemoteCount +
       (bookshelfResult?.appliedRemoteCount ?? 0);
     const uploaded: boolean = completedMergeResult.shouldUpload || bookshelfResult?.uploaded === true;

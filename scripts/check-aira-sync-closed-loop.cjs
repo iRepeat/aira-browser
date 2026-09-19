@@ -286,7 +286,7 @@ if (shouldUseBookmarkBaselineRemote(true, false, true) !== false) {
 }
 
 const historyRunner = readRepo('AiraBrowser/entry/src/main/ets/services/sync/HuaweiSpaceHistorySyncRunner.ets');
-if (!/preparePackedReplicaRows[\s\S]*takePackedReplicaRows[\s\S]*runPackedReplica/.test(historyRunner)) {
+if (!/preparePackedReplicaRows[\s\S]*repackFreshReplicaRows\(true\)[\s\S]*runPackedReplica/.test(historyRunner)) {
   fail('matching-head History local work must pack the replica once and runPackedReplica');
 }
 if (!/headMatches\) \{[\s\S]*tryLiteReplicaWrite[\s\S]*takePackedReplicaRows/.test(historyRunner)) {

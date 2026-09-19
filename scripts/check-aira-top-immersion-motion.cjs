@@ -315,90 +315,120 @@ assert.match(phoneSurface, /if \(this\.webLayerMounted\) \{\s*Stack\(\{ alignCon
 console.log('Combined safe areas: bottom reservation is equivalent to a shorter native viewport.');
 
 // Replay a root scroll-range correction after the Web viewport grows at the page end.
-// This correction is layout feedback, even while a real finger is still held down.
-for (const mode of ['single', 'split', 'new-touch', 'expired', 'larger-reversal', 'continued-down']) {
-  const facts = { ...fixture().facts, bottomPanelInteractive: true };
-  const pageHeight = 1200;
-  const geometryInput = { hostHeightPx: 844, visualTopInsetPx: 40, visualBottomInsetPx: 101,
-    fullViewport: false, largeScreenShellActive: false, nativeVideoTakeoverActive: false };
-  const transitions = [];
-  let bottomPresentation = 'resting';
-  let interaction;
-  const shell = {
-    webViewportVisualTopInsetInitialized: true, webViewportVisualTopInset: 40, webStatusBarVisible: true,
-    webViewportPresentation: BrowserWebViewportCoordinator.resolvePresentation(geometryInput),
-    getUIContext: () => ({ animateTo(_options, apply) { apply(); } }),
-    refreshWebViewportPresentation(topInset) {
-      const previous = this.webViewportPresentation;
-      this.webViewportPresentation = BrowserWebViewportCoordinator.resolvePresentation({ ...geometryInput,
-        visualTopInsetPx: topInset });
-      interaction.handleViewportChanged(facts.activeTabId, previous, this.webViewportPresentation);
-    }
-  };
-  const top = new BrowserWebTopImmersionSessionCoordinator({ resolveFacts: () => facts,
-    host: { resolveVisibleTopInsetPx: () => 40,
-      applyPresentation(visible, inset, source, duration) {
-        callbackModule.exports.apply.call(shell, visible, inset, source, duration);
-        facts.statusBarVisible = visible;
-        transitions.push(visible);
-      }, applyWindowVisibility: async () => true, scheduleSafeInsetSettle() {} }
-  });
-  interaction = new BrowserWebScrollInteractionCoordinator({
-    bottomChromeScrollCoordinator: new BrowserBottomChromeScrollCoordinator(),
-    topImmersionSessionCoordinator: top, recentActionManager: { recordClick() {} },
-    scrollPerformanceCoordinator: { createState: () => ({}), activateForMove: state => state },
-    smoothModeService: {}, runtimeLifecyclePort: {}
-  }, { resolveFacts: () => ({ activeTabId: facts.activeTabId, webPageVisible: true, addressFocused: false,
-      currentDetent: 'low', currentPresentation: bottomPresentation, tabsSheetVisible: false,
-      webAppImmersiveMode: false, fullScreenModeEnabled: false, smoothModeRuntimeEnabled: false,
-      experimentSettings: {} }),
-    applyBottomChromeDecision(decision) {
-      bottomPresentation = decision.presentation;
-      facts.bottomPanelInteractive = bottomPresentation === 'resting';
-    }
-  });
-  const scroll = y => { facts.scrollOffsetY = y; interaction.handleScroll(facts.activeTabId, y); };
-  interaction.handleTouch(facts.activeTabId, 'down');
-  interaction.handleTouch(facts.activeTabId, 'move');
-  scroll(450);
-  clockNow += 400;
-  scroll(pageHeight - shell.webViewportPresentation.contentHeightPx);
-  const clampedY = Math.min(facts.scrollOffsetY, pageHeight - shell.webViewportPresentation.contentHeightPx);
-  assert.ok(clampedY < facts.scrollOffsetY, 'expanding the viewport reduces the page-end scroll range');
-  if (mode === 'new-touch') {
-    clockNow += 400;
+// Cover ordinary pages and pages whose bottom toolbar is pinned by native avoidance.
+// Replay layout feedback during a held gesture and during its inertial continuation.
+for (const bottomInset of [0, 101]) {
+  for (const mode of ['single', 'split', 'inertia', 'mid-page', 'new-touch', 'expired', 'larger-reversal', 'continued-down']) {
+    const facts = { ...fixture().facts, bottomPanelInteractive: true, bottomToolbarPinnedBySafeArea: bottomInset > 0 };
+    const pageHeight = 1200;
+    const geometryInput = { hostHeightPx: 844, visualTopInsetPx: 40, visualBottomInsetPx: bottomInset,
+      fullViewport: false, largeScreenShellActive: false, nativeVideoTakeoverActive: false };
+    const transitions = [];
+    const durations = [];
+    let bottomPresentation = 'resting';
+    let interaction;
+    const shell = {
+      webViewportVisualTopInsetInitialized: true, webViewportVisualTopInset: 40, webStatusBarVisible: true,
+      webViewportPresentation: BrowserWebViewportCoordinator.resolvePresentation(geometryInput),
+      getUIContext: () => ({ animateTo(_options, apply) { apply(); } }),
+      refreshWebViewportPresentation(topInset) {
+        const previous = this.webViewportPresentation;
+        this.webViewportPresentation = BrowserWebViewportCoordinator.resolvePresentation({ ...geometryInput,
+          visualTopInsetPx: topInset });
+        interaction.handleViewportChanged(facts.activeTabId, previous, this.webViewportPresentation);
+      }
+    };
+    const top = new BrowserWebTopImmersionSessionCoordinator({ resolveFacts: () => facts,
+      host: { resolveVisibleTopInsetPx: () => 40,
+        applyPresentation(visible, inset, source, duration) {
+          callbackModule.exports.apply.call(shell, visible, inset, source, duration);
+          facts.statusBarVisible = visible;
+          transitions.push(visible);
+          durations.push(duration);
+        }, applyWindowVisibility: async () => true, scheduleSafeInsetSettle() {} }
+    });
+    interaction = new BrowserWebScrollInteractionCoordinator({
+      bottomChromeScrollCoordinator: new BrowserBottomChromeScrollCoordinator(),
+      topImmersionSessionCoordinator: top, recentActionManager: { recordClick() {} },
+      scrollPerformanceCoordinator: { createState: () => ({}), activateForMove: state => state, activate: state => state },
+      smoothModeService: {}, runtimeLifecyclePort: {}
+    }, { resolveFacts: () => ({ activeTabId: facts.activeTabId, webPageVisible: true, addressFocused: false,
+        currentDetent: 'low', currentPresentation: bottomPresentation, tabsSheetVisible: false,
+        bottomToolbarPinnedBySafeArea: bottomInset > 0,
+        webAppImmersiveMode: false, fullScreenModeEnabled: false, smoothModeRuntimeEnabled: false,
+        experimentSettings: {} }),
+      applyBottomChromeDecision(decision) {
+        bottomPresentation = decision.presentation;
+        facts.bottomPanelInteractive = bottomPresentation === 'resting';
+      }
+    });
+    const scroll = y => { facts.scrollOffsetY = y; interaction.handleScroll(facts.activeTabId, y); };
     interaction.handleTouch(facts.activeTabId, 'down');
     interaction.handleTouch(facts.activeTabId, 'move');
-    scroll(clampedY);
-    assert.deepEqual(transitions, [false, true], 'a new gesture must not inherit layout correction suppression');
-  } else if (mode === 'expired') {
-    clockNow += 700;
-    scroll(clampedY);
-    assert.deepEqual(transitions, [false, true], 'correction window must expire without a timer');
-  } else if (mode === 'larger-reversal') {
+    const gestureTargetY = pageHeight - shell.webViewportPresentation.contentHeightPx - (mode === 'mid-page' ? 120 : 0);
+    scroll(gestureTargetY - 47);
     clockNow += 400;
-    scroll(clampedY - 40);
-    assert.deepEqual(transitions, [false, true], 'movement larger than the resize must not be swallowed');
-  } else if (mode === 'continued-down') {
-    clockNow += 400;
-    scroll(facts.scrollOffsetY + 10);
-    scroll(clampedY);
-    assert.deepEqual(transitions, [false, true], 'fresh downward movement ends the correction allowance');
-  } else {
-    clockNow += 200;
-    if (mode === 'split') {
-      scroll(clampedY + 20);
-      clockNow += 100;
+    scroll(gestureTargetY);
+    const clampedY = Math.min(facts.scrollOffsetY, pageHeight - shell.webViewportPresentation.contentHeightPx);
+    if (mode === 'mid-page') {
+      assert.equal(clampedY, facts.scrollOffsetY, 'viewport expansion need not move a mid-page scroll position');
+      clockNow += 60;
+      scroll(gestureTargetY + 10);
+      clockNow += 60;
+      scroll(gestureTargetY + 30);
+      assert.deepEqual(transitions, [false], 'continued forward scrolling does not reverse the chrome transition');
+      assert.equal(interaction.getLastScrollY(), gestureTargetY + 30, 'forward scroll offsets are still consumed');
+      clockNow += 400;
+      scroll(gestureTargetY - 10);
+      assert.deepEqual(transitions, [false, true], 'a real reversal after continued scrolling still reveals chrome');
+      assert.ok(durations.every(duration => duration === 180), 'both directions retain the top animation');
+      continue;
     }
-    scroll(clampedY);
-    assert.deepEqual(transitions, [false],
-      'Web resize scroll correction must not reveal the chrome and reverse the just-applied viewport geometry');
-    clockNow += 400;
-    scroll(clampedY - 40);
-    assert.deepEqual(transitions, [false, true], 'a subsequent genuine upward scroll must still restore chrome');
+    assert.ok(clampedY < facts.scrollOffsetY, 'expanding the viewport reduces the page-end scroll range');
+    if (mode === 'new-touch') {
+      clockNow += 400;
+      interaction.handleTouch(facts.activeTabId, 'down');
+      interaction.handleTouch(facts.activeTabId, 'move');
+      scroll(clampedY);
+      assert.deepEqual(transitions, [false, true], 'a new gesture must not inherit layout correction suppression');
+    } else if (mode === 'expired') {
+      clockNow += 700;
+      scroll(clampedY);
+      assert.deepEqual(transitions, [false, true], 'correction window must expire without a timer');
+    } else if (mode === 'larger-reversal') {
+      clockNow += 400;
+      scroll(clampedY - 40);
+      assert.deepEqual(transitions, [false, true], 'movement larger than the resize must not be swallowed');
+    } else if (mode === 'continued-down') {
+      clockNow += 400;
+      scroll(facts.scrollOffsetY + 10);
+      scroll(clampedY);
+      assert.deepEqual(transitions, [false, true], 'fresh downward movement ends the correction allowance');
+    } else {
+      if (mode === 'inertia') interaction.handleTouch(facts.activeTabId, 'up');
+      clockNow += 200;
+      if (mode === 'split') {
+        scroll(clampedY + 20);
+        clockNow += 100;
+      }
+      scroll(clampedY);
+      assert.deepEqual(transitions, [false],
+        `bottom=${bottomInset}, ${mode}: viewport correction must not reveal chrome and reverse its geometry`);
+      assert.equal(interaction.getLastScrollY(), clampedY, 'correction updates the actual scroll baseline');
+      assert.equal(bottomPresentation, bottomInset > 0 ? 'resting' : 'compact',
+        'layout feedback preserves the intended bottom toolbar state');
+      clockNow += 400;
+      if (mode === 'inertia') {
+        interaction.handleTouch(facts.activeTabId, 'down');
+        interaction.handleTouch(facts.activeTabId, 'move');
+      }
+      scroll(clampedY - 40);
+      assert.deepEqual(transitions, [false, true], 'a subsequent genuine upward scroll must still restore chrome');
+    }
+    assert.ok(durations.every(duration => duration === 180), 'both directions retain the top animation');
   }
 }
-console.log('Combined safe areas: viewport feedback cannot reverse the user scroll direction.');
+console.log('Top immersion: ordinary and bottom-reserved pages reject viewport feedback and preserve gesture/inertia behavior.');
 
 const refreshStart = shellSource.indexOf('private refreshWebViewportPresentation(');
 const refreshEnd = shellSource.indexOf('private setWebBottomAddressFocused(', refreshStart);

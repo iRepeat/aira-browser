@@ -2189,8 +2189,10 @@ tab_home_shell_callback_count="$(awk '
   in_shell && /^}/ { print count + 0; exit }
   in_shell && /: \(/ { count += 1 }
 ' "${TAB_HOME_COORDINATOR}")"
-if [ "${tab_home_shell_callback_count}" -gt 9 ]; then
-  report_failure "${TAB_HOME_COORDINATOR_REL} must keep Tab Home Shell at no more than 9 facts/state/platform callbacks; found ${tab_home_shell_callback_count}."
+# A dedicated render-facts read prevents broad state reads from enrolling unrelated
+# page properties in ArkUI's dependency graph (confirmed in the sync-jank profile).
+if [ "${tab_home_shell_callback_count}" -gt 10 ]; then
+  report_failure "${TAB_HOME_COORDINATOR_REL} must keep Tab Home Shell at no more than 10 facts/state/platform callbacks; found ${tab_home_shell_callback_count}."
 fi
 check_file_not_contains_rule "${TABS_OVERVIEW_SESSION_COORDINATOR}" "${TABS_OVERVIEW_SESSION_COORDINATOR_REL}" \
   "type: 'show_home_surface'|BrowserTabHomeFlowHost" \

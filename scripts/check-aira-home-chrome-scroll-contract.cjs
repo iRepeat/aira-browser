@@ -832,7 +832,63 @@ function checkRoutedToolbarBackdropContract() {
   'route reset must physically unmount and collapse the glass backdrop before the post-render route barrier');
 }
 
+function checkRenderPolicyReadsOnlySurfaceFacts() {
+  const tabHomeModule = evaluateCommonJs(tabHomePath, () => ({}));
+  const cases = [
+    { kind: 'system', home: true, private: false, override: undefined, search: true,
+      hide: false, behavior: 'compact', scene: 'system_home', mode: 'compact', visible: true },
+    { kind: 'custom_web', home: true, private: false, override: undefined, search: true,
+      hide: false, behavior: 'hidden', scene: 'third_party_home', mode: 'fixed', visible: true },
+    { kind: 'custom_web', home: true, private: false, override: undefined, search: true,
+      hide: true, behavior: 'hidden', scene: 'third_party_home', mode: 'hidden', visible: true },
+    { kind: 'custom_web', home: true, private: true, override: undefined, search: true,
+      hide: false, behavior: 'compact', scene: 'system_home', mode: 'compact', visible: true },
+    { kind: 'system', home: false, private: false, override: undefined, search: true,
+      hide: false, behavior: 'compact', scene: 'web_page', mode: 'inactive', visible: false },
+    { kind: 'system', home: false, private: false, override: true, search: true,
+      hide: false, behavior: 'compact', scene: 'system_home', mode: 'compact', visible: true },
+    { kind: 'system', home: true, private: false, override: false, search: true,
+      hide: false, behavior: 'compact', scene: 'hidden', mode: 'inactive', visible: false },
+    { kind: 'system', home: true, private: false, override: undefined, search: false,
+      hide: false, behavior: 'compact', scene: 'system_home', mode: 'inactive', visible: false }
+  ];
+  for (const value of cases) {
+    let broadReads = 0;
+    let surfaceReads = 0;
+    const custom = buildCustomHomepageState(value.kind, value.hide, value.search);
+    const input = { showHomePage: value.home, webPageVisible: !value.home,
+      thirdPartyHomepageAllowed: !value.private, customHomepageState: custom,
+      customHomepageWebVisible: value.kind === 'custom_web' };
+    const coordinator = Object.create(tabHomeModule.BrowserTabHomeCoordinator.prototype);
+    coordinator.shell = {
+      readState() {
+        broadReads++;
+        return { showHomePage: value.home, currentBoundaryPrivate: value.private,
+          customHomepageRuntimeState: { presentation: custom, surfaceVisible: input.customHomepageWebVisible } };
+      },
+      readSurfaceProfileInput() { surfaceReads++; return input; }
+    };
+    coordinator.dependencies = { preferencesRepository: {
+      getPreferences: () => ({ appearance: { bottomToolbarScrollBehavior: value.behavior } })
+    } };
+    coordinator.homeSurfaceProfileViewModel = new profileModule.BrowserHomeSurfaceProfileViewModel();
+    coordinator.homeChromeScrollCoordinator = new homeModule.BrowserHomeChromeScrollCoordinator();
+    const before = JSON.stringify(input);
+    const profile = coordinator.buildHomeSurfaceProfile(value.override);
+    const policy = coordinator.buildHomeSystemChromePolicyState(value.override);
+    assert(profile.scene === value.scene && policy.scene === value.scene,
+      'narrow render facts must preserve home/web/private/override scene selection');
+    assert(policy.homeScrollMode === value.mode && policy.bottomPanelHomeSearchVisible === value.visible,
+      'narrow render facts must preserve custom-home and toolbar scroll policy');
+    assert(before === JSON.stringify(input), 'render overrides must not mutate shell-owned facts');
+    assert(broadReads === 0,
+      `Home render policy observed the whole page ${broadReads} times, including unrelated reactive fields`);
+    assert(surfaceReads === 2, 'each public presentation builder should read its surface facts once');
+  }
+}
+
 const checks = [
+  checkRenderPolicyReadsOnlySurfaceFacts,
   checkPolicyOwnershipMatrix,
   checkNativeScrollBehavior,
   checkRawAdapterAndOwnerSeam,

@@ -7,6 +7,8 @@ import {
 class RecordingThrottleClock implements AiraSyncWorkThrottleClock {
   private currentMs: number = 1000;
   sleepDelaysMs: number[] = [];
+  longestWorkMs: number = 0;
+  private workMs: number = 0;
 
   now(): number {
     return this.currentMs;
@@ -14,11 +16,14 @@ class RecordingThrottleClock implements AiraSyncWorkThrottleClock {
 
   advance(ms: number): void {
     this.currentMs += ms;
+    this.workMs += ms;
+    this.longestWorkMs = Math.max(this.longestWorkMs, this.workMs);
   }
 
   sleep(delayMs: number): Promise<void> {
     this.sleepDelaysMs.push(delayMs);
     this.currentMs += Math.max(0, delayMs);
+    this.workMs = 0;
     return Promise.resolve();
   }
 }
@@ -86,22 +91,21 @@ export default function airaSyncWorkThrottleTest(): void {
       await throttle.afterBatchItem(1);
       await throttle.afterBatchItem(2);
 
-      expect(clock.sleepDelaysMs.length).assertEqual(1);
+      expect(clock.sleepDelaysMs.length).assertEqual(2);
     });
 
-    it('does not let the default budget tax a large loop ahead of the count threshold', 0, async () => {
+    it('keeps default uninterrupted work below one frame without a full-frame sleep per slice', 0, async () => {
       const clock = new RecordingThrottleClock();
       const throttle = new AiraSyncWorkThrottleService(clock, { batchSize: 250 });
 
-      // 250 items at 1 ms is the count threshold's own stall allowance (~250 ms). A default budget
-      // stricter than that sleeps more often than the count path already did, which slows every
-      // large sync down without bounding anything new.
       for (let index = 1; index <= 250; index++) {
         clock.advance(1);
         await throttle.afterBatchItem(index);
       }
 
-      expect(clock.sleepDelaysMs.length).assertEqual(1);
+      expect(clock.longestWorkMs <= 16).assertTrue();
+      expect(clock.sleepDelaysMs.length > 1).assertTrue();
+      expect(clock.sleepDelaysMs.every((delay: number): boolean => delay === 0)).assertTrue();
     });
   });
 }

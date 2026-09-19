@@ -1,3 +1,8 @@
+import {
+  HistorySyncSnapshotReader, HISTORY_SYNC_CANONICAL_VISITS_TABLE, HISTORY_SYNC_TOMBSTONES_TABLE,
+  HISTORY_SYNC_DELETE_RANGES_TABLE, HISTORY_SYNC_FRONTIERS_TABLE, HISTORY_SYNC_RETENTION_TABLE,
+  HISTORY_SYNC_OUTBOX_TABLE
+} from './HistorySyncSnapshotReader';
 import { common } from '@kit.AbilityKit';
 import { relationalStore } from '@kit.ArkData';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -342,7 +347,7 @@ const HISTORY_VISIT_SCHEMA_SQL: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_history_visits_sync_id ON ${HISTORY_VISITS_TABLE}(sync_id) WHERE sync_id <> ''`,
   `CREATE INDEX IF NOT EXISTS idx_history_visits_sync_account ON ${HISTORY_VISITS_TABLE}(sync_account_uid, sync_origin)`
 ];
-const HISTORY_SYNC_OUTBOX_TABLE = 'history_sync_outbox_v1';
+
 // Cooperative yielding while applying remote history on the ArkTS thread. On device a single visit
 // upsert or range delete costs tens to hundreds of milliseconds, so a change count cannot bound the
 // stall: five changes were measured holding the thread for over a second while a gesture was in
@@ -356,14 +361,8 @@ const HISTORY_SYNC_SETTLE_MAX_WAIT_MS: number = 1500;
 // statement stays well inside the engine's bind-parameter limit.
 const HISTORY_SYNC_DELETE_ID_BATCH_SIZE: number = 200;
 const HISTORY_SYNC_STATE_TABLE = 'history_sync_state_v1';
-const HISTORY_SYNC_DELETE_RANGES_TABLE = 'history_sync_delete_ranges_v1';
-const HISTORY_SYNC_FRONTIERS_TABLE = 'history_sync_frontiers_v1';
-const HISTORY_SYNC_CANONICAL_VISITS_TABLE = 'history_sync_canonical_visits_v1';
-const HISTORY_SYNC_TOMBSTONES_TABLE = 'history_sync_tombstones_v1';
-const HISTORY_SYNC_RETENTION_TABLE = 'history_sync_retention_v1';
 const HUAWEI_HISTORY_REMOTE_HEAD_TABLE = 'huawei_history_remote_head_v1';
 const HISTORY_SYNC_CANONICAL_BACKFILL_BATCH_SIZE: number = 200;
-const HISTORY_SYNC_CANONICAL_READ_BATCH_SIZE: number = 128;
 const HISTORY_SYNC_CANONICAL_BACKFILL_STATE_PREFIX: string = 'history_canonical_backfill:';
 const HISTORY_SYNC_CANONICAL_BACKFILL_STATE_VERSION: number = 1;
 const HISTORY_SYNC_RETENTION_FRONTIER_GRANULARITY_MS: number = 24 * 60 * 60 * 1000;
@@ -1957,6 +1956,12 @@ export class BrowserDatabase {
     );
   }
 
+  async prepareHuaweiHistoryWorkerRead(accountUid: string): Promise<string> {
+    const store = await this.getStore();
+    await this.ensureHistorySyncCanonicalVisitsBackfilled(store, accountUid);
+    return DATABASE_NAME;
+  }
+
   async readHuaweiSpaceHistorySyncState(accountUid: string): Promise<HuaweiSpaceHistorySyncState> {
     const normalizedUid = accountUid.trim();
     if (normalizedUid.length <= 0) {
@@ -2042,7 +2047,8 @@ export class BrowserDatabase {
   }
 
   /**
-   * Drops specific outbox mutations without an acknowledgement. Used for a mutation the transport
+   * Removes specific outbox mutations after snapshot confirmation, or without an acknowledgement
+   * for a mutation the transport
    * already knows it cannot submit: the server refuses the whole exchange batch, so a mutation it
    * would reject on every run otherwise stays at the front of the queue and blocks every later one.
    */
@@ -5112,43 +5118,8 @@ export class BrowserDatabase {
     accountUid: string,
     updatedAfter: number
   ): Promise<HistorySyncVisit[]> {
-    const predicates = new relationalStore.RdbPredicates(HISTORY_SYNC_CANONICAL_VISITS_TABLE);
-    predicates.equalTo('account_uid', accountUid);
-    const normalizedUpdatedAfter = Math.max(0, Math.floor(updatedAfter));
-    if (normalizedUpdatedAfter > 0) {
-      predicates.greaterThan('updated_at', normalizedUpdatedAfter - 1);
-    }
-    predicates.orderByDesc('visited_at');
-    predicates.orderByDesc('visit_id');
-    const resultSet = await store.queryWithoutRowCount(predicates, ['visit_id', 'payload_json']);
-    const rowVisitIds: string[] = [];
-    const rowPayloads: string[] = [];
-    try {
-      const visitIdIndex = resultSet.getColumnIndex('visit_id');
-      const payloadIndex = resultSet.getColumnIndex('payload_json');
-      while (resultSet.goToNextRow()) {
-        rowVisitIds.push(resultSet.getString(visitIdIndex).trim());
-        rowPayloads.push(resultSet.getString(payloadIndex));
-        if (rowVisitIds.length % HISTORY_SYNC_CANONICAL_READ_BATCH_SIZE === 0) {
-          await this.yieldHistorySyncReadBatch();
-        }
-      }
-    } finally {
-      resultSet.close();
-    }
-    const visits: HistorySyncVisit[] = [];
-    for (let index = 0; index < rowVisitIds.length; index += 1) {
-      const visitId = rowVisitIds[index];
-      const visit = JSON.parse(rowPayloads[index]) as HistorySyncVisit;
-      if (visitId.length <= 0 || visit.visitId?.trim() !== visitId) {
-        throw new Error('History canonical visit identity mismatch.');
-      }
-      visits.push(visit);
-      if ((index + 1) % HISTORY_SYNC_CANONICAL_READ_BATCH_SIZE === 0) {
-        await this.yieldHistorySyncReadBatch();
-      }
-    }
-    return visits;
+    return HistorySyncSnapshotReader.readVisits(store, accountUid, updatedAfter,
+      async (): Promise<void> => this.yieldHistorySyncReadBatch());
   }
 
   private async hasHistorySyncProjectionVictims(
@@ -5329,96 +5300,28 @@ export class BrowserDatabase {
     store: relationalStore.RdbStore,
     accountUid: string
   ): Promise<HistorySyncExactTombstone[]> {
-    const predicates = new relationalStore.RdbPredicates(HISTORY_SYNC_TOMBSTONES_TABLE);
-    predicates.equalTo('account_uid', accountUid);
-    predicates.orderByDesc('deleted_at');
-    const resultSet = await store.queryWithoutRowCount(predicates, ['visit_id', 'deleted_at']);
-    const values: HistorySyncExactTombstone[] = [];
-    try {
-      const visitIdIndex = resultSet.getColumnIndex('visit_id');
-      const deletedAtIndex = resultSet.getColumnIndex('deleted_at');
-      while (resultSet.goToNextRow()) {
-        values.push({
-          visitId: resultSet.getString(visitIdIndex),
-          deletedAt: resultSet.getLong(deletedAtIndex)
-        });
-      }
-    } finally {
-      resultSet.close();
-    }
-    return values;
+    return HistorySyncSnapshotReader.readTombstones(store, accountUid);
   }
 
   private async readHistorySyncDeleteRanges(
     store: relationalStore.RdbStore,
     accountUid: string
   ): Promise<HistorySyncDeleteRange[]> {
-    const predicates = new relationalStore.RdbPredicates(HISTORY_SYNC_DELETE_RANGES_TABLE);
-    predicates.equalTo('account_uid', accountUid);
-    const resultSet = await store.queryWithoutRowCount(predicates, [
-      'range_id', 'url', 'started_at', 'ended_at', 'seq'
-    ]);
-    const ranges: HistorySyncDeleteRange[] = [];
-    try {
-      while (resultSet.goToNextRow()) {
-        ranges.push({
-          rangeId: resultSet.getString(resultSet.getColumnIndex('range_id')),
-          url: resultSet.getString(resultSet.getColumnIndex('url')),
-          startedAt: resultSet.getLong(resultSet.getColumnIndex('started_at')),
-          endedAt: resultSet.getLong(resultSet.getColumnIndex('ended_at')),
-          seq: resultSet.getLong(resultSet.getColumnIndex('seq'))
-        });
-      }
-    } finally {
-      resultSet.close();
-    }
-    return ranges;
+    return HistorySyncSnapshotReader.readDeleteRanges(store, accountUid);
   }
 
   private async readHistorySyncClearBefore(
     store: relationalStore.RdbStore,
     accountUid: string
   ): Promise<number> {
-    const predicates = new relationalStore.RdbPredicates(HISTORY_SYNC_FRONTIERS_TABLE);
-    predicates.equalTo('account_uid', accountUid);
-    predicates.limitAs(1);
-    const resultSet = await store.query(predicates, ['clear_before']);
-    try {
-      return resultSet.goToNextRow() ? resultSet.getLong(resultSet.getColumnIndex('clear_before')) : 0;
-    } finally {
-      resultSet.close();
-    }
+    return HistorySyncSnapshotReader.readClearBefore(store, accountUid);
   }
 
   private async readHistorySyncRetentionFrontier(
     store: relationalStore.RdbStore,
     accountUid: string
   ): Promise<HistorySyncRetentionFrontier> {
-    const empty: HistorySyncRetentionFrontier = {
-      cutoffAt: 0,
-      boundaryVisitedAt: 0,
-      boundaryVisitId: '',
-      updatedAt: 0
-    };
-    const predicates = new relationalStore.RdbPredicates(HISTORY_SYNC_RETENTION_TABLE);
-    predicates.equalTo('account_uid', accountUid);
-    predicates.limitAs(1);
-    const resultSet = await store.query(predicates, [
-      'cutoff_at', 'boundary_visited_at', 'boundary_visit_id', 'updated_at'
-    ]);
-    try {
-      if (!resultSet.goToNextRow()) {
-        return empty;
-      }
-      return {
-        cutoffAt: resultSet.getLong(resultSet.getColumnIndex('cutoff_at')),
-        boundaryVisitedAt: resultSet.getLong(resultSet.getColumnIndex('boundary_visited_at')),
-        boundaryVisitId: resultSet.getString(resultSet.getColumnIndex('boundary_visit_id')),
-        updatedAt: resultSet.getLong(resultSet.getColumnIndex('updated_at'))
-      };
-    } finally {
-      resultSet.close();
-    }
+    return HistorySyncSnapshotReader.readRetentionFrontier(store, accountUid);
   }
 
   private async persistHistorySyncRetentionFrontier(

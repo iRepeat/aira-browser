@@ -169,7 +169,7 @@ function runtime() {
   const scripts = [];
   const controller = { runJavaScript(script) { scripts.push(script); return Promise.resolve(''); } };
   const facts = { tabId: 'a', url: 'https://example.test/', controller, eligible: true,
-    suspended: false, systemBottomInsetVp: 24 };
+    suspended: false, insetSuppressed: false, systemBottomInsetVp: 24 };
   const updates = [];
   const coordinator = new BrowserWebBottomSafeAreaCoordinator({ readFacts: () => facts,
     applyBottomInset: inset => updates.push(inset) });
@@ -286,8 +286,13 @@ function runtime() {
   const settingsCalls = a.scripts.length; await advance(60000); assert.equal(a.scripts.length, settingsCalls);
   a.coordinator.setVisible(true);
   assert.deepEqual(a.updates, [101], 'return from settings never briefly collapses safe area');
-  a.facts.suspended = true; a.coordinator.reconcile(); assert.equal(a.updates.at(-1), 0);
+  // A cover that only hides the page pauses detection but keeps the reserved space, so dismissing
+  // it cannot resize the Web viewport. Only a surface that owns the bottom edge releases the space.
+  a.facts.suspended = true; a.coordinator.reconcile();
+  assert.equal(a.updates.at(-1), 101, 'a cover pauses detection without releasing the reserved space');
   a.facts.suspended = false; a.coordinator.reconcile(); assert.equal(a.updates.at(-1), 101);
+  a.facts.insetSuppressed = true; a.coordinator.reconcile(); assert.equal(a.updates.at(-1), 0);
+  a.facts.insetSuppressed = false; a.coordinator.reconcile(); assert.equal(a.updates.at(-1), 101);
   a.coordinator.handleTouch('a', true); a.signal('absent'); await advance(10000);
   assert.equal(a.updates.at(-1), 101, 'late bridge result cannot resize during gesture');
   a.coordinator.handleTouch('a', false);
@@ -343,5 +348,20 @@ function runtime() {
   await adapter.writeExperimentSettings({ ...legacy, webBottomSafeAreaEnabled: 'true' });
   assert.equal((await reopened.readExperimentSettings(DEFAULT_BROWSER_EXPERIMENT_SETTINGS)).webBottomSafeAreaEnabled,
     false, 'malformed persisted opt-in cannot enable the experiment');
+
+  // The tabs overview covers the page inside the same shell instead of navigating away, so nothing
+  // else re-evaluates bottom avoidance on the way out. Without this callback the observer stays
+  // paused and the page never regains its reserved space.
+  const shellSource = fs.readFileSync(path.resolve(root, 'app/pages/BrowserShellPage.ets'), 'utf8');
+  assert.match(shellSource, /@Watch\('handleTabsOverviewBottomSafeAreaChange'\)\s*showTabsSheet/,
+    'the tabs overview must re-evaluate bottom avoidance when it opens or closes');
+  const handlerStart = shellSource.indexOf('private handleTabsOverviewBottomSafeAreaChange(');
+  assert.ok(handlerStart >= 0, 'the tabs overview change handler must exist');
+  assert.match(shellSource.slice(handlerStart, handlerStart + 320),
+    /browserWebBottomSafeAreaCoordinator\.requestCheck\(this\.activeTabId\)/,
+    'the tabs overview change handler must re-request a bottom-safe-area check');
+  assert.match(shellSource,
+    /suspended: this\.resolveWebBottomSafeAreaInsetSuppressed\(\) \|\| this\.showTabsSheet,\s*\n\s*insetSuppressed: this\.resolveWebBottomSafeAreaInsetSuppressed\(\)/,
+    'pausing detection and releasing the reserved space must stay separate facts');
   console.log('Web bottom safe area: event runtime, document memory, input budgets, viewport, and settings checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

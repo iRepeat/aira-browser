@@ -76,6 +76,7 @@ import {
 import { BrowserHomePresentationSessionCoordinator } from './BrowserHomePresentationSessionCoordinator';
 import {
   BrowserHomeSurfaceProfile,
+  BrowserHomeSurfaceProfileInput,
   BrowserHomeSurfaceProfileViewModel,
   BrowserHomeSurfaceScene
 } from './BrowserHomeSurfaceProfileViewModel';
@@ -223,6 +224,9 @@ interface BrowserTabHomeStateApplication {
 
 export interface BrowserTabHomeShell {
   readState: () => BrowserTabHomeShellState;
+  // Render-time reads must not subscribe Home/chrome builders to the full page
+  // state (tabs, transient messages, shortcuts, viewport and search state).
+  readSurfaceProfileInput: () => BrowserHomeSurfaceProfileInput;
   applyState: (application: BrowserTabHomeStateApplication) => void;
   cancelBottomPanelBackdropFocusTransition: () => void;
   restoreHomeBottomPanel: (detent: 'peek' | 'low') => void;
@@ -519,21 +523,27 @@ export class BrowserTabHomeCoordinator {
   }
 
   buildHomeSurfaceProfile(homeVisibleOverride?: boolean): BrowserHomeSurfaceProfile {
-    const state = this.shell.readState();
+    return this.buildHomeSurfaceProfileFromInput(this.shell.readSurfaceProfileInput(), homeVisibleOverride);
+  }
+
+  private buildHomeSurfaceProfileFromInput(
+    input: BrowserHomeSurfaceProfileInput,
+    homeVisibleOverride?: boolean
+  ): BrowserHomeSurfaceProfile {
     return this.homeSurfaceProfileViewModel.buildProfile({
-      showHomePage: homeVisibleOverride ?? state.showHomePage,
-      webPageVisible: !state.showHomePage,
-      thirdPartyHomepageAllowed: !state.currentBoundaryPrivate,
-      customHomepageState: state.customHomepageRuntimeState.presentation,
-      customHomepageWebVisible: state.customHomepageRuntimeState.surfaceVisible
+      showHomePage: homeVisibleOverride ?? input.showHomePage,
+      webPageVisible: input.webPageVisible,
+      thirdPartyHomepageAllowed: input.thirdPartyHomepageAllowed,
+      customHomepageState: input.customHomepageState,
+      customHomepageWebVisible: input.customHomepageWebVisible
     });
   }
 
   buildHomeSystemChromePolicyState(
     homeVisibleOverride?: boolean
   ): BrowserHomeSystemChromePolicyState {
-    const state = this.shell.readState();
-    const profile = this.buildHomeSurfaceProfile(homeVisibleOverride);
+    const input = this.shell.readSurfaceProfileInput();
+    const profile = this.buildHomeSurfaceProfileFromInput(input, homeVisibleOverride);
     const scrollBehavior =
       this.dependencies.preferencesRepository.getPreferences().appearance.bottomToolbarScrollBehavior;
     return {
@@ -542,7 +552,7 @@ export class BrowserTabHomeCoordinator {
       systemEntryButtonVisible: profile.systemEntryButtonVisible,
       homeScrollMode: this.homeChromeScrollCoordinator.resolvePolicyMode(
         profile,
-        state.customHomepageRuntimeState.presentation,
+        input.customHomepageState,
         scrollBehavior
       ),
       bottomPanelHomeSearchVisible: profile.bottomSearchVisible,

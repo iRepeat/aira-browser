@@ -68,6 +68,7 @@ export struct SyncExperienceHost {
   @State private state: SyncExperienceViewState = DEFAULT_SYNC_EXPERIENCE_STATE;
   @State private isBusy: boolean = false;
   @State private isSyncing: boolean = false;
+  private hostVisible: boolean = false;
   @State private preActiveStatusKind: SyncExperiencePreActiveStatusKind = 'initial-loading';
   @State private activeSheetVisible: boolean = false;
   @State private desktopGuideNavigationActive: boolean = false;
@@ -130,10 +131,12 @@ export struct SyncExperienceHost {
   @State private syncWorkspaceView: 'overview' | 'additional_backup' = 'overview';
 
   aboutToAppear(): void {
+    this.hostVisible = true;
     this.refreshState(true);
   }
 
   onPageShow(): void {
+    this.hostVisible = true;
     if (this.desktopGuideNavigationActive) {
       this.desktopGuideNavigationActive = false;
       this.activeSheetVisible = true;
@@ -142,11 +145,12 @@ export struct SyncExperienceHost {
   }
 
   aboutToDisappear(): void {
+    this.hostVisible = false;
     this.syncProgressController.dispose();
   }
 
   onBackPress(): boolean {
-    return this.isBusy;
+    return this.isBusy && !this.isSyncing;
   }
 
   build() {
@@ -322,6 +326,7 @@ export struct SyncExperienceHost {
   }
 
   private exitSyncExperience(): void {
+    this.hostVisible = false;
     if (this.onExit !== undefined) {
       this.onExit();
       return;
@@ -389,15 +394,20 @@ export struct SyncExperienceHost {
     }
     this.isBusy = true;
     this.isSyncing = true;
-    this.syncProgressController.begin('正在同步', '正在整理书签、历史记录、主页收藏、小说书架和常用设置');
+    // Ordinary sync runs in the shared owner; keep scrolling and navigation available.
+    // isBusy still prevents repeat requests and provider/content changes during this run.
     sharedSyncExperienceCoordinator.syncNow()
       .then((outcome: SyncExperienceActionOutcome) => {
-        this.completeProgressOutcome(outcome);
+        if (this.hostVisible && outcome.type !== 'completed') {
+          this.renderOutcome(outcome);
+        }
       })
       .finally(() => {
         this.isSyncing = false;
         this.isBusy = false;
-        this.refreshState();
+        if (this.hostVisible) {
+          this.refreshState();
+        }
       });
   }
 

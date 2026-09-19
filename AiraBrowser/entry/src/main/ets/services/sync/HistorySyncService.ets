@@ -464,7 +464,12 @@ export class HistorySyncService {
     if (appliedChangeCount <= 0 || this.projectionRefreshHandler === undefined) {
       return;
     }
-    await this.projectionRefreshHandler();
+    const refreshSpan = AiraSyncJankProbe.beginStage('history_ui_refresh');
+    try {
+      await this.projectionRefreshHandler();
+    } finally {
+      AiraSyncJankProbe.endStage(refreshSpan);
+    }
   }
 
   private stringifyError(error: Error): string {

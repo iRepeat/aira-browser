@@ -10,7 +10,14 @@ export interface BrowserWebBottomSafeAreaFacts {
   url: string;
   controller?: webview.WebviewController;
   eligible: boolean;
+  // Pauses the page observer without giving up the reserved space: a cover that hides the page
+  // (the tabs overview, or a settings page through `setVisible`) must stop detection, but it is not
+  // an input surface, so the space the page already needed stays reserved.
   suspended: boolean;
+  // Releases the reserved space. Only a surface that occupies the bottom edge for its own input —
+  // keyboard, address field, reader overlays — does this; leaving the space reserved under a cover
+  // avoids a viewport resize that would reflow the page as the cover dismisses.
+  insetSuppressed: boolean;
   systemBottomInsetVp: number;
 }
 
@@ -234,7 +241,7 @@ export class BrowserWebBottomSafeAreaCoordinator {
   private applyPresentation(facts: BrowserWebBottomSafeAreaFacts,
     session: BottomSafeAreaDocumentSession | undefined): void {
     if (!this.visible) return;
-    if (!facts.eligible || facts.suspended || session === undefined) {
+    if (!facts.eligible || facts.insetSuppressed || session === undefined) {
       this.publish(0);
       return;
     }

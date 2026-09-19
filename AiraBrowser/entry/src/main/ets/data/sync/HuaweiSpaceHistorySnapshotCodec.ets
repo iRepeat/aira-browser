@@ -1,6 +1,7 @@
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { util } from '@kit.ArkTS';
 import {
+  HISTORY_SYNC_MAX_VISITS,
   HistorySyncDeleteRange,
   HistorySyncExactTombstone,
   HistorySyncRetentionFrontier,
@@ -17,6 +18,10 @@ const HUAWEI_SPACE_HISTORY_ROW_MAX_BYTES: number = 12 * 1024;
 const HUAWEI_SPACE_HISTORY_CHUNK_TARGET_BYTES: number = 11 * 1024;
 const HUAWEI_SPACE_HISTORY_SLOT_COUNT: number = 2;
 const HUAWEI_SPACE_HISTORY_MAX_CHUNKS_PER_BUCKET: number = 128;
+// Older lite writers normalized without applying retention and could publish >10k visits.
+// Read those bounded snapshots through the usual hashes/counts/checksum validation so merge
+// can apply retention and publish a repaired Head. This is not a new publication limit.
+const HUAWEI_SPACE_HISTORY_RECOVERY_MAX_VISITS: number = 100000;
 
 export type HuaweiSpaceHistoryRecordKind =
   'visit' |
@@ -422,6 +427,7 @@ export class HuaweiSpaceHistorySnapshotCodec {
     generatedAt: number = Date.now()
   ): HuaweiSpaceHistoryProjection {
     const normalized = this.mergeService.normalize(state);
+    this.requireRetainedPublication(normalized);
     const ownHead = mirror.selectedHeads.find((head: HuaweiSpaceHistoryHead): boolean => {
       return head.value.deviceId === this.deviceId;
     });
@@ -561,6 +567,7 @@ export class HuaweiSpaceHistorySnapshotCodec {
     generatedAt: number = Date.now()
   ): HuaweiSpaceHistoryProjection {
     const normalized = this.mergeService.normalize(state);
+    this.requireRetainedPublication(normalized);
     let ownHeadRow: HuaweiSpaceHistoryRow | undefined = undefined;
     let ownHead: HuaweiSpaceHistoryHeadData | undefined = undefined;
     const legacyRowIds: string[] = [];
@@ -619,26 +626,33 @@ export class HuaweiSpaceHistorySnapshotCodec {
       // had not named without checking, which is how a head could end up
       // checksummed against data its buckets did not hold.
       if (currentReference !== undefined) {
-        const currentRecords = this.materializeOwnBucketRecords(
+        if (this.ownBucketMatchesDesired(
           bucketRowByLogicalId,
           chunkRowByLogicalId,
           bucketIndex,
-          currentReference
-        );
-        if (currentRecords !== undefined && this.sameRecords(currentRecords, desiredRecords)) {
+          currentReference,
+          desiredRecords
+        )) {
           bucketReferences.push(currentReference);
           continue;
         }
       }
       const bucketSlot = currentReference === undefined ? 0 : 1 - currentReference.bucketSlot;
-      const built = this.buildBucket(
+      const built = this.buildBucketReusingChunks(
         bucketIndex,
         bucketSlot,
         generation,
         timestamp,
-        desiredRecords
+        desiredRecords,
+        chunkRowByLogicalId
       );
-      rowsToUpsert.push(...built.rows);
+      for (const row of built.rows) {
+        const existing = chunkRowByLogicalId.get(row.logicalId);
+        if (existing === undefined || existing.rowId !== row.rowId ||
+          existing.data !== row.data || existing.updatedAt !== row.updatedAt) {
+          rowsToUpsert.push(row);
+        }
+      }
       bucketReferences.push(built.reference);
       const expectedPrefix = this.buildChunkLogicalPrefix(this.deviceId, bucketIndex, bucketSlot);
       const candidateRowIds = chunkRowIdsByPrefix.get(expectedPrefix) ?? [];
@@ -674,54 +688,57 @@ export class HuaweiSpaceHistorySnapshotCodec {
     };
   }
 
-  private materializeOwnBucketRecords(
+  private ownBucketMatchesDesired(
     bucketRowByLogicalId: Map<string, HuaweiSpaceHistoryRow>,
     chunkRowByLogicalId: Map<string, HuaweiSpaceHistoryRow>,
     bucketIndex: number,
-    reference: HuaweiSpaceHistoryBucketReference
-  ): HuaweiSpaceHistorySnapshotRecord[] | undefined {
+    reference: HuaweiSpaceHistoryBucketReference,
+    desiredRecords: HuaweiSpaceHistorySnapshotRecord[]
+  ): boolean {
+    if (desiredRecords.length !== reference.recordCount) {
+      return false;
+    }
     const bucketLogicalId = this.buildBucketLogicalId(this.deviceId, bucketIndex, reference.bucketSlot);
     const bucketRow = bucketRowByLogicalId.get(bucketLogicalId);
     if (bucketRow === undefined) {
-      return undefined;
+      return false;
     }
-    let bucket: HuaweiSpaceHistoryBucket;
     try {
-      bucket = this.parseBucket(bucketRow);
+      const bucket = this.parseBucket(bucketRow);
+      if (bucket.hash !== reference.hash) {
+        return false;
+      }
+      let offset = 0;
+      for (let index = 0; index < bucket.value.chunks.length; index += 1) {
+        const chunkReference = bucket.value.chunks[index];
+        const chunkLogicalId = this.buildChunkLogicalId(
+          this.deviceId, bucketIndex, reference.bucketSlot, chunkReference.segmentIndex
+        );
+        const chunkRow = chunkRowByLogicalId.get(chunkLogicalId);
+        const end = offset + chunkReference.recordCount;
+        if (chunkRow === undefined || end > desiredRecords.length) {
+          return false;
+        }
+        this.validateOuterRow(chunkRow);
+        const generatedAt = this.requireTimestamp(chunkRow.updatedAt, 'generatedAt');
+        // Desired records have already passed strict normalization/record validation.
+        // Rebuild the exact canonical envelope using the stored timestamp, then compare
+        // all bytes and the referenced hash. Equality proves the old payload is that
+        // validated payload without reparsing every stored URL or trusting dirty hints.
+        const expected = this.buildChunkData(
+          bucketIndex, reference.bucketSlot, chunkReference.segmentIndex, 0,
+          generatedAt, desiredRecords.slice(offset, end)
+        );
+        if (JSON.stringify(expected) !== chunkRow.data ||
+          this.sha256Hex(chunkRow.data) !== chunkReference.hash) {
+          return false;
+        }
+        offset = end;
+      }
+      return offset === desiredRecords.length;
     } catch (_error) {
-      return undefined;
+      return false;
     }
-    const records: HuaweiSpaceHistorySnapshotRecord[] = [];
-    for (let index = 0; index < bucket.value.chunks.length; index += 1) {
-      const chunkReference = bucket.value.chunks[index];
-      const chunkLogicalId = this.buildChunkLogicalId(
-        this.deviceId,
-        bucketIndex,
-        reference.bucketSlot,
-        chunkReference.segmentIndex
-      );
-      const chunkRow = chunkRowByLogicalId.get(chunkLogicalId);
-      if (chunkRow === undefined) {
-        return undefined;
-      }
-      let chunk: HuaweiSpaceHistoryChunk;
-      try {
-        chunk = this.parseChunk(chunkRow);
-      } catch (_error) {
-        return undefined;
-      }
-      if (chunk.hash !== chunkReference.hash ||
-        chunk.value.records.length !== chunkReference.recordCount) {
-        return undefined;
-      }
-      for (let recordIndex = 0; recordIndex < chunk.value.records.length; recordIndex += 1) {
-        records.push(chunk.value.records[recordIndex]);
-      }
-    }
-    if (records.length !== reference.recordCount) {
-      return undefined;
-    }
-    return records;
   }
 
   async buildProjectionCooperatively(
@@ -731,6 +748,7 @@ export class HuaweiSpaceHistorySnapshotCodec {
     generatedAt: number = Date.now()
   ): Promise<HuaweiSpaceHistoryProjection> {
     const normalized = await this.mergeService.normalizeCooperatively(state, throttle);
+    this.requireRetainedPublication(normalized);
     const ownHead = mirror.selectedHeads.find((head: HuaweiSpaceHistoryHead): boolean => {
       return head.value.deviceId === this.deviceId;
     });
@@ -919,7 +937,7 @@ export class HuaweiSpaceHistorySnapshotCodec {
       buckets.set(index, []);
     }
     state.visits.forEach((value: HistorySyncVisit): void => {
-      this.appendSnapshotRecord(buckets, this.buildVisitRecord(value));
+      this.appendSnapshotRecord(buckets, this.buildNormalizedVisitRecord(value));
     });
     state.tombstones.forEach((value: HistorySyncExactTombstone): void => {
       this.appendSnapshotRecord(buckets, this.buildTombstoneRecord(value));
@@ -963,7 +981,7 @@ export class HuaweiSpaceHistorySnapshotCodec {
     }
     let processed = 0;
     for (let index = 0; index < state.visits.length; index += 1) {
-      this.appendSnapshotRecord(buckets, this.buildVisitRecord(state.visits[index]));
+      this.appendSnapshotRecord(buckets, this.buildNormalizedVisitRecord(state.visits[index]));
       processed += 1;
       await throttle.afterBatchItem(processed);
     }
@@ -1012,6 +1030,93 @@ export class HuaweiSpaceHistorySnapshotCodec {
     const records = buckets.get(bucketIndex) ?? [];
     records.push(record);
     buckets.set(bucketIndex, records);
+  }
+
+  private buildBucketReusingChunks(
+    bucketIndex: number,
+    bucketSlot: number,
+    generation: number,
+    generatedAt: number,
+    records: HuaweiSpaceHistorySnapshotRecord[],
+    existingChunks: Map<string, HuaweiSpaceHistoryRow>
+  ): HuaweiSpaceHistoryBuiltBucket {
+    // Reuse only the inactive slot. The currently published slot stays intact until Head commit.
+    // Prior chunk end keys are partition hints, never trusted data: every output record comes
+    // from the validated desired state, and reusing an old row requires exact canonical bytes.
+    const stable = this.tryBuildStableBucket(
+      bucketIndex, bucketSlot, generation, generatedAt, records, existingChunks
+    );
+    return stable ?? this.buildBucket(bucketIndex, bucketSlot, generation, generatedAt, records);
+  }
+
+  private tryBuildStableBucket(
+    bucketIndex: number,
+    bucketSlot: number,
+    generation: number,
+    generatedAt: number,
+    records: HuaweiSpaceHistorySnapshotRecord[],
+    existingChunks: Map<string, HuaweiSpaceHistoryRow>
+  ): HuaweiSpaceHistoryBuiltBucket | undefined {
+    const rows: HuaweiSpaceHistoryRow[] = [];
+    const references: HuaweiSpaceHistoryChunkReference[] = [];
+    let offset = 0;
+    let previousBoundary = '';
+    try {
+      for (let segment = 0; segment < HUAWEI_SPACE_HISTORY_MAX_CHUNKS_PER_BUCKET; segment += 1) {
+        const logicalId = this.buildChunkLogicalId(this.deviceId, bucketIndex, bucketSlot, segment);
+        const existing = existingChunks.get(logicalId);
+        if (existing === undefined) {
+          // New/empty slots use the ordinary compact layout. Large additions also fall back
+          // instead of exhausting the segment limit or producing oversized records.
+          if (offset === records.length && rows.length > 0) {
+            return this.finishBucket(bucketIndex, bucketSlot, generatedAt, records.length, rows, references);
+          }
+          return undefined;
+        }
+        const old = JSON.parse(existing.data) as HuaweiSpaceHistoryChunkData;
+        if (!Array.isArray(old.records) || old.records.length === 0) {
+          return undefined;
+        }
+        const last = this.parseSnapshotRecord(old.records[old.records.length - 1]);
+        const boundary = this.buildSnapshotRecordKey(last);
+        if (segment > 0 && boundary.localeCompare(previousBoundary) <= 0) {
+          return undefined;
+        }
+        previousBoundary = boundary;
+        let end = offset;
+        const nextId = this.buildChunkLogicalId(this.deviceId, bucketIndex, bucketSlot, segment + 1);
+        const lastSegment = !existingChunks.has(nextId);
+        while (end < records.length && (lastSegment ||
+          this.buildSnapshotRecordKey(records[end]).localeCompare(boundary) <= 0)) {
+          end += 1;
+        }
+        if (end === offset) {
+          // Empty chunks are forbidden by H2; compact this bucket when an entire chunk vanished.
+          return undefined;
+        }
+        const desired = records.slice(offset, end);
+        const chunk = this.buildChunk(bucketIndex, bucketSlot, segment, generation, generatedAt, desired);
+        this.validateOuterRow(existing);
+        const originalTime = this.requireTimestamp(existing.updatedAt, 'generatedAt');
+        const oldEnvelope = this.buildChunkData(bucketIndex, bucketSlot, segment, generation, originalTime, desired);
+        if (JSON.stringify(oldEnvelope) === existing.data) {
+          this.assertRowSize(existing.data);
+          chunk.row = existing;
+          chunk.reference.hash = this.sha256Hex(existing.data);
+        }
+        rows.push(chunk.row);
+        references.push(chunk.reference);
+        offset = end;
+        if (lastSegment) {
+          return this.finishBucket(bucketIndex, bucketSlot, generatedAt, records.length, rows, references);
+        }
+      }
+    } catch (_error) {
+      // Malformed partition hints are never published; normal construction still validates
+      // row sizes and the final desired state, and overwrites the inactive slot safely.
+      return undefined;
+    }
+    return undefined;
   }
 
   private buildBucket(
@@ -1076,6 +1181,17 @@ export class HuaweiSpaceHistorySnapshotCodec {
     if (pending.length > 0) {
       flush();
     }
+    return this.finishBucket(bucketIndex, bucketSlot, generatedAt, records.length, rows, chunkReferences);
+  }
+
+  private finishBucket(
+    bucketIndex: number,
+    bucketSlot: number,
+    generatedAt: number,
+    recordCount: number,
+    rows: HuaweiSpaceHistoryRow[],
+    chunkReferences: HuaweiSpaceHistoryChunkReference[]
+  ): HuaweiSpaceHistoryBuiltBucket {
     if (chunkReferences.length > HUAWEI_SPACE_HISTORY_MAX_CHUNKS_PER_BUCKET) {
       throw new Error('Huawei History bucket exceeds the compact snapshot safety limit.');
     }
@@ -1102,7 +1218,7 @@ export class HuaweiSpaceHistorySnapshotCodec {
       bucketIndex,
       bucketSlot,
       hash: this.sha256Hex(encoded),
-      recordCount: records.length
+      recordCount
     };
     const built: HuaweiSpaceHistoryBuiltBucket = {
       rows,
@@ -1853,7 +1969,9 @@ export class HuaweiSpaceHistorySnapshotCodec {
     const encoded = JSON.stringify(value.data);
     if (value.kind === 'v') {
       const visit = this.parseVisit(value.logicalId, value.updatedAt, encoded);
-      canonical = this.buildVisitRecord(visit);
+      // parseVisit already checked fields, identity, URL and canonical bytes.
+      // Do not serialize and validate the same visit a second time.
+      canonical = { kind: 'v', logicalId: visit.visitId, updatedAt: visit.visitedAt, data: visit };
     } else if (value.kind === 't') {
       const tombstone = this.parseTombstone(value.logicalId, value.updatedAt, encoded);
       canonical = this.buildTombstoneRecord(tombstone);
@@ -1885,10 +2003,13 @@ export class HuaweiSpaceHistorySnapshotCodec {
     return canonical;
   }
 
-  private buildVisitRecord(value: HistorySyncVisit): HuaweiSpaceHistorySnapshotRecord {
-    const encoded = JSON.stringify(value);
-    const canonical = this.parseVisit(value.visitId, value.visitedAt, encoded);
-    return { kind: 'v', logicalId: canonical.visitId, updatedAt: canonical.visitedAt, data: canonical };
+  private buildNormalizedVisitRecord(value: HistorySyncVisit): HuaweiSpaceHistorySnapshotRecord {
+    // Only called while building buckets from mergeService.normalize output.
+    // URL/identity/timestamp normalization has already happened for these owned
+    // records. Keep the transport's stricter field/transition validation here.
+    this.requireVisitFields(value);
+    this.requireTimestamp(value.visitedAt, 'visitedAt');
+    return { kind: 'v', logicalId: value.visitId, updatedAt: value.visitedAt, data: value };
   }
 
   private buildTombstoneRecord(value: HistorySyncExactTombstone): HuaweiSpaceHistorySnapshotRecord {
@@ -1905,6 +2026,20 @@ export class HuaweiSpaceHistorySnapshotCodec {
 
   private parseVisit(logicalId: string, updatedAt: number, encoded: string): HistorySyncVisit {
     const value = JSON.parse(encoded) as HistorySyncVisit;
+    this.requireVisitFields(value);
+    this.requireTimestamp(value.visitedAt, 'visitedAt');
+    const canonical = this.mergeService.normalizeVisit(value);
+    if (canonical === undefined) {
+      throw new Error('Huawei History visit payload is not canonical.');
+    }
+    if (canonical.visitId !== logicalId || canonical.visitedAt !== updatedAt ||
+      JSON.stringify(canonical) !== encoded) {
+      throw new Error('Huawei History visit payload identity is invalid.');
+    }
+    return canonical;
+  }
+
+  private requireVisitFields(value: HistorySyncVisit): void {
     if (value === null || typeof value !== 'object' || typeof value.visitId !== 'string' ||
       typeof value.clientId !== 'string' || typeof value.nativeVisitId !== 'string' ||
       typeof value.url !== 'string' || typeof value.title !== 'string' ||
@@ -1913,19 +2048,6 @@ export class HuaweiSpaceHistorySnapshotCodec {
       !this.isHistoryTransition(value.transition)) {
       throw new Error('Huawei History visit payload is invalid.');
     }
-    this.requireTimestamp(value.visitedAt, 'visitedAt');
-    const state = this.mergeService.emptyState();
-    state.visits = [value];
-    const normalized = this.mergeService.normalize(state);
-    if (normalized.visits.length !== 1) {
-      throw new Error('Huawei History visit payload is not canonical.');
-    }
-    const canonical = normalized.visits[0];
-    if (canonical.visitId !== logicalId || canonical.visitedAt !== updatedAt ||
-      JSON.stringify(canonical) !== encoded) {
-      throw new Error('Huawei History visit payload identity is invalid.');
-    }
-    return canonical;
   }
 
   private parseTombstone(logicalId: string, updatedAt: number, encoded: string): HistorySyncExactTombstone {
@@ -2013,13 +2135,21 @@ export class HuaweiSpaceHistorySnapshotCodec {
 
   private parseCounts(value: HuaweiSpaceHistorySnapshotCounts): HuaweiSpaceHistorySnapshotCounts {
     const canonical: HuaweiSpaceHistorySnapshotCounts = {
-      visits: this.requireInteger(value.visits, 0, 10000, 'visits'),
+      visits: this.requireInteger(value.visits, 0, HUAWEI_SPACE_HISTORY_RECOVERY_MAX_VISITS, 'visits'),
       tombstones: this.requireInteger(value.tombstones, 0, 100000, 'tombstones'),
       deleteRanges: this.requireInteger(value.deleteRanges, 0, 100000, 'deleteRanges'),
       clearBefore: this.requireInteger(value.clearBefore, 0, 1, 'clearBefore'),
       retentionFrontier: this.requireInteger(value.retentionFrontier, 0, 1, 'retentionFrontier')
     };
     return canonical;
+  }
+
+  private requireRetainedPublication(state: HuaweiSpaceHistorySyncState): void {
+    if (state.visits.length > HISTORY_SYNC_MAX_VISITS) {
+      // The caller must use the ordinary merge/apply path so the retained state and its
+      // deletion frontier are persisted locally too; silently slicing here would lose that.
+      throw new Error('Huawei History publication exceeds the retention limit; full merge required.');
+    }
   }
 
   private countState(state: HuaweiSpaceHistorySyncState): HuaweiSpaceHistorySnapshotCounts {

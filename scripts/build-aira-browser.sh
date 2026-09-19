@@ -14,6 +14,7 @@ SHORTCUTS_RESOURCE="${PROJECT_DIR}/entry/src/main/resources/base/profile/shortcu
 APP_VERSION_INFO="${PROJECT_DIR}/entry/src/main/ets/common/constants/AppVersionInfo.ets"
 DISTRIBUTION_OWNER="${PROJECT_DIR}/entry/src/main/ets/common/config/AiraDistributionCapabilityOwner.ets"
 LOCAL_TEST_AUTH_CONFIG="${PROJECT_DIR}/entry/src/main/ets/common/config/AiraLocalTestAuth.ets"
+SYNC_DIAGNOSTICS_CONFIG="${PROJECT_DIR}/entry/src/main/ets/common/config/AiraSyncDiagnostics.ets"
 AGCONNECT_RAWFILE="${PROJECT_DIR}/AppScope/resources/rawfile/agconnect-services.json"
 AGCONNECT_LOCAL_DEFAULT="${PROJECT_DIR}/agconnect-services.local.json"
 BUILD_PROFILE_TEMPLATE="${PROJECT_DIR}/build-profile.json5"
@@ -34,6 +35,13 @@ IMMERSIVE_LIGHT_SENSE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-immersive-li
 SYNC_FIRST_ACTIVATION_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-first-activation-contract.sh"
 SYNC_PROVIDER_SWITCH_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-provider-switch-contract.sh"
 HISTORY_SYNC_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-history-sync-contract.sh"
+HISTORY_PROVIDER_TRANSITION_TEST="${REPO_ROOT}/scripts/check-aira-history-provider-transition.cjs"
+SYNC_RESPONSIVENESS_TEST="${REPO_ROOT}/scripts/check-aira-sync-responsiveness.cjs"
+HISTORY_REPLICA_RESPONSIVENESS_TEST="${REPO_ROOT}/scripts/check-aira-history-replica-responsiveness.cjs"
+HISTORY_RECORD_VALIDATION_TEST="${REPO_ROOT}/scripts/check-aira-history-record-validation.cjs"
+HISTORY_REMOTE_READ_BUDGET_TEST="${REPO_ROOT}/scripts/check-aira-history-remote-read-budget.cjs"
+HISTORY_RETRY_BACKOFF_TEST="${REPO_ROOT}/scripts/check-aira-history-retry-backoff.cjs"
+SYNC_DIAGNOSTICS_TEST="${REPO_ROOT}/scripts/check-aira-sync-diagnostics.cjs"
 BOOKMARK_SNAPSHOT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bookmark-snapshot-contract.sh"
 NEW_USER_GIFT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-new-user-gift-contract.sh"
 PRO_RENEWAL_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-pro-renewal-contract.sh"
@@ -61,6 +69,7 @@ SHORTCUTS_BACKUP=""
 APP_VERSION_INFO_BACKUP=""
 DISTRIBUTION_OWNER_BACKUP=""
 LOCAL_TEST_AUTH_CONFIG_BACKUP=""
+SYNC_DIAGNOSTICS_BACKUP=""
 AGCONNECT_BACKUP=""
 AGCONNECT_WAS_PRESENT=0
 DISTRIBUTION_CONFIGURED=0
@@ -102,6 +111,10 @@ configure_cargo_home() {
 }
 
 cleanup() {
+  if [ -n "${SYNC_DIAGNOSTICS_BACKUP}" ] && [ -f "${SYNC_DIAGNOSTICS_BACKUP}" ]; then
+    cp "${SYNC_DIAGNOSTICS_BACKUP}" "${SYNC_DIAGNOSTICS_CONFIG}"
+    rm -f "${SYNC_DIAGNOSTICS_BACKUP}"
+  fi
   if [ -n "${BUILD_PROFILE_BACKUP}" ] && [ -f "${BUILD_PROFILE_BACKUP}" ]; then
     cp "${BUILD_PROFILE_BACKUP}" "${BUILD_PROFILE_TEMPLATE}"
     rm -f "${BUILD_PROFILE_BACKUP}"
@@ -310,6 +323,13 @@ if [ ! -x "${HISTORY_SYNC_GUARD_SCRIPT}" ]; then
 fi
 
 "${HISTORY_SYNC_GUARD_SCRIPT}"
+node "${HISTORY_PROVIDER_TRANSITION_TEST}"
+node "${SYNC_RESPONSIVENESS_TEST}"
+node "${HISTORY_REPLICA_RESPONSIVENESS_TEST}"
+node "${HISTORY_RECORD_VALIDATION_TEST}"
+node "${HISTORY_REMOTE_READ_BUDGET_TEST}"
+node "${HISTORY_RETRY_BACKOFF_TEST}"
+node "${SYNC_DIAGNOSTICS_TEST}"
 
 if [ ! -x "${BOOKMARK_SNAPSHOT_GUARD_SCRIPT}" ]; then
   fail "Bookmark snapshot contract guard not executable: ${BOOKMARK_SNAPSHOT_GUARD_SCRIPT}"
@@ -1721,6 +1741,25 @@ fi
 if [ "${BUILD_VARIANT}" = "release" ]; then
   apply_release_page_pruning
   apply_release_source_pruning
+fi
+
+case "${AIRA_SYNC_DIAGNOSTICS:-0}" in
+  0|1) ;;
+  *) fail "AIRA_SYNC_DIAGNOSTICS must be 0 or 1." ;;
+esac
+if [ "${AIRA_SYNC_DIAGNOSTICS:-0}" = "1" ]; then
+  [ "${BUILD_VARIANT}" = "default" ] || fail "Sync diagnostics are only available in default diagnostic builds."
+  SYNC_DIAGNOSTICS_BACKUP="$(mktemp "${TMPDIR:-/tmp}/aira-sync-diagnostics.XXXXXX")"
+  cp "${SYNC_DIAGNOSTICS_CONFIG}" "${SYNC_DIAGNOSTICS_BACKUP}"
+  "${NODE_BIN}" - "${SYNC_DIAGNOSTICS_CONFIG}" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const source = fs.readFileSync(file, 'utf8');
+const flag = 'export const AIRA_ENABLE_SYNC_DIAGNOSTICS: boolean = false;';
+if (!source.includes(flag)) throw new Error('Sync diagnostic source flag must stay disabled.');
+fs.writeFileSync(file, source.replace(flag, flag.replace('false', 'true')));
+NODE
+  echo "Sync diagnostics enabled: 180-second windows, tag SyncJankProbe."
 fi
 
 validate_effective_build_profile() {

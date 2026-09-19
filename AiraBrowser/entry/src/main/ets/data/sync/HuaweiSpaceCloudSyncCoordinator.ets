@@ -137,6 +137,8 @@ export class HuaweiSpaceCloudSyncCoordinator {
     const request = task.request;
     const syncMode = HuaweiSpaceCloudSyncCoordinator.resolveSyncMode(request);
     task.startedAt = Date.now();
+    AiraSyncJankProbe.markExtra('cloud_sync_start',
+      `tables=${request.tableNames.join(',')} mode=${syncMode} queued=${state.pending.length}`);
     hilog.info(
       HUAWEI_SPACE_CLOUD_SYNC_LOG_DOMAIN,
       HUAWEI_SPACE_CLOUD_SYNC_LOG_TAG,

@@ -1,4 +1,8 @@
 import {
+  HistorySyncDeleteRange,
+  HistorySyncExactTombstone,
+  HistorySyncRetentionFrontier,
+  HistorySyncVisit,
   HuaweiSpaceHistorySyncState
 } from '../../common/models/HistorySyncModels';
 import {
@@ -7,6 +11,7 @@ import {
   HuaweiSpaceHistoryRow
 } from '../../data/sync/HuaweiSpaceHistorySnapshotCodec';
 import { util } from '@kit.ArkTS';
+import { AiraSyncCooperativeThrottle } from './AiraSyncWorkThrottleService';
 
 export interface AiraHistoryRemoteWriteProjection {
   rowsToUpsert: HuaweiSpaceHistoryRow[];
@@ -40,125 +45,292 @@ function readU64(source: Uint8Array, offset: number): number {
   return readU32(source, offset) * 4294967296 + readU32(source, offset + 4);
 }
 
+// State framing is only an in-process TaskPool transfer, never a cloud/storage format. Each
+// logical record has its own JSON frame so the caller can yield between parses/stringifies.
+const HISTORY_STATE_TRANSFER_MAGIC: number = 0x41485331;
+const HISTORY_TRANSFER_COPY_SLICE_BYTES: number = 64 * 1024;
+
+interface HistoryTransferMetadata {
+  clearBefore: number;
+  retentionFrontier: HistorySyncRetentionFrontier;
+}
+
+class HistoryTransferWriter {
+  private readonly encoder: util.TextEncoder = util.TextEncoder.create('utf-8');
+  readonly parts: Uint8Array[] = [];
+  byteLength: number = 0;
+
+  appendBytes(bytes: Uint8Array): void {
+    this.parts.push(bytes);
+    this.byteLength += bytes.byteLength;
+  }
+
+  appendString(value: string): void {
+    const bytes = this.encoder.encodeInto(value);
+    const length = new Uint8Array(4);
+    writeU32(length, 0, bytes.byteLength);
+    this.appendBytes(length);
+    this.appendBytes(bytes);
+  }
+
+  appendRow(row: HuaweiSpaceHistoryRow): void {
+    this.appendString(row.rowId);
+    this.appendString(row.recordKind);
+    this.appendString(row.logicalId);
+    this.appendString(row.data);
+    const timestamp = new Uint8Array(8);
+    writeU64(timestamp, 0, row.updatedAt);
+    this.appendBytes(timestamp);
+  }
+
+  pack(): ArrayBuffer {
+    const target = new Uint8Array(this.byteLength);
+    let offset = 0;
+    for (const part of this.parts) {
+      target.set(part, offset);
+      offset += part.byteLength;
+    }
+    return target.buffer;
+  }
+
+  async packCooperatively(throttle: AiraSyncCooperativeThrottle): Promise<ArrayBuffer> {
+    const target = new Uint8Array(this.byteLength);
+    let offset = 0;
+    let copied = 0;
+    for (const part of this.parts) {
+      for (let start = 0; start < part.byteLength; start += HISTORY_TRANSFER_COPY_SLICE_BYTES) {
+        const slice = part.subarray(start, Math.min(part.byteLength, start + HISTORY_TRANSFER_COPY_SLICE_BYTES));
+        target.set(slice, offset);
+        offset += slice.byteLength;
+        await throttle.afterBatchItem(++copied);
+      }
+    }
+    return target.buffer;
+  }
+}
+
+class HistoryTransferReader {
+  private readonly bytes: Uint8Array;
+  private readonly decoder: util.TextDecoder = util.TextDecoder.create('utf-8');
+  private offset: number = 0;
+
+  constructor(buffer: ArrayBuffer) {
+    this.bytes = new Uint8Array(buffer);
+  }
+
+  readNumber(): number {
+    this.requireBytes(4);
+    const value = readU32(this.bytes, this.offset);
+    this.offset += 4;
+    return value;
+  }
+
+  readString(): string {
+    const length = this.readNumber();
+    this.requireBytes(length);
+    const value = this.decoder.decodeToString(this.bytes.subarray(this.offset, this.offset + length));
+    this.offset += length;
+    return value;
+  }
+
+  readRow(): HuaweiSpaceHistoryRow {
+    const rowId = this.readString();
+    const recordKind = this.readString() as HuaweiSpaceHistoryRecordKind;
+    const logicalId = this.readString();
+    const data = this.readString();
+    this.requireBytes(8);
+    const updatedAt = readU64(this.bytes, this.offset);
+    this.offset += 8;
+    return { rowId, recordKind, logicalId, data, updatedAt };
+  }
+
+  assertFinished(): void {
+    if (this.offset !== this.bytes.byteLength) {
+      throw new Error('Huawei History TaskPool payload has trailing bytes.');
+    }
+  }
+
+  private requireBytes(count: number): void {
+    if (count > this.bytes.byteLength - this.offset) {
+      throw new Error('Huawei History TaskPool payload is truncated.');
+    }
+  }
+}
+
+class HistoryStateTransferReader {
+  readonly reader: HistoryTransferReader;
+  readonly state: HuaweiSpaceHistorySyncState;
+  readonly visitCount: number;
+  readonly tombstoneCount: number;
+  readonly rangeCount: number;
+
+  constructor(buffer: ArrayBuffer) {
+    this.reader = new HistoryTransferReader(buffer);
+    if (this.reader.readNumber() !== HISTORY_STATE_TRANSFER_MAGIC) {
+      throw new Error('Huawei History TaskPool state format is invalid.');
+    }
+    this.visitCount = this.reader.readNumber();
+    this.tombstoneCount = this.reader.readNumber();
+    this.rangeCount = this.reader.readNumber();
+    const metadata = JSON.parse(this.reader.readString()) as HistoryTransferMetadata;
+    this.state = {
+      visits: [], tombstones: [], deleteRanges: [],
+      clearBefore: metadata.clearBefore, retentionFrontier: metadata.retentionFrontier
+    };
+  }
+
+  recordCount(): number {
+    return this.visitCount + this.tombstoneCount + this.rangeCount;
+  }
+
+  readRecord(index: number): void {
+    const json = this.reader.readString();
+    if (index < this.visitCount) {
+      this.state.visits.push(JSON.parse(json) as HistorySyncVisit);
+    } else if (index < this.visitCount + this.tombstoneCount) {
+      this.state.tombstones.push(JSON.parse(json) as HistorySyncExactTombstone);
+    } else {
+      this.state.deleteRanges.push(JSON.parse(json) as HistorySyncDeleteRange);
+    }
+  }
+}
+
 export class AiraHistoryTaskpoolTransferCodec {
   static encodeRows(rows: HuaweiSpaceHistoryRow[]): ArrayBuffer {
-    const encoder = util.TextEncoder.create('utf-8');
-    const rowIds: Uint8Array[] = [];
-    const kinds: Uint8Array[] = [];
-    const logicalIds: Uint8Array[] = [];
-    const payloads: Uint8Array[] = [];
-    let packedByteLength = 4;
-    for (let index = 0; index < rows.length; index += 1) {
-      const row = rows[index];
-      const rowId = encoder.encodeInto(row.rowId);
-      const recordKind = encoder.encodeInto(row.recordKind);
-      const logicalId = encoder.encodeInto(row.logicalId);
-      const data = encoder.encodeInto(row.data);
-      rowIds.push(rowId);
-      kinds.push(recordKind);
-      logicalIds.push(logicalId);
-      payloads.push(data);
-      packedByteLength += 24 + rowId.byteLength + recordKind.byteLength +
-        logicalId.byteLength + data.byteLength;
+    const writer = AiraHistoryTaskpoolTransferCodec.rowWriter(rows.length);
+    for (const row of rows) {
+      writer.appendRow(row);
     }
-    const packed = new ArrayBuffer(packedByteLength);
-    const target = new Uint8Array(packed);
-    writeU32(target, 0, rows.length);
-    let offset = 4;
-    for (let index = 0; index < rows.length; index += 1) {
-      const rowId = rowIds[index];
-      const recordKind = kinds[index];
-      const logicalId = logicalIds[index];
-      const data = payloads[index];
-      writeU32(target, offset, rowId.byteLength);
-      offset += 4;
-      target.set(rowId, offset);
-      offset += rowId.byteLength;
-      writeU32(target, offset, recordKind.byteLength);
-      offset += 4;
-      target.set(recordKind, offset);
-      offset += recordKind.byteLength;
-      writeU32(target, offset, logicalId.byteLength);
-      offset += 4;
-      target.set(logicalId, offset);
-      offset += logicalId.byteLength;
-      writeU32(target, offset, data.byteLength);
-      offset += 4;
-      target.set(data, offset);
-      offset += data.byteLength;
-      writeU64(target, offset, rows[index].updatedAt);
-      offset += 8;
+    return writer.pack();
+  }
+
+  static async encodeRowsCooperatively(
+    rows: HuaweiSpaceHistoryRow[], throttle: AiraSyncCooperativeThrottle
+  ): Promise<ArrayBuffer> {
+    await throttle.afterStage();
+    const writer = AiraHistoryTaskpoolTransferCodec.rowWriter(rows.length);
+    for (let index = 0; index < rows.length; index++) {
+      writer.appendRow(rows[index]);
+      await throttle.afterBatchItem(index + 1);
     }
-    return packed;
+    return writer.packCooperatively(throttle);
   }
 
   static decodeRows(rowBuffer: ArrayBuffer): HuaweiSpaceHistoryRow[] {
-    const decoder = util.TextDecoder.create('utf-8');
-    const bytes = new Uint8Array(rowBuffer);
-    if (bytes.byteLength < 4) {
-      throw new Error('Huawei History TaskPool row payload is truncated.');
-    }
-    const rowCount = readU32(bytes, 0);
+    const reader = new HistoryTransferReader(rowBuffer);
+    const count = reader.readNumber();
     const rows: HuaweiSpaceHistoryRow[] = [];
-    let offset = 4;
-    const readString = (): string => {
-      if (offset + 4 > bytes.byteLength) {
-        throw new Error('Huawei History TaskPool row payload is truncated.');
-      }
-      const length = readU32(bytes, offset);
-      offset += 4;
-      if (length < 0 || offset + length > bytes.byteLength) {
-        throw new Error('Huawei History TaskPool row payload length is invalid.');
-      }
-      const value = decoder.decodeToString(bytes.subarray(offset, offset + length));
-      offset += length;
-      return value;
-    };
-    for (let index = 0; index < rowCount; index += 1) {
-      const rowId = readString();
-      const recordKind = readString();
-      const logicalId = readString();
-      const data = readString();
-      if (offset + 8 > bytes.byteLength) {
-        throw new Error('Huawei History TaskPool row payload is truncated.');
-      }
-      const updatedAt = readU64(bytes, offset);
-      offset += 8;
-      rows.push({
-        rowId: rowId,
-        recordKind: recordKind as HuaweiSpaceHistoryRecordKind,
-        logicalId: logicalId,
-        data: data,
-        updatedAt: updatedAt
-      });
+    for (let index = 0; index < count; index++) {
+      rows.push(reader.readRow());
     }
+    reader.assertFinished();
+    return rows;
+  }
+
+  static async decodeRowsCooperatively(
+    rowBuffer: ArrayBuffer, throttle: AiraSyncCooperativeThrottle
+  ): Promise<HuaweiSpaceHistoryRow[]> {
+    await throttle.afterStage();
+    const reader = new HistoryTransferReader(rowBuffer);
+    const count = reader.readNumber();
+    const rows: HuaweiSpaceHistoryRow[] = [];
+    for (let index = 0; index < count; index++) {
+      rows.push(reader.readRow());
+      await throttle.afterBatchItem(index + 1);
+    }
+    reader.assertFinished();
     return rows;
   }
 
   static encodeState(state: HuaweiSpaceHistorySyncState): ArrayBuffer {
-    const encoder = util.TextEncoder.create('utf-8');
-    const bytes = encoder.encodeInto(JSON.stringify(state));
-    const packed = new ArrayBuffer(bytes.byteLength);
-    new Uint8Array(packed).set(bytes);
-    return packed;
+    const writer = AiraHistoryTaskpoolTransferCodec.stateWriter(state);
+    const count = state.visits.length + state.tombstones.length + state.deleteRanges.length;
+    for (let index = 0; index < count; index++) {
+      writer.appendString(AiraHistoryTaskpoolTransferCodec.stateRecordJson(state, index));
+    }
+    return writer.pack();
+  }
+
+  static async encodeStateCooperatively(
+    state: HuaweiSpaceHistorySyncState, throttle: AiraSyncCooperativeThrottle
+  ): Promise<ArrayBuffer> {
+    await throttle.afterStage();
+    const writer = AiraHistoryTaskpoolTransferCodec.stateWriter(state);
+    const count = state.visits.length + state.tombstones.length + state.deleteRanges.length;
+    for (let index = 0; index < count; index++) {
+      writer.appendString(AiraHistoryTaskpoolTransferCodec.stateRecordJson(state, index));
+      await throttle.afterBatchItem(index + 1);
+    }
+    return writer.packCooperatively(throttle);
   }
 
   static decodeState(stateBuffer: ArrayBuffer): HuaweiSpaceHistorySyncState {
-    const decoder = util.TextDecoder.create('utf-8');
-    const parsed = JSON.parse(
-      decoder.decodeToString(new Uint8Array(stateBuffer))
-    ) as HuaweiSpaceHistorySyncState;
-    if (!Array.isArray(parsed.visits) || !Array.isArray(parsed.tombstones) ||
-      !Array.isArray(parsed.deleteRanges)) {
-      throw new Error('Huawei History TaskPool state is invalid.');
+    const transfer = new HistoryStateTransferReader(stateBuffer);
+    for (let index = 0; index < transfer.recordCount(); index++) {
+      transfer.readRecord(index);
     }
-    return parsed;
+    transfer.reader.assertFinished();
+    return transfer.state;
+  }
+
+  static async decodeStateCooperatively(
+    stateBuffer: ArrayBuffer, throttle: AiraSyncCooperativeThrottle
+  ): Promise<HuaweiSpaceHistorySyncState> {
+    await throttle.afterStage();
+    const transfer = new HistoryStateTransferReader(stateBuffer);
+    for (let index = 0; index < transfer.recordCount(); index++) {
+      transfer.readRecord(index);
+      await throttle.afterBatchItem(index + 1);
+    }
+    transfer.reader.assertFinished();
+    return transfer.state;
   }
 
   static copyBuffer(buffer: ArrayBuffer): ArrayBuffer {
     const copy = new ArrayBuffer(buffer.byteLength);
     new Uint8Array(copy).set(new Uint8Array(buffer));
     return copy;
+  }
+
+  static async copyBufferCooperatively(
+    buffer: ArrayBuffer, throttle: AiraSyncCooperativeThrottle
+  ): Promise<ArrayBuffer> {
+    const writer = new HistoryTransferWriter();
+    writer.appendBytes(new Uint8Array(buffer));
+    return writer.packCooperatively(throttle);
+  }
+
+  private static rowWriter(count: number): HistoryTransferWriter {
+    const writer = new HistoryTransferWriter();
+    const header = new Uint8Array(4);
+    writeU32(header, 0, count);
+    writer.appendBytes(header);
+    return writer;
+  }
+
+  private static stateWriter(state: HuaweiSpaceHistorySyncState): HistoryTransferWriter {
+    const writer = new HistoryTransferWriter();
+    const header = new Uint8Array(16);
+    writeU32(header, 0, HISTORY_STATE_TRANSFER_MAGIC);
+    writeU32(header, 4, state.visits.length);
+    writeU32(header, 8, state.tombstones.length);
+    writeU32(header, 12, state.deleteRanges.length);
+    writer.appendBytes(header);
+    const metadata: HistoryTransferMetadata = {
+      clearBefore: state.clearBefore, retentionFrontier: state.retentionFrontier
+    };
+    writer.appendString(JSON.stringify(metadata));
+    return writer;
+  }
+
+  private static stateRecordJson(state: HuaweiSpaceHistorySyncState, index: number): string {
+    if (index < state.visits.length) {
+      return JSON.stringify(state.visits[index]);
+    }
+    const tombstoneIndex = index - state.visits.length;
+    return tombstoneIndex < state.tombstones.length
+      ? JSON.stringify(state.tombstones[tombstoneIndex])
+      : JSON.stringify(state.deleteRanges[tombstoneIndex - state.tombstones.length]);
   }
 
   static leanProjection(projection: HuaweiSpaceHistoryProjection): AiraHistoryRemoteWriteProjection {

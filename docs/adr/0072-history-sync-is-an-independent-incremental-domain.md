@@ -117,7 +117,16 @@ invalidating it. Sync surface loading reuses the same subordinate binding normal
 valid run. An enabled legacy/default selection whose account UID is empty binds to the current supported Provider
 account; an explicit opt-out stays off, and a non-empty mismatched binding is cleared before work resumes.
 There is no dual write and no WebDAV History. A Primary Provider switch between Aira Cloud and Huawei Cloud Space first
-synchronizes the current History source, merges and confirms the target, and only then persists the Primary Provider.
+attempts to synchronize the current History source, merges and confirms the target, and only then persists the Primary Provider.
+
+Amended 2026-09-19: refreshing the old History source is best effort for supported Provider transitions. If it fails,
+the transition continues with the durable local History state, including canonical visits, tombstones, delete ranges,
+and deletion/retention frontiers. The target must still merge and confirm that state before the Primary Provider changes;
+a target failure keeps the old Provider selected. No old-source reset or deletion is performed to implement this fallback,
+and records available only on the old remote are not claimed as migrated. A successful operation includes a short notice
+that the old source could not be fully refreshed and local records were merged into the target; the old-source failure
+does not produce a failure dialog or require a separate confirmation. Ordinary same-Provider synchronization is unchanged.
+
 A user who later enables History on a supported Provider enrolls the preserved local bounded state into that target. Durable account-scoped
 canonical visits, exact tombstones, delete ranges, `clearBefore`,
 and retention frontier state prevent target switching or a stale client from resurrecting deleted visits.
@@ -186,3 +195,49 @@ on a version bump, and warms the store after content is ready instead of on the 
 timer while the user is scrolling. Automatic drain yields a frame before enqueueing so the timer turn
 can complete. Head/Block `cloudSync` remains the ordinary read/write path; this is not a second merge
 algorithm.
+
+
+### Confirmed History read budget
+
+An ordinary Huawei run uses the account-scoped durable confirmed Head to gate unchanged reads; it does not keep and
+renormalize a second full logical snapshot after success. Local pruning also counts as pending work. With an unchanged
+Head, lite publication loads this device's block rows plus all Heads; a full-merge fallback explicitly reloads all device
+blocks before decoding. Lite bucket reuse compares the complete canonical desired chunk bytes and referenced hashes,
+so it does not reparse stored visit URLs or trust dirty hints. The H2 bytes, deletion rules, and write/confirmation ordering
+remain unchanged. This reduces caller work and CPU work without deferring it until scrolling ends.
+
+
+Lite publication may retain the inactive slot's previous chunk boundary keys as partition hints, so small deletions do
+not shift every following record between chunks. Every output payload still comes from the validated desired state;
+reuse requires equality with the full canonical chunk bytes at the original timestamp. An identical inactive chunk is
+omitted from upserts, while bucket and Head reference its verified hash. Empty/oversized layouts or invalid hints fall
+back to compact construction. Only the inactive slot is staged, preserving the current published snapshot until the
+Head barrier. This changes partition choice, not the H2 wire format or deletion/confirmation semantics.
+
+For ordinary local edits with a matching durable/fresh Head, a LOW-priority TaskPool job now opens the already
+initialized local database, reads the account's canonical state and the captured outbox, and builds the lite
+projection there. Database schema/backfill and distributed registration remain with the existing owners and finish
+before dispatch. No RdbStore object crosses threads, and a Context is not serializable across TaskPool either, so the
+worker resolves its own `application.getApplicationContext()` and uses the platform's `*Sync` RDB query APIs (the SDK
+advises running them on a taskpool thread). The TaskPool entry must also be a synchronous `@Concurrent` function: a
+returned Promise is rejected with "Can't return Promise in pending state".
+
+The Huawei replica Head/Block tables are `DISTRIBUTED_CLOUD` tables, and a worker connection cannot query them (a
+generic SQLite error with both predicates and raw SQL), so the caller still packs this device's replica rows and hands
+over a transferable ArrayBuffer. The worker decodes that buffer and combines it with the state it read itself. This
+removes the caller's full local read and its ~5 MB state pack from the UI thread while keeping the replica transfer.
+The shared `HistorySyncSnapshotReader` owns row mapping for both database owner and worker, so provider enrollment,
+deletion records and retention fields do not acquire a second interpretation.
+
+The worker returns changed rows, captured outbox IDs and an ArrayBuffer reserving the exact planned desired state.
+That reserve is not decoded on the normal matching-Head confirmation; a changed/missing Head still invokes the
+existing full block/projection/desired-state verification. Outbox acknowledgement removes only IDs captured before
+the state read. Later edits remain pending, and provider transitions retain all outbox IDs as before. Compute/read
+failure falls back to the existing replica repair/full merge; transport failure does not recompute in the same run.
+
+Platform reference: OpenHarmony's official `batch-database-operations-guide.md` and `@ohos.data.relationalStore` advise
+performing `queryWithoutRowCountSync` on a taskpool thread, and `@ohos.app.ability.application`'s `getApplicationContext()`
+provides context access independent of the ability base class so a worker can obtain the application context itself. The
+installed Huawei SDK documents that simultaneous multithreaded opens are unsupported, so this path awaits owner
+initialization, then opens and closes the two read handles sequentially.
+The worker does not create tables, perform migrations, register distributed tables, or initiate cloud transport.

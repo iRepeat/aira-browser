@@ -49,9 +49,16 @@ interface HuaweiSpaceHistoryHeadChecksum {
 const HUAWEI_SPACE_HISTORY_SYNC_TIMEOUT_MS: number = 300000;
 const HUAWEI_HISTORY_LOG_DOMAIN: number = 0x0000;
 const HUAWEI_HISTORY_LOG_TAG: string = 'HuaweiHistorySync';
+const HISTORY_ROW_LOOKUP_BATCH_SIZE: number = 200;
 
 export interface HuaweiSpaceHistoryWriteResult {
   state: HuaweiSpaceHistorySyncState;
+  changedRowCount: number;
+  localApplyRequired: boolean;
+}
+
+export interface HuaweiSpaceHistoryDeferredWriteResult {
+  state?: HuaweiSpaceHistorySyncState;
   changedRowCount: number;
   localApplyRequired: boolean;
 }
@@ -64,11 +71,12 @@ export class HuaweiSpaceHistoryRemoteStore {
   private readonly computeExecutor: AiraSyncComputeExecutor = new AiraSyncComputeExecutor();
   private readonly rowReadThrottle: AiraSyncWorkThrottleService = new AiraSyncWorkThrottleService(
     undefined,
-    { batchSize: 100000, batchPauseMs: 16, stagePauseMs: 16 }
+    { batchSize: 250 }
   );
   private store?: relationalStore.RdbStore;
   private storePromise?: Promise<relationalStore.RdbStore>;
   private freshRows?: HuaweiSpaceHistoryRow[];
+  private freshRowsOwnDeviceOnly: boolean = false;
   private freshLegacyRowIds: string[] = [];
   private lastMirror?: HuaweiSpaceHistoryPhysicalMirror;
   private lastHeadChecksum: string = '';
@@ -179,11 +187,18 @@ export class HuaweiSpaceHistoryRemoteStore {
   }
 
 
-  async preparePackedReplicaRows(): Promise<boolean> {
+  // The worker plan needs the replica rows packed for transfer. Real stores support it;
+  // keeping it an explicit capability lets tests and other transports opt out.
+  supportsWorkerReplicaPlan(): boolean {
+    return true;
+  }
+
+  async preparePackedReplicaRows(ownDeviceOnly: boolean = false): Promise<boolean> {
     this.assertConfigured();
     const store = await this.getStore();
     const headRows = this.peekedHeadRows ?? await this.readRawRows(store, HUAWEI_SPACE_HISTORY_HEAD_TABLE);
-    let rows = headRows.concat(await this.readRawRows(store, HUAWEI_SPACE_HISTORY_BLOCK_TABLE));
+    let rows = headRows.concat(await this.readRawRows(store, HUAWEI_SPACE_HISTORY_BLOCK_TABLE, undefined,
+      ownDeviceOnly ? `${this.deviceId}:` : undefined));
     if (this.needsOwnHeadComplete(rows)) {
       const repairStartedAt = Date.now();
       await this.runCloudSync(
@@ -193,26 +208,28 @@ export class HuaweiSpaceHistoryRemoteStore {
         [HUAWEI_SPACE_HISTORY_BLOCK_TABLE]
       );
       const repairedHeads = await this.readRawRows(store, HUAWEI_SPACE_HISTORY_HEAD_TABLE);
-      rows = repairedHeads.concat(await this.readRawRows(store, HUAWEI_SPACE_HISTORY_BLOCK_TABLE));
+      rows = repairedHeads.concat(await this.readRawRows(store, HUAWEI_SPACE_HISTORY_BLOCK_TABLE, undefined,
+      ownDeviceOnly ? `${this.deviceId}:` : undefined));
       const stillIncomplete = this.needsOwnHeadComplete(rows);
       this.logStage('replica-repair', repairStartedAt, `complete=${stillIncomplete ? 0 : 1}`);
       if (stillIncomplete) {
         return false;
       }
-    } else if (this.needsBlockCloudSync(rows)) {
+    } else if (!ownDeviceOnly && this.needsBlockCloudSync(rows)) {
       AiraSyncJankProbe.markExtra(
         'history_replica_partial',
         `scope=self ownHeadComplete=1 otherDevicesIncomplete=1 rows=${rows.length}`
       );
     }
     const packStartedAt = Date.now();
-    const packed = AiraHistoryTaskpoolTransferCodec.encodeRows(rows);
+    const packed = await AiraHistoryTaskpoolTransferCodec.encodeRowsCooperatively(rows, this.rowReadThrottle);
     AiraSyncJankProbe.endExtra(
       'history_row_pack',
       packStartedAt,
       `bytes=${packed.byteLength} rows=${rows.length}`
     );
     this.freshRows = rows;
+    this.freshRowsOwnDeviceOnly = ownDeviceOnly;
     this.lastPackedRows = packed;
     return true;
   }
@@ -223,12 +240,18 @@ export class HuaweiSpaceHistoryRemoteStore {
     return packed;
   }
 
-  repackFreshReplicaRows(): ArrayBuffer | undefined {
+  async repackFreshReplicaRows(includeOtherDevices: boolean = false): Promise<ArrayBuffer | undefined> {
+    // A lite replica deliberately omits other devices. Full merge must expand it even when
+    // the original transfer is still attached (e.g. retention skipped lite before compute).
+    if (includeOtherDevices && this.freshRowsOwnDeviceOnly) {
+      this.freshRows = await this.readAllPhysicalRows(await this.getStore());
+      this.freshRowsOwnDeviceOnly = false;
+    }
     const rows = this.freshRows;
     if (rows === undefined) {
       return undefined;
     }
-    const packed = AiraHistoryTaskpoolTransferCodec.encodeRows(rows);
+    const packed = await AiraHistoryTaskpoolTransferCodec.encodeRowsCooperatively(rows, this.rowReadThrottle);
     this.lastPackedRows = packed;
     return packed;
   }
@@ -241,26 +264,53 @@ export class HuaweiSpaceHistoryRemoteStore {
     projection: AiraHistoryRemoteWriteProjection,
     desired: HuaweiSpaceHistorySyncState
   ): Promise<HuaweiSpaceHistoryWriteResult> {
+    const result = await this.publishPreparedProjection(projection,
+      async (): Promise<HuaweiSpaceHistorySyncState> => desired);
+    return { state: result.state ?? desired, changedRowCount: result.changedRowCount,
+      localApplyRequired: result.localApplyRequired };
+  }
+
+  async writePreparedProjectionDeferred(
+    projection: AiraHistoryRemoteWriteProjection,
+    desiredBuffer: ArrayBuffer
+  ): Promise<HuaweiSpaceHistoryDeferredWriteResult> {
+    return this.publishPreparedProjection(projection, async (): Promise<HuaweiSpaceHistorySyncState> => {
+      return this.computeExecutor.decodeHuaweiHistoryTransferredState(desiredBuffer);
+    });
+  }
+
+  private async publishPreparedProjection(
+    projection: AiraHistoryRemoteWriteProjection,
+    loadDesired: () => Promise<HuaweiSpaceHistorySyncState>
+  ): Promise<HuaweiSpaceHistoryDeferredWriteResult> {
     this.assertConfigured();
     const store = await this.getStore();
     let changedRowCount = await this.stageProjection(store, projection);
     if (changedRowCount > 0) {
       await this.runIncrementalCommitBarrier(store, this.changedCloudTables(projection));
     }
-    let confirmedRows = await this.readAllPhysicalRows(store);
-    let confirmation = await this.assertProjectionAndDesiredStateConfirmed(confirmedRows, projection, desired);
+    let desired: HuaweiSpaceHistorySyncState | undefined = undefined;
+    let confirmation: AiraHistoryRemoteWriteConfirmation | undefined = undefined;
+    let confirmedRows = await this.readProjectionConfirmationRows(store, projection);
+    if (!this.isHeadChecksumConfirmed(confirmedRows, projection)) {
+      desired = await loadDesired();
+      confirmation = await this.assertProjectionAndDesiredStateConfirmed(confirmedRows, projection, desired);
+    }
     const cleanedLegacyRows = await this.deleteConfirmedLegacyRows(store, projection);
     changedRowCount += cleanedLegacyRows;
     if (cleanedLegacyRows > 0) {
       confirmedRows = await this.readAllPhysicalRows(store);
       this.assertLegacyCleanupConfirmed(confirmedRows, projection);
-      confirmation = await this.assertProjectionAndDesiredStateConfirmed(confirmedRows, projection, desired);
+      if (!this.isHeadChecksumConfirmed(confirmedRows, projection)) {
+        desired = desired ?? await loadDesired();
+        confirmation = await this.assertProjectionAndDesiredStateConfirmed(confirmedRows, projection, desired);
+      }
     }
     this.lastHeadChecksum = this.extractHeadChecksum(confirmedRows);
     return {
-      state: confirmation.confirmed,
+      state: confirmation?.confirmed,
       changedRowCount,
-      localApplyRequired: confirmation.localApplyRequired
+      localApplyRequired: confirmation?.localApplyRequired ?? false
     };
   }
 
@@ -328,7 +378,7 @@ export class HuaweiSpaceHistoryRemoteStore {
       this.logStage('write-barrier', stageStartedAt, 'mode=time-only');
     }
     stageStartedAt = Date.now();
-    let confirmedRows = await this.readAllPhysicalRows(store);
+    let confirmedRows = await this.readProjectionConfirmationRows(store, projection);
     this.logStage('write-reload', stageStartedAt, `rows=${confirmedRows.length}`);
     stageStartedAt = Date.now();
     let confirmation = await this.assertProjectionAndDesiredStateConfirmed(confirmedRows, projection, state);
@@ -353,8 +403,9 @@ export class HuaweiSpaceHistoryRemoteStore {
     store: relationalStore.RdbStore,
     skipCloudTransport: boolean = false
   ): Promise<HuaweiSpaceHistoryRow[]> {
-    const rows = this.freshRows;
+    const rows = this.freshRowsOwnDeviceOnly ? undefined : this.freshRows;
     this.freshRows = undefined;
+    this.freshRowsOwnDeviceOnly = false;
     this.freshLegacyRowIds = [];
     if (rows !== undefined) {
       return rows;
@@ -410,12 +461,55 @@ export class HuaweiSpaceHistoryRemoteStore {
     return confirmation;
   }
 
+  private async readProjectionConfirmationRows(
+    store: relationalStore.RdbStore,
+    projection: AiraHistoryRemoteWriteProjection
+  ): Promise<HuaweiSpaceHistoryRow[]> {
+    // The existing confirmation fast path uses only the freshly synced Head. Read it first:
+    // materializing every block before making that same decision adds tens of MB on the UI thread.
+    const heads = await this.readRawRows(store, HUAWEI_SPACE_HISTORY_HEAD_TABLE);
+    if (this.isHeadChecksumConfirmed(heads, projection)) {
+      return heads;
+    }
+    // A changed/missing Head still requires full replica validation by the compute executor.
+    return heads.concat(await this.readRawRows(store, HUAWEI_SPACE_HISTORY_BLOCK_TABLE));
+  }
+
+  private async readRowsToUpsert(
+    store: relationalStore.RdbStore,
+    projection: AiraHistoryRemoteWriteProjection
+  ): Promise<HuaweiSpaceHistoryRow[]> {
+    const idsByTable = new Map<string, string[]>();
+    for (const row of projection.rowsToUpsert) {
+      const table = this.tableNameForKind(row.recordKind);
+      let ids = idsByTable.get(table);
+      if (ids === undefined) {
+        ids = [];
+        idsByTable.set(table, ids);
+      }
+      ids.push(row.rowId);
+    }
+    const rows: HuaweiSpaceHistoryRow[] = [];
+    for (const table of idsByTable.keys()) {
+      const ids = idsByTable.get(table) ?? [];
+      for (let offset = 0; offset < ids.length; offset += HISTORY_ROW_LOOKUP_BATCH_SIZE) {
+        const batch = await this.readRawRows(store, table, ids.slice(offset, offset + HISTORY_ROW_LOOKUP_BATCH_SIZE));
+        for (const row of batch) {
+          rows.push(row);
+        }
+      }
+    }
+    return rows;
+  }
+
   private async stageProjection(
     store: relationalStore.RdbStore,
     projection: AiraHistoryRemoteWriteProjection,
     knownRows?: HuaweiSpaceHistoryRow[]
   ): Promise<number> {
-    const existingRows = knownRows ?? await this.readAllPhysicalRows(store);
+    // Comparison only needs rows being upserted. Deletes already return their actual affected
+    // count from RDB; unrelated blocks must not be marshaled just to build this lookup.
+    const existingRows = knownRows ?? await this.readRowsToUpsert(store, projection);
     const existingById = new Map<string, HuaweiSpaceHistoryRow>();
     existingRows.forEach((row: HuaweiSpaceHistoryRow): void => {
       existingById.set(row.rowId, row);
@@ -566,6 +660,7 @@ export class HuaweiSpaceHistoryRemoteStore {
   }
 
   private logStage(stage: string, startedAt: number, extra: string = ''): void {
+    AiraSyncJankProbe.endExtra(`huawei_history_store_${stage}`, startedAt, extra);
     hilog.info(
       HUAWEI_HISTORY_LOG_DOMAIN,
       HUAWEI_HISTORY_LOG_TAG,
@@ -585,13 +680,13 @@ export class HuaweiSpaceHistoryRemoteStore {
     const startedAt = Date.now();
     try {
       const packStartedAt = Date.now();
-      const packed = AiraHistoryTaskpoolTransferCodec.encodeRows(rows);
+      const packed = await AiraHistoryTaskpoolTransferCodec.encodeRowsCooperatively(rows, this.rowReadThrottle);
       AiraSyncJankProbe.endExtra(
         'history_row_pack',
         packStartedAt,
         `bytes=${packed.byteLength} rows=${rows.length}`
       );
-      this.lastPackedRows = AiraHistoryTaskpoolTransferCodec.copyBuffer(packed);
+      this.lastPackedRows = await AiraHistoryTaskpoolTransferCodec.copyBufferCooperatively(packed, this.rowReadThrottle);
       const decoded = await this.computeExecutor.decodePackedHuaweiHistoryRemoteState(
         this.uid,
         this.deviceId,
@@ -701,10 +796,22 @@ export class HuaweiSpaceHistoryRemoteStore {
 
   private async readRawRows(
     store: relationalStore.RdbStore,
-    tableName: string = HUAWEI_SPACE_HISTORY_HEAD_TABLE
+    tableName: string = HUAWEI_SPACE_HISTORY_HEAD_TABLE,
+    rowIds?: string[],
+    logicalIdPrefix?: string
   ): Promise<HuaweiSpaceHistoryRow[]> {
+    // RdbPredicates.in([]) discards the condition rather than matching nothing.
+    if (rowIds !== undefined && rowIds.length === 0) {
+      return [];
+    }
     const predicates = new relationalStore.RdbPredicates(tableName);
     predicates.equalTo('accountUid', this.uid);
+    if (logicalIdPrefix !== undefined) {
+      predicates.beginsWith('logicalId', logicalIdPrefix);
+    }
+    if (rowIds !== undefined) {
+      predicates.in('rowId', rowIds);
+    }
     const resultSet = await store.queryWithoutRowCount(predicates, [
       'rowId',
       'recordKind',

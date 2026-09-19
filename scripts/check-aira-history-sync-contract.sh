@@ -30,6 +30,7 @@ reject_pattern() {
 
 MODEL_REL="AiraBrowser/entry/src/main/ets/common/models/HistorySyncModels.ets"
 DATABASE_REL="AiraBrowser/entry/src/main/ets/data/database/BrowserDatabase.ets"
+SNAPSHOT_READER_REL="AiraBrowser/entry/src/main/ets/data/database/HistorySyncSnapshotReader.ets"
 OWNER_REL="AiraBrowser/entry/src/main/ets/data/sync/HuaweiSpaceRdbStoreOwner.ets"
 REMOTE_REL="AiraBrowser/entry/src/main/ets/data/sync/HuaweiSpaceHistoryRemoteStore.ets"
 CLOUD_REL="AiraBrowser/entry/src/main/ets/data/sync/HuaweiSpaceCloudSyncCoordinator.ets"
@@ -130,7 +131,7 @@ if [ "${failures}" -eq 0 ]; then
     "this.lastPackedRows" \
     "History writes must reuse the already packed replica buffer instead of JSON-stringifying rows again"
   require_pattern "${TRANSFER_REL}" \
-    "writeU32\(target, 0, rows.length\)" \
+    "writeU32\(header, 0, count\)" \
     "History physical rows must pack as length-prefixed binary instead of JSON.stringify(rows)"
   require_pattern "${REMOTE_REL}" \
     "this\.freshRows = rows" \
@@ -145,14 +146,14 @@ if [ "${failures}" -eq 0 ]; then
     "state: mirror\.state" \
     "the bounded remote-state decoder must return only the validated logical state"
   require_pattern "${COMPUTE_REL}" \
-    "estimateHuaweiHistoryRowsTransferBytes\(rows\)" \
+    "estimateHuaweiHistoryRowsTransferBytes\(rows, this\.cooperativeThrottle\)" \
     "the bounded remote-state decoder must preflight one serialized transfer direction"
   require_pattern "${COMPUTE_REL}" \
     "task\.setTransferList\(\[rowBuffer\]\)" \
     "bounded H1 rows must enter TaskPool through one zero-copy transferable buffer"
   require_pattern "${COMPUTE_REL}" \
-    "AiraHistoryTaskpoolTransferCodec\.encodeRows\(rows\)" \
-    "H1 transferable-buffer packing must encode all rows in one JSON transfer"
+    "AiraHistoryTaskpoolTransferCodec\.encodeRowsCooperatively\(rows, this\.cooperativeThrottle\)" \
+    "H1 transferable-buffer packing must yield while encoding rows"
   require_pattern "${REMOTE_REL}" \
     "afterBatchItem\(rows\.length\)" \
     "H1 RDB row materialization must yield between bounded batches"
@@ -267,13 +268,13 @@ if [ "${failures}" -eq 0 ]; then
   require_pattern "${RUNNER_REL}" \
     "remoteStore\.requiresMaintenance\(\)" \
     "unchanged legacy Huawei History mirrors must still run the confirmed compact migration"
-  require_pattern "${DATABASE_REL}" \
+  require_pattern "${SNAPSHOT_READER_REL}" \
     "history_sync_canonical_visits_v1" \
     "portable canonical visits must remain durable across Provider switching"
-  require_pattern "${DATABASE_REL}" \
+  require_pattern "${SNAPSHOT_READER_REL}" \
     "history_sync_tombstones_v1" \
     "exact History tombstones must remain durable after outbox acknowledgement"
-  require_pattern "${DATABASE_REL}" \
+  require_pattern "${SNAPSHOT_READER_REL}" \
     "history_sync_retention_v1" \
     "History retention must keep a stale-device resurrection frontier"
   require_pattern "${DATABASE_REL}" \
@@ -329,9 +330,12 @@ if [ "${failures}" -eq 0 ]; then
   require_pattern "${COMPUTE_REL}" \
     "aira-sync-history-initial-merge-packed" \
     "Huawei History packed merge must execute on TaskPool"
-  require_pattern "${COMPUTE_REL}" \
-    "batchPauseMs: 16" \
-    "History compute packing must yield a frame between batches"
+  require_pattern "${THROTTLE_REL}" \
+    "DEFAULT_YIELD_BUDGET_MS: number = 8" \
+    "Sync must bound uninterrupted cooperative work to a short input-friendly slice"
+  require_pattern "${TRANSFER_REL}" \
+    "await throttle.afterBatchItem" \
+    "History transfer packing and unpacking must yield within each batch"
   require_pattern "${CLOUD_REL}" \
     "CLOUD_SYNC_UI_YIELD_MS" \
     "consecutive Huawei cloudSync tasks must yield the UI thread"
@@ -357,7 +361,7 @@ if [ "${failures}" -eq 0 ]; then
     "DEBUG-HIST-CONFLICT-825|HistoryConflictDiag" \
     "temporary History stage diagnostics must be removed after device verification"
   require_pattern "${MERGE_REL}" \
-    "isDeleted.*tombstones.*deleteRanges.*clearBefore.*retentionFrontier" \
+    "isDeleted.*tombstoneIds.*rangesByUrl.*clearBefore.*retentionFrontier" \
     "one merge owner must apply all History deletion and retention rules"
   require_pattern "${SERVICE_REL}" \
     "identity.provider === 'huawei_space'" \
@@ -368,7 +372,7 @@ if [ "${failures}" -eq 0 ]; then
   require_pattern "${SERVICE_REL}" \
     "providerEnrollmentUpdatedAfter" \
     "Aira target transitions must preserve the last confirmed enrollment boundary"
-  require_pattern "${DATABASE_REL}" \
+  require_pattern "${SNAPSHOT_READER_REL}" \
     "greaterThan\('updated_at', normalizedUpdatedAfter - 1\)" \
     "Aira target enrollment must select only visits observed since its last confirmed state"
   require_pattern "${RUNNER_REL}" \
@@ -386,10 +390,10 @@ if [ "${failures}" -eq 0 ]; then
   require_pattern "${DATABASE_REL}" \
     "hasHistorySyncProjectionVictims\(store, normalizedUid, cutoff\)" \
     "History projection pruning must keep its no-victim path inside SQLite"
-  require_pattern "${DATABASE_REL}" \
+  require_pattern "${SNAPSHOT_READER_REL}" \
     "HISTORY_SYNC_CANONICAL_READ_BATCH_SIZE" \
     "large local History state parsing must yield in bounded batches"
-  require_pattern "${DATABASE_REL}" \
+  require_pattern "${SNAPSHOT_READER_REL}" \
     "rowVisitIds\.length % HISTORY_SYNC_CANONICAL_READ_BATCH_SIZE" \
     "large local History row materialization must yield before JSON parsing"
   require_pattern "${COMPUTE_REL}" \
@@ -402,8 +406,8 @@ if [ "${failures}" -eq 0 ]; then
     "if \(clearOutboxAfterSuccess\)" \
     "ordinary Huawei success may clear the Aira outbox only outside a Provider transition"
   require_pattern "${RUNNER_REL}" \
-    "shouldUseCachedHuaweiHistoryRemote" \
-    "ordinary Huawei History may reuse the confirmed remote instead of repeating CLOUD_FIRST"
+    "readHuaweiHistoryRemoteHead" \
+    "Huawei History must use the account-scoped durable Head to gate unchanged reads"
   require_pattern "${RUNNER_REL}" \
     "shouldSkipUnchangedHuaweiHistoryRemote" \
     "ordinary Huawei History must skip decode and merge when persisted heads are unchanged"
@@ -457,7 +461,7 @@ if [ "${failures}" -eq 0 ]; then
     "Primary Provider switching must carry supported History transitions"
   require_pattern "${AUTOMATIC_REL}" \
     "runForProvider\(source, 'source_transition'\)" \
-    "supported History Provider switching must refresh the bounded source state first"
+    "supported History Provider switching must attempt to refresh the bounded source state first"
   require_pattern "${AUTOMATIC_REL}" \
     "runForProvider\(target, 'target_transition'\)" \
     "supported History Provider switching must enroll and confirm the target before persistence"

@@ -2218,10 +2218,14 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
     stage: AiraBookmarkSyncFailureStage,
     operation: () => Promise<T>
   ): Promise<T> {
+    const diagnosticStage = AiraSyncJankProbe.beginStage(`bookmark_${stage}`);
     try {
       return await operation();
     } catch (error) {
+      AiraSyncJankProbe.mark('bookmark_stage_failed');
       throw this.ensureBookmarkStageError(error as Error, stage);
+    } finally {
+      AiraSyncJankProbe.endStage(diagnosticStage);
     }
   }
 

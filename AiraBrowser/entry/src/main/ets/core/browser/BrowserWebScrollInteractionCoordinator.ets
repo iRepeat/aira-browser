@@ -80,7 +80,7 @@ const DEFAULT_WEB_SCROLL_INTERACTION_CONFIG: BrowserWebScrollInteractionConfig =
 };
 
 const CONTINUATION_SCROLL_CHECKPOINT_DELAY_MS: number = 300;
-// Covers the immediate ArkWeb reflow after native top/bottom insets settle, without
+// Covers the immediate ArkWeb reflow after the native top inset changes, without
 // suppressing a whole gesture or treating every reverse scroll as layout feedback.
 const VIEWPORT_SCROLL_CORRECTION_WINDOW_MS: number = 650;
 
@@ -176,10 +176,10 @@ export class BrowserWebScrollInteractionCoordinator {
         this.buildBottomChromeInput(facts, tabId, this.lastBottomChromeScrollY, false)
       ));
     }
-    const previousBottom = previous.reservedBottomInsetPx;
-    const nextBottom = next.reservedBottomInsetPx;
+    // Top immersion resizes ordinary pages too. Layout feedback must not be
+    // classified as a new gesture just because bottom avoidance is disabled.
     if (previous.fillParentHeight || next.fillParentHeight ||
-      previous.hostHeightPx !== next.hostHeightPx || (previousBottom <= 0 && nextBottom <= 0)) {
+      previous.hostHeightPx !== next.hostHeightPx) {
       this.clearViewportScrollCorrection();
       return;
     }

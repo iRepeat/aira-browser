@@ -2674,6 +2674,13 @@ struct BrowserShellPage {
     }
   };
   private browserTabHomeShell: BrowserTabHomeShell = {
+    readSurfaceProfileInput: () => ({
+      showHomePage: this.showHomePage,
+      webPageVisible: !this.showHomePage,
+      thirdPartyHomepageAllowed: !this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate(),
+      customHomepageState: this.customHomepageRuntimeState.presentation,
+      customHomepageWebVisible: this.customHomepageRuntimeState.surfaceVisible
+    }),
     readState: () => ({
       tabs: this.tabs,
       activeTabId: this.activeTabId,
@@ -4382,8 +4389,8 @@ struct BrowserShellPage {
           !this.shouldHideRootBottomChromeForImmersion() &&
           !this.buildCurrentDocumentViewerChromeContext().policy.active &&
           /^https?:\/\//i.test(this.tabScopedEventContextCoordinator.resolvePageUrl(this.activeTabId)),
-        suspended: this.rootKeyboardInsetVp > 0 || this.webBottomAddressFocused || this.showTabsSheet ||
-          this.readerModeSessionSnapshot.state.visible || this.novelReaderSnapshot.visible,
+        suspended: this.resolveWebBottomSafeAreaInsetSuppressed() || this.showTabsSheet,
+        insetSuppressed: this.resolveWebBottomSafeAreaInsetSuppressed(),
         systemBottomInsetVp: this.homeBottomSafeInsetVp
       }),
       applyBottomInset: (insetVp: number): void => {
@@ -5469,7 +5476,7 @@ struct BrowserShellPage {
     sharedAiraCloudBookmarkV4BootstrapRuntime.getViewState();
   @State mediaResourceSessionSnapshot: BrowserMediaResourceSessionSnapshot =
     createBrowserMediaResourceSessionSnapshot();
-  @State showTabsSheet: boolean = false;
+  @State @Watch('handleTabsOverviewBottomSafeAreaChange') showTabsSheet: boolean = false;
   @State tabsOverviewPresentationState: BrowserTabsOverviewSessionPresentationState =
     this.tabsOverviewSessionCoordinator.getPresentationState();
   @State tabsSharedSnapshotState: BrowserTabsSharedSnapshotTransitionState =
@@ -8381,6 +8388,21 @@ struct BrowserShellPage {
     if (keyboardInset > 0) {
       this.rootAddressKeyboardOverlayInsetVp = keyboardInset;
     }
+  }
+
+  // Surfaces that own the bottom edge for their own input release the reserved space. The tabs
+  // overview is not one of them: it only covers the page, so its open/close must not resize the
+  // Web viewport. It pauses detection instead, and this callback re-evaluates on both transitions
+  // so the observer resumes when the overview closes.
+  private resolveWebBottomSafeAreaInsetSuppressed(): boolean {
+    return this.rootKeyboardInsetVp > 0 ||
+      this.webBottomAddressFocused ||
+      this.readerModeSessionSnapshot.state.visible ||
+      this.novelReaderSnapshot.visible;
+  }
+
+  private handleTabsOverviewBottomSafeAreaChange(): void {
+    this.browserWebBottomSafeAreaCoordinator.requestCheck(this.activeTabId);
   }
 
   private applyRootAddressKeyboardOverlayInset(insetVp: number): void {

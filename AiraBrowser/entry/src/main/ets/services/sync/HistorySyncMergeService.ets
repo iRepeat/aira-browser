@@ -391,6 +391,19 @@ export class HistorySyncMergeService {
         updatedAt: Math.max(retentionFrontier.updatedAt, Math.max(0, Math.floor(now)))
       };
     }
+    // Match the cooperative path: index deletion facts once, instead of scanning
+    // all tombstones/ranges for every visit in a worker merge.
+    const tombstoneIds = new Set<string>();
+    for (let index = 0; index < tombstones.length; index += 1) {
+      tombstoneIds.add(tombstones[index].visitId);
+    }
+    const rangesByUrl = new Map<string, HistorySyncDeleteRange[]>();
+    for (let index = 0; index < deleteRanges.length; index += 1) {
+      const range = deleteRanges[index];
+      const ranges = rangesByUrl.get(range.url) ?? [];
+      ranges.push(range);
+      rangesByUrl.set(range.url, ranges);
+    }
     const visits = this.mergeVisits(
       preferredState.visits,
       incomingState.visits,
@@ -398,7 +411,7 @@ export class HistorySyncMergeService {
     )
       .filter((visit: HistorySyncVisit): boolean => {
         return visit.visitedAt >= retentionCutoff &&
-          !this.isDeleted(visit, tombstones, deleteRanges, clearBefore, retentionFrontier);
+          !this.isDeleted(visit, tombstoneIds, rangesByUrl, clearBefore, retentionFrontier);
       })
       .sort((left: HistorySyncVisit, right: HistorySyncVisit): number => this.compareVisits(left, right));
     if (visits.length > HISTORY_SYNC_MAX_VISITS) {
@@ -616,19 +629,20 @@ export class HistorySyncMergeService {
 
   private isDeleted(
     visit: HistorySyncVisit,
-    tombstones: HistorySyncExactTombstone[],
-    ranges: HistorySyncDeleteRange[],
+    tombstoneIds: Set<string>,
+    rangesByUrl: Map<string, HistorySyncDeleteRange[]>,
     clearBefore: number,
     retentionFrontier: HistorySyncRetentionFrontier
   ): boolean {
     if (visit.visitedAt <= clearBefore || this.isBehindRetentionFrontier(visit, retentionFrontier)) {
       return true;
     }
-    if (tombstones.some((value: HistorySyncExactTombstone): boolean => value.visitId === visit.visitId)) {
+    if (tombstoneIds.has(visit.visitId)) {
       return true;
     }
-    return ranges.some((range: HistorySyncDeleteRange): boolean => {
-      return range.url === visit.url && visit.visitedAt >= range.startedAt && visit.visitedAt <= range.endedAt;
+    const ranges = rangesByUrl.get(visit.url);
+    return ranges !== undefined && ranges.some((range: HistorySyncDeleteRange): boolean => {
+      return visit.visitedAt >= range.startedAt && visit.visitedAt <= range.endedAt;
     });
   }
 
@@ -648,7 +662,9 @@ export class HistorySyncMergeService {
     return visit.visitId.localeCompare(frontier.boundaryVisitId) < 0;
   }
 
-  private normalizeVisit(value: HistorySyncVisit): HistorySyncVisit | undefined {
+  // The snapshot codec also validates individual records. Reuse the visit policy
+  // without allocating maps, arrays and a retention frontier for a one-item state.
+  normalizeVisit(value: HistorySyncVisit): HistorySyncVisit | undefined {
     const visitId = (value?.visitId ?? '').trim();
     const clientId = (value?.clientId ?? '').trim();
     const nativeVisitId = (value?.nativeVisitId ?? '').trim();
