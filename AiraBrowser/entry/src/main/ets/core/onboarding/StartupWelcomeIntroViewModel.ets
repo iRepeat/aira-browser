@@ -32,7 +32,7 @@ const STARTUP_WELCOME_INTRO_HERO_SIGN_IN: StartupWelcomeIntroHeroState = {
 
 const STARTUP_WELCOME_INTRO_HERO_SELF_HOSTED: StartupWelcomeIntroHeroState = {
   title: '开启跨设备同步',
-  subtitle: '连接个人服务器或 WebDAV，让书签、历史记录和常用设置在各设备之间保持一致。'
+  subtitle: '连接私有化部署或 WebDAV，让书签、历史记录和常用设置在各设备之间保持一致。'
 };
 
 const STARTUP_WELCOME_INTRO_HERO_BASIC_MODE: StartupWelcomeIntroHeroState = {
@@ -59,7 +59,7 @@ export class StartupWelcomeIntroViewModel {
     return [
       {
         id: 'personal_server',
-        label: '使用个人服务器同步'
+        label: '使用私有化部署同步'
       },
       {
         id: 'webdav',

@@ -902,7 +902,7 @@ function BookmarkSyncControls({
             label={selectedSource === 'aira-cloud'
               ? t('popup.dashboard.cloudData', { defaultValue: '云端数据' })
               : selectedSource === 'personal-server'
-                ? '个人服务器数据'
+                ? '私有化部署数据'
                 : t('popup.dashboard.webdavData', { defaultValue: 'WebDAV 数据' })}
             value={formatBookmarkDataSummary(
               syncRuntime.state.leafTabRemoteSummary,
@@ -1137,7 +1137,7 @@ function LoggedOutHome({
         >
           {AIRATAB_CAPABILITIES.airaCloud
             ? t('popup.profile.loginNow', { defaultValue: '立即登录' })
-            : '连接个人服务器'}
+            : '连接私有化部署'}
         </Button>
 
         <div className="space-y-2">
@@ -1203,7 +1203,7 @@ function PersonalServerHome({
         </div>
 
         <div className="space-y-2">
-          <SectionLabel>个人服务器</SectionLabel>
+          <SectionLabel>私有化部署</SectionLabel>
           <MenuItem
             icon={<RiCloudFill className="size-4" />}
             title="使用自己的服务器"
@@ -1327,7 +1327,7 @@ function AdvancedSettingsPage({
     ? t('popup.dashboard.cloudData', { defaultValue: '云端数据' })
     : selectedSource === 'webdav'
       ? t('popup.dashboard.webdavData', { defaultValue: 'WebDAV 数据' })
-      : selectedSource === 'personal-server' ? '个人服务器数据' : '远程数据';
+      : selectedSource === 'personal-server' ? '私有化部署数据' : '远程数据';
   return (
     <section className="min-h-[360px] bg-background">
       <PopupHeader

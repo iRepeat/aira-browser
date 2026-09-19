@@ -83,8 +83,9 @@ export struct HistoryVisitDetailsSheet {
 
   @Builder
   private buildFooter() {
-    Row({ space: 10 }) {
+    Column({ space: 10 }) {
       BrowserSheetActionButton({
+        stacked: true,
         label: '复制链接',
         onAction: () => {
           this.copyLink();
@@ -92,6 +93,7 @@ export struct HistoryVisitDetailsSheet {
       })
 
       BrowserSheetActionButton({
+        stacked: true,
         label: '完成',
         onAction: () => {
           this.onClose();

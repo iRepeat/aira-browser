@@ -409,16 +409,9 @@ struct BrowserHlsTakeoverSheet {
   @Builder
   private buildFooter() {
     Column({ space: 8 }) {
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '复制链接',
-          emphasis: 'secondary',
-          actionEnabled: this.target !== undefined,
-          onAction: () => {
-            this.onCopyUrl();
-          }
-        })
-        BrowserSheetActionButton({
+          stacked: true,
           label: '刷新解析',
           emphasis: 'primary',
           actionEnabled: this.target !== undefined && !this.parsing,
@@ -427,11 +420,22 @@ struct BrowserHlsTakeoverSheet {
             this.onRefresh();
           }
         })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '复制链接',
+          emphasis: 'secondary',
+          actionEnabled: this.target !== undefined,
+          onAction: () => {
+            this.onCopyUrl();
+          }
+        })
       }
       .width('100%')
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
+          stacked: true,
           label: '复制上下文',
           emphasis: 'secondary',
           actionEnabled: this.target !== undefined,
@@ -439,7 +443,9 @@ struct BrowserHlsTakeoverSheet {
             this.onCopyContext();
           }
         })
+
         BrowserSheetActionButton({
+          stacked: true,
           label: '资源嗅探',
           emphasis: 'secondary',
           actionEnabled: true,

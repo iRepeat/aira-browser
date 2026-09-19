@@ -52,17 +52,9 @@ export struct SyncFailureDialog {
       }
       .width('100%')
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '复制详情',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.copyDetails();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '知道了',
           emphasis: 'primary',
           accentColor: this.storedAccentColor,
@@ -70,6 +62,16 @@ export struct SyncFailureDialog {
           fontSize: 15,
           onAction: () => {
             this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '复制详情',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
+            this.copyDetails();
           }
         })
       }

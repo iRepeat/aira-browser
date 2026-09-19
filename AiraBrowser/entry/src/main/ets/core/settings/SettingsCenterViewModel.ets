@@ -88,7 +88,7 @@ export class SettingsCenterViewModel {
     ));
     accountRows.push(this.buildRow(
       'cross_device_link',
-      '跨系统互联',
+      '跨设备互联',
       '',
       canReadDevicePreferences && isFullServiceMode
     ));

@@ -42,6 +42,8 @@ HISTORY_RECORD_VALIDATION_TEST="${REPO_ROOT}/scripts/check-aira-history-record-v
 HISTORY_REMOTE_READ_BUDGET_TEST="${REPO_ROOT}/scripts/check-aira-history-remote-read-budget.cjs"
 HISTORY_RETRY_BACKOFF_TEST="${REPO_ROOT}/scripts/check-aira-history-retry-backoff.cjs"
 SYNC_DIAGNOSTICS_TEST="${REPO_ROOT}/scripts/check-aira-sync-diagnostics.cjs"
+WEBDAV_LOCK_NULL_PLACEHOLDER_TEST="${REPO_ROOT}/scripts/check-aira-webdav-lock-null-placeholder.cjs"
+DIALOG_ACTION_LAYOUT_TEST="${REPO_ROOT}/scripts/check-aira-dialog-action-layout.cjs"
 BOOKMARK_SNAPSHOT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bookmark-snapshot-contract.sh"
 NEW_USER_GIFT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-new-user-gift-contract.sh"
 PRO_RENEWAL_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-pro-renewal-contract.sh"
@@ -330,6 +332,8 @@ node "${HISTORY_RECORD_VALIDATION_TEST}"
 node "${HISTORY_REMOTE_READ_BUDGET_TEST}"
 node "${HISTORY_RETRY_BACKOFF_TEST}"
 node "${SYNC_DIAGNOSTICS_TEST}"
+node "${WEBDAV_LOCK_NULL_PLACEHOLDER_TEST}"
+node "${DIALOG_ACTION_LAYOUT_TEST}"
 
 if [ ! -x "${BOOKMARK_SNAPSHOT_GUARD_SCRIPT}" ]; then
   fail "Bookmark snapshot contract guard not executable: ${BOOKMARK_SNAPSHOT_GUARD_SCRIPT}"

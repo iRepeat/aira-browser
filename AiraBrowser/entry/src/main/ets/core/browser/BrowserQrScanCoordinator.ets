@@ -136,7 +136,7 @@ export class BrowserQrScanCoordinator {
       } else {
         this.clearDesktopLoginSession();
       }
-      this.shell.showToast(this.resolveErrorMessage(error as Error, '桌面插件登录失败'));
+      this.shell.showToast(this.resolveErrorMessage(error as Error, 'Aira-sync 扩展登录失败'));
     }
   }
 
@@ -271,7 +271,7 @@ export class BrowserQrScanCoordinator {
       this.shell.showToast('可以回到电脑继续使用 Aira-sync。');
       return;
     }
-    const message = result.message?.trim() ?? '桌面插件登录确认失败，请刷新二维码后重试。';
+    const message = result.message?.trim() ?? 'Aira-sync 扩展登录确认失败，请刷新二维码后重试。';
     this.shell.showToast(message.length > 0 ? message : '登录失败');
   }
 

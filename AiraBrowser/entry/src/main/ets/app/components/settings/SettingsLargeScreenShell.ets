@@ -668,6 +668,9 @@ export struct SettingsLargeScreenShell {
         onOpenUserScriptGallerySource: (url: string) => {
           this.onIntent(SettingsCenterPresentationIntent.openUserScriptGallerySource(url));
         },
+        onOpenExternalUrl: (url: string) => {
+          this.onIntent(SettingsCenterPresentationIntent.openExternalUrl(url));
+        },
         onSettingsChanged: () => {
           this.onIntent(SettingsCenterPresentationIntent.settingsChanged());
         }
@@ -888,6 +891,9 @@ export struct SettingsLargeScreenShell {
         },
         onOpenUserScriptGallerySource: (url: string) => {
           this.onIntent(SettingsCenterPresentationIntent.openUserScriptGallerySource(url));
+        },
+        onOpenExternalUrl: (url: string) => {
+          this.onIntent(SettingsCenterPresentationIntent.openExternalUrl(url));
         },
         onSettingsChanged: () => {
           this.onIntent(SettingsCenterPresentationIntent.settingsChanged());

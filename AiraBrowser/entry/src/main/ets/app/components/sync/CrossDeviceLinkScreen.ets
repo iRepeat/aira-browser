@@ -72,6 +72,7 @@ export struct CrossDeviceLinkScreen {
   @Prop isAddingDevice: boolean = false;
   @Prop isBusy: boolean = false;
   @Prop showBackButton: boolean = true;
+  @Prop showTitleBar: boolean = true;
   @Prop useTopSafeInset: boolean = true;
   @Prop contentKind: SettingsContentKind = 'standard';
   @Prop desktopPresentation: boolean = false;
@@ -91,13 +92,14 @@ export struct CrossDeviceLinkScreen {
   build() {
     Column() {
       SettingsHdsScaffold({
-        title: '跨系统互联',
+        title: '跨设备互联',
         backIconKind: 'back',
         pageBackground: this.storedPageBackgroundColor,
         headerButtonBackground: this.storedPressedBackgroundColor,
         primaryTextColor: this.storedPrimaryTextColor,
         dividerColor: this.storedDividerColor,
         showBackButton: this.showBackButton,
+        showTitleBar: this.showTitleBar,
         useTopSafeInset: this.useTopSafeInset,
         contentKind: this.contentKind,
         desktopPresentation: this.desktopPresentation,
@@ -243,8 +245,6 @@ export struct CrossDeviceLinkScreen {
           })
         }, (row: CrossDeviceLinkCapabilityRowState): string => row.id)
       }
-
-      this.buildSectionFooter(this.state.capabilitiesFooter)
     }
   }
 
@@ -281,8 +281,6 @@ export struct CrossDeviceLinkScreen {
           }, (row: CrossDeviceLinkDeviceRowState): string => row.deviceId)
         }
       }
-
-      this.buildSectionFooter('这里只显示当前在线或刚刚在线的电脑；电脑关机或退出浏览器后会自动消失。')
     }
   }
 

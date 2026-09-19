@@ -66,12 +66,12 @@ export class BrowserPhonePagePushCoordinator {
           title: this.resolveTitle(snapshot.title, url)
         }, host, config);
       } catch (error) {
-        host.showToast(this.resolveErrorMessage(error as Error, '请先连接个人服务器。'));
+        host.showToast(this.resolveErrorMessage(error as Error, '请先连接私有化部署。'));
       }
       return;
     }
     if (settings.remoteKind !== 'aira_cloud') {
-      host.showToast('当前同步服务不支持网页推送，请选择个人服务器或 Aira 云同步。');
+      host.showToast('当前同步服务不支持网页推送，请选择私有化部署或 Aira 云同步。');
       return;
     }
     if (!AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
@@ -270,7 +270,7 @@ export class BrowserPhonePagePushCoordinator {
   private resolveFailureMessage(result: AiraPhonePagePushResponseBody, personalServer: boolean): string {
     switch (result.code) {
       case 'pro_required':
-        return '通过 Aira 云推送网页需要 Pro；连接个人服务器后可免费使用。';
+        return '通过 Aira 云推送网页需要 Pro；连接私有化部署后可免费使用。';
       case 'phone_page_push_rate_limited':
       case 'page_push_rate_limited':
         return '推送太频繁了，请稍后再试。';
@@ -283,11 +283,11 @@ export class BrowserPhonePagePushCoordinator {
       case 'personal_server_auth_required':
       case 'invalid_device_credential':
       case 'device_revoked':
-        return '请重新连接个人服务器后再推送网页。';
+        return '请重新连接私有化部署后再推送网页。';
       case 'missing_uid':
       case 'auth_token_required':
       case 'auth_token_expired':
-        return personalServer ? '请重新连接个人服务器后再推送网页。' : '请重新登录华为账号后再推送。';
+        return personalServer ? '请重新连接私有化部署后再推送网页。' : '请重新登录华为账号后再推送。';
       case 'invalid_url':
       case 'invalid_page_url':
         return '当前页面不能推送到电脑。';

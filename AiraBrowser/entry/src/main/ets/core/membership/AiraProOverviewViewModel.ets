@@ -164,7 +164,7 @@ export class AiraProOverviewViewModel {
 
   private resolveHeroSubtitle(state: AiraMembershipState): string {
     if (!this.membershipPresentationService.isLongTermMember(state)) {
-      return '本地功能、WebDAV 和个人服务器功能免费。Pro 仅用于 Aira 官方托管云服务。';
+      return '本地功能、WebDAV 和私有化部署功能免费。Pro 仅用于 Aira 官方托管云服务。';
     }
     if (this.membershipPresentationService.hasInsiderRecognition(state)) {
       return 'INSIDER 长期会员权益已生效。感谢你帮助测试和改进 Aira。';

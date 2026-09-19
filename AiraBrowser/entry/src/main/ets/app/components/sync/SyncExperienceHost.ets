@@ -716,7 +716,7 @@ export struct SyncExperienceHost {
     if (isCrossSystemBookmarkUpgrade) {
       showCenteredAlertDialog({
         title: 'Aira 云书签同步需要 Pro',
-        message: 'Aira 官方托管的跨系统书签同步需要 Pro。你也可以免费使用私有化部署、华为云空间或 WebDAV。',
+        message: 'Aira 官方托管的跨设备书签同步需要 Pro。你也可以免费使用私有化部署、华为云空间或 WebDAV。',
         autoCancel: true,
         buttonDirection: DialogButtonDirection.VERTICAL,
         buttons: [

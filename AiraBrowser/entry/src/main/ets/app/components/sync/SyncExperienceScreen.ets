@@ -32,7 +32,7 @@ import {
   SyncExperienceSelectionDialog,
   SyncExperienceSelectionKind
 } from './SyncExperienceSelectionDialog';
-import { createCenteredDialogMaterial } from '../common/CenteredDialogSurface';
+import { createCenteredDialogMaterial, resolveWideCenteredDialogWidth } from '../common/CenteredDialogSurface';
 import { SyncContentSwitchCard } from './SyncContentSwitchCard';
 import {
   BrowserSettingsIconBackgroundTokenSet,
@@ -159,6 +159,9 @@ export struct SyncExperienceScreen {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
+    // The controller caps its own box at 400 vp by default; widen the box too, or the
+    // 560 vp content is laid out against a narrower box and gets clipped.
+    width: resolveWideCenteredDialogWidth(),
     systemMaterial: createCenteredDialogMaterial(),
   });
 
@@ -426,7 +429,7 @@ export struct SyncExperienceScreen {
         })
         SettingsGroupDivider({ dividerColor: this.storedDividerColor })
         SettingsNavigationRow({
-          title: '跨系统互联',
+          title: '跨设备互联',
           desktopPresentation: this.desktopPresentation,
           value: '查看教程',
           icon: $r('sys.symbol.link'),

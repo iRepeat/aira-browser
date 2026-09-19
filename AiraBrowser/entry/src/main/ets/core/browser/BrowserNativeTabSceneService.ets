@@ -261,6 +261,7 @@ export class BrowserNativeTabSceneService {
       case 'appearance_toolbar':
       case 'experiments':
       case 'sync':
+      case 'cross_device_link':
       case 'about':
         return rawValue.trim() as SettingsCenterDestination;
       default:

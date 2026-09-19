@@ -59,7 +59,7 @@ export class SyncDesktopBookmarkGuideMarkdownService {
     if (!this.shouldCopyGuideLink(normalizedUrl)) {
       return {
         ok: false,
-        message: '插件链接暂未配置。'
+        message: '扩展链接暂未配置。'
       };
     }
     try {

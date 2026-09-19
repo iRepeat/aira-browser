@@ -223,6 +223,7 @@ export struct LocalBackupImportContent {
       }
 
       BrowserSheetActionButton({
+        stacked: true,
         label: this.isBusy ? '正在导入' : '导入',
         emphasis: 'primary',
         actionEnabled: !this.isBusy && this.hasAnySelection(),

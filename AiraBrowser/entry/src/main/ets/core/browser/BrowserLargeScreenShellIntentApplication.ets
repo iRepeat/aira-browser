@@ -122,6 +122,7 @@ export type BrowserLargeScreenNavigationIntentKind =
   'open_history_visit' |
   'open_saved_page_original' |
   'open_user_script_gallery' |
+  'open_external_url' |
   'update_bookmark_workspace_route' |
   'update_history_workspace_route' |
   'update_settings_workspace_route' |
@@ -669,6 +670,20 @@ export class BrowserLargeScreenShellIntentApplication {
           'configured',
           900
         );
+      }
+      return;
+    }
+    if (intent.kind === 'open_external_url' && intent.url !== undefined) {
+      const targetUrl = intent.url.trim();
+      if (targetUrl.length > 0) {
+        // A tapped link in an embedded settings pane opens in its own tab so the pane it
+        // came from is still there when the user returns to it.
+        void this.dependencies.foregroundTabCreationCoordinator.createNewTab({
+          initialUrl: targetUrl,
+          initialTitle: intent.title?.trim().length ? intent.title as string : targetUrl,
+          options: this.dependencies.windowContextCoordinator.resolveCurrentTabSessionBoundary(),
+          runtimeOptions: {}
+        });
       }
       return;
     }

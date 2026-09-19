@@ -32,7 +32,7 @@ const SYNC_EXPERIENCE_GOALS: SyncExperienceGoalDescriptor[] = [
   {
     id: 'aira_cloud',
     title: 'Aira 云同步',
-    description: '通过浏览器插件在手机、Windows 和 Mac 之间跨系统同步。',
+    description: '通过电脑上的 Aira-sync 扩展在手机、Windows 和 Mac 之间跨设备同步。',
     requiresPro: true
   },
   {

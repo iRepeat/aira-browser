@@ -106,6 +106,7 @@ export struct SyncGoalSelectionSheet {
 
             if (option.id === 'webdav') {
               BrowserSheetActionButton({
+                stacked: true,
                 label: '编辑 WebDAV 配置',
                 actionEnabled: !this.isPrivateSession && !this.isBusy,
                 fillAvailableWidth: false,
@@ -120,6 +121,7 @@ export struct SyncGoalSelectionSheet {
 
             if (option.id === 'self_hosted') {
               BrowserSheetActionButton({
+                stacked: true,
                 label: option.isSelected ? '管理私有化部署' : '连接私有化部署',
                 actionEnabled: !this.isPrivateSession && !this.isBusy,
                 fillAvailableWidth: false,

@@ -176,7 +176,7 @@ export class AiraPhonePagePushFunctionService {
       return {
         ok: false,
         code: 'personal_server_auth_required',
-        message: '请重新连接个人服务器后再推送网页。'
+        message: '请重新连接私有化部署后再推送网页。'
       };
     }
     if (!this.isHttpUrl(normalizedUrl)) {

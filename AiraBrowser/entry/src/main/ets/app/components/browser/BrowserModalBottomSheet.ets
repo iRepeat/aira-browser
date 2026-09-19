@@ -300,6 +300,8 @@ export struct BrowserSheetActionButton {
   @Prop accentColor: ResourceColor = '';
   @Prop textColor: ResourceColor = '';
   @Prop fillAvailableWidth: boolean = true;
+  /** Set by callers that stack actions in a Column, where no width weight is wanted. */
+  @Prop stacked: boolean = false;
   @Prop buttonWidth: Length = 56;
   @Prop buttonHeight: number = BROWSER_MODAL_BOTTOM_SHEET_ACTION_HEIGHT;
   @Prop fontSize: number = 16;
@@ -348,7 +350,10 @@ export struct BrowserSheetActionButton {
     }
     .width(this.fillAvailableWidth ? '100%' : this.buttonWidth)
     .height(this.buttonHeight)
-    .layoutWeight(this.fillAvailableWidth ? 1 : 0)
+    // layoutWeight splits a Row's width. It is the main-axis weight, so the same value
+    // inside a Column would stretch the button vertically and blow the dialog height up;
+    // stacked callers opt out and keep the fixed height instead.
+    .layoutWeight(this.fillAvailableWidth && !this.stacked ? 1 : 0)
     .opacity(this.resolveStackOpacity())
   }
 

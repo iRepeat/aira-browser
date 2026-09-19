@@ -19,6 +19,7 @@ import {
 } from '../../../common/utils/RouteParamUtils';
 import {
   SyncDesktopExtensionEntry,
+  SyncDesktopExtensionEntryId,
   resolveSyncDesktopExtensionEntries,
   resolveSyncDesktopExtensionEntryActionLabel
 } from '../../../services/sync/SyncDesktopExtensionCatalog';
@@ -44,13 +45,17 @@ import { sharedPreferencesRepository } from '../../bootstrap/BrowserAppRuntime';
 const EXTENSION_GLYPH: AiraRenderableIconId = 'site.setting.externalActions';
 const LOCAL_PACKAGE_GLYPH: AiraRenderableIconId = 'settings.downloads';
 const STEP_BADGE_SIZE: number = 22;
+// Browser store rows show the vendor mark itself, so it keeps the same leading width as
+// the round glyph it replaces without drawing a second, brand-less circle behind it.
+const BROWSER_BRAND_LEADING_SIZE: number = 34;
+const BROWSER_BRAND_ICON_SIZE: number = 26;
 const STEP_ROW_HORIZONTAL_PADDING: number = 16;
 const STEP_ROW_VERTICAL_PADDING: number = 14;
 
 const LOCKED_PAGE_TOAST: string = '访问密码已复制，粘贴即可';
 
 /**
- * The install and pairing recipe, one level below 跨系统互联 so the overview stays a
+ * The install and pairing recipe, one level below 跨设备互联 so the overview stays a
  * status page. The mode arrives through the route, so this surface needs no sync state
  * of its own, and the page it lives in stays a shell.
  */
@@ -58,6 +63,14 @@ const LOCKED_PAGE_TOAST: string = '访问密码已复制，粘贴即可';
 export struct CrossDeviceLinkSetupScreen {
   /** Bumped by the owning page's onPageShow, which only an @Entry component receives. */
   @Prop @Watch('handlePageShowRefresh') refreshToken: number = 0;
+  /** Embedded in the large-screen settings pane instead of its own routed page. */
+  @Prop embedded: boolean = false;
+  @Prop desktopPresentation: boolean = false;
+  @Prop @Watch('handleEmbeddedProviderChange') providerKind: CrossDeviceLinkProviderKind = 'none';
+  /** When embedded, back exits the workspace pane instead of popping the router. */
+  onExit?: () => void;
+  /** Provided by the PC shell, which opens the link in the browser instead of routing. */
+  onOpenExternalUrl?: (url: string) => void;
   @StorageProp(BROWSER_THEME_STORAGE_DIVIDER_KEY) private storedDividerColor: string = DEFAULT_THEME_PALETTE.light.divider;
   @StorageProp(BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY) private storedPageBackgroundColor: string =
     DEFAULT_THEME_PALETTE.light.pageBackground;
@@ -102,16 +115,21 @@ export struct CrossDeviceLinkSetupScreen {
         headerButtonBackground: this.storedPressedBackgroundColor,
         primaryTextColor: this.storedPrimaryTextColor,
         dividerColor: this.storedDividerColor,
+        showBackButton: !this.embedded,
+        showTitleBar: !this.embedded,
+        useTopSafeInset: !this.embedded,
+        desktopPresentation: this.desktopPresentation,
         menuActionLabel: '帮助',
         menuActionIcon: $r('sys.symbol.doc_text_fill'),
         onMenuAction: (): void => {
           this.navigationCoordinator.openSyncDesktopBookmarkGuide(this.boundary);
         },
         onBack: (): void => {
-          this.navigationCoordinator.back();
+          this.handleBack();
         }
       }) {
         SettingsPresentationScrollBody({
+          desktopPresentation: this.desktopPresentation,
           contentSpace: 16,
           topPadding: 8,
           bottomPadding: 28
@@ -196,10 +214,15 @@ export struct CrossDeviceLinkSetupScreen {
           SettingsNavigationRow({
             title: entry.title,
             value: resolveSyncDesktopExtensionEntryActionLabel(entry),
-            airaIconId: entry.action === 'open_link' ? LOCAL_PACKAGE_GLYPH : EXTENSION_GLYPH,
-            iconBackgroundColor: entry.action === 'open_link'
-              ? this.settingsIconBackgrounds.downloads
-              : this.settingsIconBackgrounds.siteCustomization,
+            useCustomLeading: this.isBrowserBrandEntry(entry.id),
+            airaIconId: this.isBrowserBrandEntry(entry.id)
+              ? undefined
+              : (entry.action === 'open_link' ? LOCAL_PACKAGE_GLYPH : EXTENSION_GLYPH),
+            iconBackgroundColor: this.isBrowserBrandEntry(entry.id)
+              ? undefined
+              : (entry.action === 'open_link'
+                ? this.settingsIconBackgrounds.downloads
+                : this.settingsIconBackgrounds.siteCustomization),
             iconColor: this.storedSettingsIconForegroundColor,
             rowPosition: this.resolveRowPosition(index, this.installEntries.length),
             primaryTextColor: this.storedPrimaryTextColor,
@@ -207,6 +230,9 @@ export struct CrossDeviceLinkSetupScreen {
             pressedBackgroundColor: this.storedPressedBackgroundColor,
             onAction: (): void => {
               this.handleInstallEntry(entry);
+            },
+            customLeading: () => {
+              this.buildBrowserBrandLeading(entry.id);
             }
           })
         }, (entry: SyncDesktopExtensionEntry): string => entry.id)
@@ -223,16 +249,34 @@ export struct CrossDeviceLinkSetupScreen {
 
   private refresh(): void {
     if (!this.appServiceModeGateService.canUseOptionalService()) {
-      this.navigationCoordinator.back();
+      this.handleBack();
       return;
     }
     const params = router.getParams() as Record<string, string | undefined> | undefined;
     this.boundary = readBrowserBoundaryRouteState(this.boundary);
-    const providerKind = this.resolveProviderKind(params?.crossDeviceLinkProvider ?? '');
+    // Embedded, the owning host already resolved the mode and passes it as a prop; the
+    // routed page keeps reading it from its own route instead.
+    const providerKind = this.embedded
+      ? this.providerKind
+      : this.resolveProviderKind(params?.crossDeviceLinkProvider ?? '');
     this.steps = buildCrossDeviceLinkSteps(
       providerKind,
       AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')
     );
+  }
+
+  private handleEmbeddedProviderChange(): void {
+    if (this.embedded) {
+      this.refresh();
+    }
+  }
+
+  private handleBack(): void {
+    if (this.onExit !== undefined) {
+      this.onExit();
+      return;
+    }
+    this.navigationCoordinator.back();
   }
 
   private resolveProviderKind(value: string): CrossDeviceLinkProviderKind {
@@ -251,6 +295,32 @@ export struct CrossDeviceLinkSetupScreen {
       return 'first';
     }
     return index === total - 1 ? 'last' : 'middle';
+  }
+
+  @Builder
+  private buildBrowserBrandLeading(id: SyncDesktopExtensionEntryId) {
+    Stack({ alignContent: Alignment.Center }) {
+      Image(this.resolveBrowserBrandIcon(id))
+        .width(BROWSER_BRAND_ICON_SIZE)
+        .height(BROWSER_BRAND_ICON_SIZE)
+        .objectFit(ImageFit.Contain)
+    }
+    .width(BROWSER_BRAND_LEADING_SIZE)
+    .height(BROWSER_BRAND_LEADING_SIZE)
+  }
+
+  private isBrowserBrandEntry(id: SyncDesktopExtensionEntryId): boolean {
+    return id === 'chrome' || id === 'edge' || id === 'firefox';
+  }
+
+  private resolveBrowserBrandIcon(id: SyncDesktopExtensionEntryId): Resource {
+    if (id === 'edge') {
+      return $r('app.media.sync_browser_edge');
+    }
+    if (id === 'firefox') {
+      return $r('app.media.sync_browser_firefox');
+    }
+    return $r('app.media.sync_browser_chrome');
   }
 
   private handleInstallEntry(entry: SyncDesktopExtensionEntry): void {
@@ -292,6 +362,12 @@ export struct CrossDeviceLinkSetupScreen {
 
   private openUrlInBrowser(url: string): void {
     if (url.length === 0) {
+      return;
+    }
+    // The PC shell hosts settings in the tab's native route, where router.back cannot bring
+    // the page forward; it hands us its own opener so the link really opens.
+    if (this.onOpenExternalUrl !== undefined) {
+      this.onOpenExternalUrl(url);
       return;
     }
     this.navigationCoordinator.openBrowserUrlFromGuide(url, this.boundary);

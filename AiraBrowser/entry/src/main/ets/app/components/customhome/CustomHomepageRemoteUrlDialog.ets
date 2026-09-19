@@ -37,17 +37,9 @@ export struct CustomHomepageRemoteUrlDialog {
         }
       })
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '添加',
           emphasis: 'primary',
           accentColor: this.accentColor,
@@ -57,6 +49,16 @@ export struct CustomHomepageRemoteUrlDialog {
             if (this.confirm()) {
               this.controller?.close();
             }
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
+            this.controller?.close();
           }
         })
       }

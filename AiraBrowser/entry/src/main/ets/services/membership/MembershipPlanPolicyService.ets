@@ -62,7 +62,7 @@ export class MembershipPlanPolicyService {
       requiresLogin: true,
       requiresClub: false,
       requiresPro: true,
-      title: '跨系统同步书签'
+      title: '跨设备同步书签'
     },
     {
       featureKey: 'webdav_sync',

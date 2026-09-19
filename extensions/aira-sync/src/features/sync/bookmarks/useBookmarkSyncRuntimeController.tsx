@@ -190,7 +190,7 @@ const readSelectedSyncSourceFromStorage = (): LeafTabSyncRemoteKind | null => {
 };
 
 const resolveRemoteProgressName = (remoteKind: LeafTabSyncRemoteKind) => (
-  remoteKind === 'aira-cloud' ? '云端' : remoteKind === 'personal-server' ? '个人服务器' : 'WebDAV'
+  remoteKind === 'aira-cloud' ? '云端' : remoteKind === 'personal-server' ? '私有化部署' : 'WebDAV'
 );
 
 const resolveProgressDetail = (

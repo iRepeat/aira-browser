@@ -343,15 +343,9 @@ export struct BrowserSiteInfoSheet {
 
   @Builder
   private buildSecurityReportActions() {
-    Row({ space: 12 }) {
+    Column({ space: 12 }) {
       BrowserSheetActionButton({
-        label: '拦截日志',
-        onAction: () => {
-          this.onAction('open_protection_log');
-        }
-      })
-
-      BrowserSheetActionButton({
+        stacked: true,
         label: '站点信息',
         emphasis: 'primary',
         accentColor: this.storedAccentColor,
@@ -359,9 +353,17 @@ export struct BrowserSiteInfoSheet {
           this.onAction('open_overview');
         }
       })
+
+      BrowserSheetActionButton({
+        stacked: true,
+        label: '拦截日志',
+        onAction: () => {
+          this.onAction('open_protection_log');
+        }
+      })
     }
     .width('100%')
-    .alignItems(VerticalAlign.Center)
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder

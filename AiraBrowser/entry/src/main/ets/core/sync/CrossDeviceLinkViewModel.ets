@@ -2,7 +2,7 @@ import { AiraSyncProviderKind } from '../../common/models/AiraSyncModels';
 import { CrossDeviceTabPresencePanelStatus } from '../deviceTabs/CrossDeviceTabPresenceModels';
 
 /**
- * What a row on the 跨系统互联 page does when tapped. The page is a read-only
+ * What a row on the 跨设备互联 page does when tapped. The page is a read-only
  * projection plus these jumps; it never owns sync state itself.
  */
 export type CrossDeviceLinkActionId =
@@ -47,7 +47,6 @@ export interface CrossDeviceLinkViewState {
   primaryActionHint: string;
   primaryAction: CrossDeviceLinkActionId;
   capabilities: CrossDeviceLinkCapabilityRowState[];
-  capabilitiesFooter: string;
   /** The three-step recipe for the mode that is actually available here. */
   steps: string[];
   devices: CrossDeviceLinkDeviceRowState[];
@@ -82,7 +81,7 @@ export interface CrossDeviceLinkFacts {
   devices: CrossDeviceLinkDeviceFact[];
 }
 
-const CONNECTION_TITLE: string = '与电脑互联';
+const CONNECTION_TITLE: string = '跨设备互联';
 const CONNECTION_MESSAGE: string = 'Windows · macOS 上的 Chrome、Edge、Firefox';
 const ADD_DEVICE_HINT: string = '用手机扫一扫电脑上的二维码，确认后电脑端就用当前账号登录，不必在电脑上输密码。';
 const PAIR_HINT: string = '在电脑端扩展里填同一个服务器地址和配对码，两边对上就通了。';
@@ -92,15 +91,10 @@ const HUAWEI_SPACE_NOTICE: string = '华为云空间在华为设备之间同步�
 const NO_PROVIDER_NOTICE: string = '还没开启同步，先选一种同步方式，再回来和电脑连。';
 const NO_PROVIDER_NOTICE_COMMUNITY: string = '还没配置同步，先配置私有化部署，就能和电脑连上。';
 
-const FULL_CAPABILITIES_FOOTER: string = '书签和历史记录可以随时关掉；网页接力、跨设备标签页一直可用，不需要设置。';
-const LIMITED_CAPABILITIES_FOOTER: string = '书签和历史记录可以随时关掉；网页接力、跨设备标签页需要 Aira 云或私有化部署。';
-const LIMITED_CAPABILITIES_FOOTER_COMMUNITY: string =
-  '书签和历史记录可以随时关掉；网页接力、跨设备标签页需要私有化部署。';
-
 const SELF_HOSTED_SECTION_TITLE: string = '不想登录账号';
 const SELF_HOSTED_SECTION_TITLE_COMMUNITY: string = '推荐方式';
 const SELF_HOSTED_FOOTER: string =
-  '云同步、网页接力、跨设备标签页需要登录账号并开通 Aira Pro；只用私有化部署同步书签免费。';
+  '用私有化部署：书签、历史记录、网页接力、跨设备标签页全都能用，免账号、免会员。';
 const SELF_HOSTED_FOOTER_COMMUNITY: string =
   '私有化部署用的是你自己的服务器，不需要登录账号，书签、历史记录、网页接力和跨设备标签页都能用。';
 
@@ -171,7 +165,6 @@ export class CrossDeviceLinkViewModel {
       primaryActionHint: primary.hint,
       primaryAction: primary.action,
       capabilities: this.buildCapabilities(facts, fullDesktopLink),
-      capabilitiesFooter: this.resolveCapabilitiesFooter(facts, fullDesktopLink),
       steps: this.resolveSteps(facts),
       devices: this.buildDevices(facts.devices),
       devicesPlaceholderTitle: this.resolveDevicesPlaceholderTitle(facts),
@@ -213,13 +206,6 @@ export class CrossDeviceLinkViewModel {
       return HUAWEI_SPACE_NOTICE;
     }
     return facts.desktopLinkAvailable ? NO_PROVIDER_NOTICE : NO_PROVIDER_NOTICE_COMMUNITY;
-  }
-
-  private resolveCapabilitiesFooter(facts: CrossDeviceLinkFacts, fullDesktopLink: boolean): string {
-    if (fullDesktopLink) {
-      return FULL_CAPABILITIES_FOOTER;
-    }
-    return facts.desktopLinkAvailable ? LIMITED_CAPABILITIES_FOOTER : LIMITED_CAPABILITIES_FOOTER_COMMUNITY;
   }
 
   private resolveSteps(facts: CrossDeviceLinkFacts): string[] {

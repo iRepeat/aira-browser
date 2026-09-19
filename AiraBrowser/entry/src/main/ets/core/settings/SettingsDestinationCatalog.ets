@@ -168,12 +168,12 @@ const ACCOUNT_TARGETS: SettingsDestinationCatalogTarget[] = [
   target('sync', 'sync', 'sync', '同步',
     AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity() ? '同步与备份' : '账号与同步', 'root', '', '',
     ['WebDAV', '华为云'], ['书签同步', '同步方式', '远端', '恢复同步']),
-  // One page that explains and opens the desktop side, so it stays a routed
-  // destination on every shell instead of a two-pane detail panel.
-  target('cross_device_link', 'cross_device_link', 'cross_device_link', '跨系统互联',
+  // Phone and touch two-pane keep the routed page, but the PC shell embeds it as a
+  // settings pane like 同步, so it no longer opens a bare full-window page there.
+  target('cross_device_link', 'cross_device_link', 'cross_device_link', '跨设备互联',
     AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity() ? '同步与备份' : '账号与同步', 'root', '', '',
-    ['桌面插件', 'Aira-sync', '跨设备'], ['电脑', '浏览器插件', '扩展', '接力', '跨设备标签页', '跨系统'],
-    true, true, 'routed')
+    ['Aira-sync 扩展', 'Aira-sync 插件', '跨设备'], ['电脑', '浏览器插件', '扩展', '接力', '跨设备标签页', '跨设备互联'],
+    true, true, 'desktop_embedded')
 ];
 
 const GENERAL_TARGETS: SettingsDestinationCatalogTarget[] = [

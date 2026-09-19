@@ -349,6 +349,9 @@ export struct BrowserLargeScreenPrimarySurface {
         },
         onOpenAppProxySettings: (): void => {
           this.onNavigationIntent({ kind: 'open_app_proxy', text: '' });
+        },
+        onOpenExternalUrl: (url: string): void => {
+          this.onNavigationIntent({ kind: 'open_external_url', text: '', url: url });
         }
       })
     } else if (this.presentation?.activeTabChrome.scene === 'downloads') {

@@ -68,6 +68,7 @@ export struct SupportQqGroupDialog {
       .width('100%')
 
       BrowserSheetActionButton({
+        stacked: true,
         label: '复制群号码',
         emphasis: 'primary',
         accentColor: this.storedAccentColor,

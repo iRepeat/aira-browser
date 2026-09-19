@@ -74,7 +74,7 @@ export struct BrowserTabsOverviewDeviceButton {
             .stateEffect(false)
             .monopolizeEvents(true)
             .hitTestBehavior(HitTestMode.Block)
-            .accessibilityText('电脑标签页')
+            .accessibilityText('跨设备标签页')
             .onTouch((event: TouchEvent) => {
               this.updatePressedState(event.type);
             })

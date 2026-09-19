@@ -495,8 +495,9 @@ export struct OfflinePageViewerScreen {
         }
         .width('100%')
 
-        Row({ space: 10 }) {
+        Column({ space: 10 }) {
           BrowserSheetActionButton({
+            stacked: true,
             label: '打开原网页',
             actionEnabled: this.resolveOriginalPageUrl().length > 0,
             accentColor: this.themedAccentColor,
@@ -507,6 +508,7 @@ export struct OfflinePageViewerScreen {
           })
 
           BrowserSheetActionButton({
+            stacked: true,
             label: '复制链接',
             actionEnabled: this.resolveOriginalPageUrl().length > 0,
             accentColor: this.themedAccentColor,

@@ -12,25 +12,48 @@ import {
   BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
-import { BrowserSheetActionButton } from '../browser/BrowserModalBottomSheet';
+import {
+  BROWSER_IMMERSIVE_SHEET_HEADER_CONTENT_TOP_INSET,
+  BROWSER_SHEET_IMMERSIVE_BOTTOM_PADDING,
+  BrowserBottomSheetSurface,
+  BrowserImmersiveSheetLayout,
+  BrowserSheetActionButton,
+  BrowserSheetIconButton
+} from '../browser/BrowserModalBottomSheet';
 import { CENTERED_DIALOG_SYSTEM_TALL_PADDED_SURFACE_MODIFIER } from '../common/CenteredDialogSurface';
 
 const CLEAR_BROWSING_DATA_RANGE_GROUP: string = 'clear-browsing-data-range';
+const CLEAR_BROWSING_DATA_SHEET_SIDE_PADDING: number = 16;
 
-@CustomDialog
-export struct ClearBrowsingDataDialog {
+@Component
+export struct ClearBrowsingDataContent {
   @StorageProp(BROWSER_THEME_STORAGE_ACCENT_KEY) private storedAccentColor: string = '#0A59F7';
   @StorageProp(BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY) private storedControlBackgroundColor: string = '#EEF2F6';
   @StorageProp(BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY) private storedFloatingSurfaceColor: string = '#FFFFFF';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY) private storedPrimaryTextColor: string = '#111318';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY) private storedSecondaryTextColor: string = '#5F6875';
-  controller?: CustomDialogController;
   @Link dialogState: SettingsBrowsingDataClearDialogState;
   @Link selectedTimeRangeId: SettingsBrowsingDataClearTimeRangeId;
   @Link selectedItemIds: SettingsBrowsingDataClearItemId[];
-  confirm: () => void = () => {};
+  /**
+   * `sheet` keeps the phone sheet chrome used by the rest of the app: the title sits at the
+   * leading edge under an immersive blurred header and the platform owns the close button.
+   * `dialog` is the PC pane's centered dialog, which centers its own title instead.
+   */
+  @Prop layoutMode: 'dialog' | 'sheet' = 'dialog';
+  onConfirm: () => void = () => {};
+  onCancel: () => void = () => {};
 
   build() {
+    if (this.layoutMode === 'sheet') {
+      this.buildSheetLayout()
+    } else {
+      this.buildDialogLayout()
+    }
+  }
+
+  @Builder
+  private buildDialogLayout() {
     Column({ space: 16 }) {
       Text(this.dialogState.title)
         .width('100%')
@@ -42,47 +65,132 @@ export struct ClearBrowsingDataDialog {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
       Scroll() {
-        Column({ space: 12 }) {
-          if (this.dialogState.showTimeRange) {
-            this.buildSectionTitle(this.dialogState.timeRangeTitle)
-            this.buildTimeRanges()
-          }
-          this.buildSectionTitle(this.dialogState.dataTypesTitle)
-          this.buildDataItems()
-        }
-        .width('100%')
+        this.buildSectionList()
       }
       .layoutWeight(1)
       .width('100%')
       .scrollBar(BarState.Auto)
       .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
 
-      Row({ space: 10 }) {
-        BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.controller?.close();
-          }
-        })
+      this.buildActions()
+    }
+  }
 
-        BrowserSheetActionButton({
-          label: this.dialogState.confirmLabel,
-          emphasis: 'primary',
-          actionEnabled: this.selectedItemIds.length > 0,
-          accentColor: this.storedAccentColor,
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.confirm();
-            this.controller?.close();
-          }
-        })
+  @Builder
+  private buildSheetLayout() {
+    // Immersive phone sheet: content scrolls under a blurred top, and the header row owns
+    // both the title and the close button so the two are laid out on one line together.
+    BrowserBottomSheetSurface({
+      fullHeight: true,
+      horizontalPadding: 0,
+      topPadding: 0,
+      bottomPadding: 0,
+      surfaceColor: this.storedFloatingSurfaceColor
+    }) {
+      BrowserImmersiveSheetLayout({
+        footerVisible: true,
+        scrollContent: () => {
+          this.buildSheetScrollContent()
+        },
+        header: () => {
+          this.buildSheetHeader()
+        },
+        footer: () => {
+          this.buildActions()
+        }
+      })
+    }
+  }
+
+  @Builder
+  private buildSheetHeader() {
+    Row({ space: 8 }) {
+      Text(this.dialogState.title)
+        .layoutWeight(1)
+        .fontSize(21)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.storedPrimaryTextColor)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      BrowserSheetIconButton({
+        icon: $r('sys.symbol.xmark'),
+        iconSize: 17,
+        accessibilityLabel: '关闭',
+        onAction: () => {
+          this.onCancel();
+        }
+      })
+    }
+    .width('100%')
+    .height(40)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private buildSheetScrollContent() {
+    Scroll() {
+      Column() {
+        this.buildSectionList()
       }
       .width('100%')
+      .constraintSize({ minHeight: '100%' })
+      .padding({
+        left: CLEAR_BROWSING_DATA_SHEET_SIDE_PADDING,
+        right: CLEAR_BROWSING_DATA_SHEET_SIDE_PADDING,
+        top: BROWSER_IMMERSIVE_SHEET_HEADER_CONTENT_TOP_INSET,
+        bottom: BROWSER_SHEET_IMMERSIVE_BOTTOM_PADDING
+      })
+      .alignItems(HorizontalAlign.Start)
+      .justifyContent(FlexAlign.Start)
     }
-    .attributeModifier(CENTERED_DIALOG_SYSTEM_TALL_PADDED_SURFACE_MODIFIER)
+    .width('100%')
+    .height('100%')
+    .scrollBar(BarState.Auto)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+    .clip(false)
+  }
+
+  @Builder
+  private buildSectionList() {
+    Column({ space: 12 }) {
+      if (this.dialogState.showTimeRange) {
+        this.buildSectionTitle(this.dialogState.timeRangeTitle)
+        this.buildTimeRanges()
+      }
+      this.buildSectionTitle(this.dialogState.dataTypesTitle)
+      this.buildDataItems()
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private buildActions() {
+    Column({ space: 10 }) {
+      BrowserSheetActionButton({
+        stacked: true,
+        label: this.dialogState.confirmLabel,
+        emphasis: 'primary',
+        actionEnabled: this.selectedItemIds.length > 0,
+        accentColor: this.storedAccentColor,
+        buttonHeight: 44,
+        fontSize: 15,
+        onAction: () => {
+          this.onConfirm();
+        }
+      })
+
+      BrowserSheetActionButton({
+        stacked: true,
+        label: '取消',
+        buttonHeight: 44,
+        fontSize: 15,
+        onAction: () => {
+          this.onCancel();
+        }
+      })
+    }
+    .width('100%')
   }
 
   @Builder
@@ -210,5 +318,35 @@ export struct ClearBrowsingDataDialog {
     const nextIds = this.selectedItemIds.slice();
     nextIds.push(id);
     this.selectedItemIds = nextIds;
+  }
+}
+
+/**
+ * The same content as a centered dialog for the PC pane. The phone shells host
+ * `ClearBrowsingDataContent` in a bottom sheet instead, so this stays a thin wrapper.
+ */
+@CustomDialog
+export struct ClearBrowsingDataDialog {
+  controller?: CustomDialogController;
+  @Link dialogState: SettingsBrowsingDataClearDialogState;
+  @Link selectedTimeRangeId: SettingsBrowsingDataClearTimeRangeId;
+  @Link selectedItemIds: SettingsBrowsingDataClearItemId[];
+  confirm: () => void = () => {};
+
+  build() {
+    ClearBrowsingDataContent({
+      dialogState: $dialogState,
+      selectedTimeRangeId: $selectedTimeRangeId,
+      selectedItemIds: $selectedItemIds,
+      layoutMode: 'dialog',
+      onConfirm: () => {
+        this.confirm();
+        this.controller?.close();
+      },
+      onCancel: () => {
+        this.controller?.close();
+      }
+    })
+      .attributeModifier(CENTERED_DIALOG_SYSTEM_TALL_PADDED_SURFACE_MODIFIER)
   }
 }

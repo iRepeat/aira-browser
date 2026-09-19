@@ -175,18 +175,9 @@ export struct SecureDnsProfileEditHost {
 
       this.buildFieldsSection()
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          actionEnabled: !this.saving && !this.deleting,
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.onBack?.();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: this.saving ? '保存中...' : '保存并使用',
           emphasis: 'primary',
           actionEnabled: !this.saving && !this.deleting,
@@ -196,6 +187,17 @@ export struct SecureDnsProfileEditHost {
           fontSize: 15,
           onAction: () => {
             void this.saveProfile();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          actionEnabled: !this.saving && !this.deleting,
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
+            this.onBack?.();
           }
         })
       }

@@ -76,7 +76,7 @@ export struct SyncDesktopBookmarkGuideContent {
         payload.historyUrl
       );
     } catch (_error) {
-      this.showToast('跨设备指南加载失败');
+      this.showToast('跨设备使用指南加载失败');
     }
   }
 

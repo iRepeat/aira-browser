@@ -96,6 +96,7 @@ export type SettingsCenterPresentationIntentKind =
   'open_app_proxy_quick' |
   'open_app_proxy_settings' |
   'open_embedded_subpage' |
+  'open_external_url' |
   'edit_secure_dns_profile' |
   'open_user_script_gallery_source' |
   'scan_login' |
@@ -155,6 +156,12 @@ export class SettingsCenterPresentationIntent {
 
   static openUserScriptGallerySource(url: string): SettingsCenterPresentationIntent {
     const intent = new SettingsCenterPresentationIntent('open_user_script_gallery_source');
+    intent.url = url;
+    return intent;
+  }
+
+  static openExternalUrl(url: string): SettingsCenterPresentationIntent {
+    const intent = new SettingsCenterPresentationIntent('open_external_url');
     intent.url = url;
     return intent;
   }

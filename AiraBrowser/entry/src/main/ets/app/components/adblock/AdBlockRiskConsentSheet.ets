@@ -115,11 +115,7 @@ export struct AdBlockRiskConsentSheet {
       .scrollBar(BarState.Auto)
       .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
 
-      Row({ space: 12 }) {
-        this.buildActions()
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+      this.buildActions()
     }
     .width('100%')
   }
@@ -172,21 +168,29 @@ export struct AdBlockRiskConsentSheet {
 
   @Builder
   private buildActions() {
-    BrowserSheetActionButton({
-      label: this.state.secondaryActionLabel,
-      onAction: () => {
-        this.onDecline();
-      }
-    })
+    // The phone footer hosts this builder inside its own Row, so the stack lives here:
+    // a stacked action keeps width 100%, and two of those laid out side by side by the
+    // caller would overflow the sheet.
+    Column({ space: 10 }) {
+      BrowserSheetActionButton({
+        stacked: true,
+        label: this.state.primaryActionLabel,
+        emphasis: 'primary',
+        accentColor: this.storedAccentColor,
+        onAction: () => {
+          this.onAccept();
+        }
+      })
 
-    BrowserSheetActionButton({
-      label: this.state.primaryActionLabel,
-      emphasis: 'primary',
-      accentColor: this.storedAccentColor,
-      onAction: () => {
-        this.onAccept();
-      }
-    })
+      BrowserSheetActionButton({
+        stacked: true,
+        label: this.state.secondaryActionLabel,
+        onAction: () => {
+          this.onDecline();
+        }
+      })
+    }
+    .width('100%')
   }
 
   @Builder

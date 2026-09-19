@@ -94,6 +94,7 @@ export struct BrowserLargeScreenWebZoomDialog {
       .clip(true)
 
       BrowserSheetActionButton({
+        stacked: true,
         label: '完成',
         emphasis: 'primary',
         fontSize: 15,

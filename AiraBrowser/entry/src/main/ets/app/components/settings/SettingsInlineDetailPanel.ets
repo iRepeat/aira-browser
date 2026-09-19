@@ -93,7 +93,7 @@ import {
 import { SystemSettingsLaunchService } from '../../../services/system/SystemSettingsLaunchService';
 import { AppModeSwitchRestartService } from '../../../services/settings/AppModeSwitchRestartService';
 import { AlwaysPrivateModeConfirmationDialog } from './AlwaysPrivateModeConfirmationDialog';
-import { ClearBrowsingDataDialog } from './ClearBrowsingDataDialog';
+import { ClearBrowsingDataContent, ClearBrowsingDataDialog } from './ClearBrowsingDataDialog';
 import { SettingsDetailContent } from './SettingsDetailContent';
 import { SupportQqGroupDialog } from './SupportQqGroupDialog';
 
@@ -195,6 +195,7 @@ export struct SettingsInlineDetailPanel {
   @State private clearBrowsingDataSelectedItemIds: SettingsBrowsingDataClearItemId[] =
     this.buildDefaultClearBrowsingDataItemIds(this.clearBrowsingDataDialogState);
   @State private alwaysPrivateConfirmationAccepted: boolean = false;
+  @State private clearBrowsingDataSheetVisible: boolean = false;
   private clearBrowsingDataDialogController: CustomDialogController = new CustomDialogController({
     builder: ClearBrowsingDataDialog({
       dialogState: $clearBrowsingDataDialogState,
@@ -285,6 +286,32 @@ export struct SettingsInlineDetailPanel {
           },
           'JavaScript'
         );
+      }
+    })
+      .bindSheet($$this.clearBrowsingDataSheetVisible, this.buildClearBrowsingDataSheet(), {
+        preferType: SheetType.BOTTOM,
+        height: SheetSize.LARGE,
+        dragBar: true,
+        showClose: false,
+        onDisappear: () => {
+          this.clearBrowsingDataSheetVisible = false;
+        }
+      })
+  }
+
+  @Builder
+  private buildClearBrowsingDataSheet() {
+    ClearBrowsingDataContent({
+      dialogState: $clearBrowsingDataDialogState,
+      selectedTimeRangeId: $clearBrowsingDataTimeRangeId,
+      selectedItemIds: $clearBrowsingDataSelectedItemIds,
+      layoutMode: 'sheet',
+      onConfirm: () => {
+        this.clearBrowsingDataSheetVisible = false;
+        void this.clearSelectedBrowsingData();
+      },
+      onCancel: () => {
+        this.clearBrowsingDataSheetVisible = false;
       }
     })
   }
@@ -857,7 +884,12 @@ export struct SettingsInlineDetailPanel {
     this.clearBrowsingDataDialogState = clearState;
     this.clearBrowsingDataTimeRangeId = clearState.defaultTimeRangeId;
     this.clearBrowsingDataSelectedItemIds = this.buildDefaultClearBrowsingDataItemIds(clearState);
-    this.clearBrowsingDataDialogController.open();
+    // The PC pane keeps the centered dialog; the phone shells use a tall bottom sheet.
+    if (this.shellFamily === 'large_screen') {
+      this.clearBrowsingDataDialogController.open();
+      return;
+    }
+    this.clearBrowsingDataSheetVisible = true;
   }
 
   private async clearSelectedBrowsingData(): Promise<void> {

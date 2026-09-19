@@ -53,6 +53,7 @@ export struct SyncResultDialog {
       .edgeEffect(EdgeEffect.Spring)
 
       BrowserSheetActionButton({
+        stacked: true,
         label: '知道了',
         emphasis: 'primary',
         accentColor: this.storedAccentColor,

@@ -72,17 +72,9 @@ export struct AdBlockGithubRuleDialog {
         }
       })
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '确定',
           emphasis: 'primary',
           accentColor: this.storedAccentColor,
@@ -91,6 +83,16 @@ export struct AdBlockGithubRuleDialog {
           fontSize: 15,
           onAction: () => {
             this.confirm();
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
             this.controller?.close();
           }
         })

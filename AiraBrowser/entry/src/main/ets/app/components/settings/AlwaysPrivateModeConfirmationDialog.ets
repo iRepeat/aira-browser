@@ -39,18 +39,9 @@ export struct AlwaysPrivateModeConfirmationDialog {
 
       this.buildAcceptanceRow()
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.onCancel();
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '确认开启',
           emphasis: 'primary',
           actionEnabled: this.accepted,
@@ -59,6 +50,17 @@ export struct AlwaysPrivateModeConfirmationDialog {
           fontSize: 15,
           onAction: () => {
             this.onConfirm();
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
+            this.onCancel();
             this.controller?.close();
           }
         })

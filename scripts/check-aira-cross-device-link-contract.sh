@@ -39,6 +39,10 @@ CATALOG_SERVICE_REL="${ETS_DIR}/services/sync/SyncDesktopExtensionCatalog.ets"
 DESTINATIONS_REL="${ETS_DIR}/core/settings/SettingsDestinationCatalog.ets"
 CENTER_VIEW_MODEL_REL="${ETS_DIR}/core/settings/SettingsCenterViewModel.ets"
 NAV_COORDINATOR_REL="${ETS_DIR}/app/router/SettingsNavigationCoordinator.ets"
+EMBEDDED_DETAIL_REL="${ETS_DIR}/app/components/settings/SettingsEmbeddedDetailPanel.ets"
+SETTINGS_CENTER_REL="${ETS_DIR}/app/components/settings/SettingsCenterScreen.ets"
+LARGE_SCREEN_INTENT_REL="${ETS_DIR}/core/browser/BrowserLargeScreenShellIntentApplication.ets"
+LARGE_SCREEN_TOOLBAR_REL="${ETS_DIR}/app/components/browser/BrowserLargeScreenNavigationToolbarSurface.ets"
 ROUTES_REL="${ETS_DIR}/app/router/AppRoutes.ets"
 MAIN_PAGES_REL="AiraBrowser/entry/src/main/resources/base/profile/main_pages.json"
 BROWSER_TABS_SHEET_REL="${ETS_DIR}/app/components/browser/BrowserCrossDeviceTabsOverlay.ets"
@@ -140,7 +144,58 @@ require_pattern "${SETUP_SCREEN_REL}" "router.getParams" \
 reject_pattern "${SETUP_SCREEN_REL}" "sharedSyncExperienceCoordinator" \
   "the sub-page must not load sync state of its own."
 require_pattern "${SETUP_PAGE_REL}" "@Entry" \
-  "the install and pairing recipe must be its own routed page."
+  "the install and pairing recipe must keep its own routed page for phone and touch."
+require_pattern "${SETUP_SCREEN_REL}" "export struct CrossDeviceLinkSetupScreen" \
+  "that page must stay a shell and delegate to the component."
+require_pattern "${SETUP_SCREEN_REL}" "embedded: boolean = false" \
+  "the recipe component must also be embeddable for the PC settings pane."
+require_pattern "${SETUP_SCREEN_REL}" "this\\.embedded" \
+  "the embedded recipe must take its mode from the host instead of the route."
+require_pattern "${HOST_REL}" "this\\.showSetupInline = true" \
+  "the large-screen overview must open the recipe inline instead of routing."
+# The three browser rows show the vendor mark itself, not a colorable glyph inside the
+# shared round badge, because the store brands are third-party artwork.
+require_pattern "${SETUP_SCREEN_REL}" "app\\.media\\.sync_browser_chrome" \
+  "the Chrome row must use the Chrome brand mark."
+require_pattern "${SETUP_SCREEN_REL}" "app\\.media\\.sync_browser_edge" \
+  "the Edge row must use the Edge brand mark."
+require_pattern "${SETUP_SCREEN_REL}" "app\\.media\\.sync_browser_firefox" \
+  "the Firefox row must use the Firefox brand mark."
+require_pattern "${SETUP_SCREEN_REL}" "useCustomLeading: this\\.isBrowserBrandEntry" \
+  "browser rows must bypass the round icon badge."
+reject_pattern "${SETUP_SCREEN_REL}" "buildBrowserBrandLeading[^)]*\\{[\\s\\S]{0,200}Circle\(" \
+  "the brand mark must not sit inside another circle."
+
+require_pattern "${HOST_REL}" "CrossDeviceLinkSetupScreen\\(" \
+  "the host must render the recipe component it embeds."
+# On the PC shell the settings live in the tab's native route, so router.back cannot bring
+# the page forward; a tapped install link must go through the shell's own opener.
+require_pattern "${SETUP_SCREEN_REL}" "onOpenExternalUrl" \
+  "the embedded recipe must accept the shell's link opener."
+require_pattern "${HOST_REL}" "this\\.onOpenExternalUrl" \
+  "the host must pass the shell opener into the embedded recipe."
+require_pattern "${EMBEDDED_DETAIL_REL}" "this\\.onOpenExternalUrl\\?\\.\\(url" \
+  "the embedded pane must forward the link opener."
+require_pattern "${SETTINGS_CENTER_REL}" "openExternalUrlFromPane" \
+  "the settings center must route an embedded pane link to the shell opener."
+require_pattern "${LARGE_SCREEN_INTENT_REL}" "'open_external_url'" \
+  "the PC shell must implement opening a pane link in its own tab."
+# The PC address bar offers the cross-device tab list between the account popover and the
+# user-script button, reusing the sheet the cross-device-link page already shows.
+require_pattern "${LARGE_SCREEN_TOOLBAR_REL}" "buildCrossDeviceTabsButton" \
+  "the PC address bar must offer a cross-device tabs button."
+require_pattern "${LARGE_SCREEN_TOOLBAR_REL}" "BrowserCrossDeviceTabsSheet" \
+  "that button must reuse the existing cross-device tabs sheet."
+require_pattern "${LARGE_SCREEN_TOOLBAR_REL}" "kind: 'open_external_url'" \
+  "opening a remote tab from the address bar must reuse the shell's URL intent."
+# PC keeps the user inside the settings workspace so the sync dialogs stay centered. The
+# routed sync page is the phone presentation; its sheets are bottom sheets by design.
+require_pattern "${EMBEDDED_DETAIL_REL}" "onSelectDestination\\('sync'\\)" \
+  "the PC pane must select the 同步 destination instead of pushing the routed sync page."
+require_pattern "${HOST_REL}" "onOpenSyncSettings" \
+  "the host must prefer the PC pane over the routed sync page."
+require_pattern "${HOST_REL}" "this\\.desktopPresentation \\? SheetType\\.CENTER : SheetType\\.BOTTOM" \
+  "the PC pane must present its own sheets as centered dialogs."
 require_pattern "${SETUP_PAGE_REL}" "CrossDeviceLinkSetupScreen" \
   "that page must stay a shell and delegate to the component."
 require_pattern "${ROUTES_REL}" "CROSS_DEVICE_LINK_SETUP_ROUTE" \
@@ -184,14 +239,17 @@ reject_pattern "${HOST_REL}" "wwbgv|lanzou" \
 # story: no account wording, no Aira Cloud wording, and one route to a desktop.
 require_pattern "${VIEW_MODEL_REL}" "NO_PROVIDER_NOTICE_COMMUNITY" \
   "a build without Aira Cloud must explain the self-hosted route, not a missing cloud."
-require_pattern "${VIEW_MODEL_REL}" "LIMITED_CAPABILITIES_FOOTER_COMMUNITY" \
-  "the limited footer must not promise Aira Cloud where it does not exist."
+require_pattern "${VIEW_MODEL_REL}" "SELF_HOSTED_FOOTER_COMMUNITY" \
+  "a build without Aira Cloud must keep a self-hosted footer that does not promise it."
 require_pattern "${VIEW_MODEL_REL}" "SELF_HOSTED_SECTION_TITLE_COMMUNITY: string = '推荐方式'" \
   "the self-hosted row is the recommended path, not the alternate one, on that build."
 require_pattern "${VIEW_MODEL_REL}" "STEPS_SELF_HOSTED" \
   "the steps must not describe an account login that build cannot perform."
 require_pattern "${VIEW_MODEL_REL}" "label: '去配置私有化部署'" \
   "that build must send the user at configuring its own server."
+reject_pattern "${SCREEN_REL}" "capabilitiesFooter" \
+  "the capability list must not carry a footer again."
+
 require_pattern "${SETUP_SCREEN_REL}" "ForEach\\(this\\.steps" \
   "the steps must come from the owner's state instead of the screen."
 
@@ -203,11 +261,24 @@ require_pattern "${SCREEN_REL}" "this.onAction\\(this.state.devicesPlaceholderAc
 reject_pattern "${SCREEN_REL}" "private buildPlaceholderDeviceRow\\(\\) \\{\n\\s+Row\\(\{ space: 12 \\)" \
   "the empty device row must reuse the settings row component, not a hand-built one."
 
-# One routed destination on every shell, so the same page opens on phone and large screen.
-require_pattern "${DESTINATIONS_REL}" "target\\('cross_device_link', 'cross_device_link', 'cross_device_link', '跨系统互联'" \
+# The PC shell embeds it as a settings pane like 同步; phone and touch two-pane keep the
+# routed page, so a large-screen click never opens a bare full-window page.
+require_pattern "${DESTINATIONS_REL}" "target\\('cross_device_link', 'cross_device_link', 'cross_device_link', '跨设备互联'" \
   "the settings catalog must register the first-level destination."
-require_pattern "${DESTINATIONS_REL}" "true, true, 'routed'\\)" \
-  "the destination must be routed so it is never an embedded two-pane panel."
+require_pattern "${DESTINATIONS_REL}" "true, true, 'desktop_embedded'\\)" \
+  "the destination must embed on the PC shell and route only where there is no pane."
+reject_pattern "${DESTINATIONS_REL}" "'cross_device_link',[^)]*'routed'\\)" \
+  "the destination must not stay routed on every shell."
+require_pattern "${EMBEDDED_DETAIL_REL}" "this\\.selectedDestination === 'cross_device_link'" \
+  "the large-screen detail panel must route the destination to its embedded pane."
+require_pattern "${EMBEDDED_DETAIL_REL}" "CrossDeviceLinkHost\\(\\{" \
+  "the embedded pane must host the cross-device-link content, not a blank detail."
+require_pattern "${HOST_REL}" "desktopPresentation: boolean = false" \
+  "the host must be embeddable in the large-screen workspace."
+require_pattern "${HOST_REL}" "onExit\\?" \
+  "an embedded host must exit the pane instead of popping the router."
+require_pattern "${SCREEN_REL}" "showTitleBar: this\\.showTitleBar" \
+  "the embedded pane must hide the scaffold title bar."
 require_pattern "${CENTER_VIEW_MODEL_REL}" "'cross_device_link'" \
   "the settings center must show the row."
 require_pattern "${NAV_COORDINATOR_REL}" "destination === 'cross_device_link'" \

@@ -187,8 +187,8 @@ export class CrossDeviceTabPresenceCoordinator {
       if (context === undefined) {
         return {
           allowed: false,
-          title: '请先连接个人服务器',
-          message: '跨设备标签页需要有效的个人服务器设备凭据。',
+          title: '请先连接私有化部署',
+          message: '跨设备标签页需要有效的私有化部署设备凭据。',
           openPro: false,
           openSyncSettings: true
         };
@@ -204,8 +204,8 @@ export class CrossDeviceTabPresenceCoordinator {
     if (AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity()) {
       return {
         allowed: false,
-        title: '请先连接个人服务器',
-        message: '跨设备标签页支持通过你自己部署的个人服务器使用，请先在同步设置中完成连接。',
+        title: '请先连接私有化部署',
+        message: '跨设备标签页支持通过你自己部署的私有化部署使用，请先在同步设置中完成连接。',
         openPro: false,
         openSyncSettings: true
       };
@@ -223,7 +223,7 @@ export class CrossDeviceTabPresenceCoordinator {
       return {
         allowed: false,
         title: '请先配置跨设备同步',
-        message: '跨设备标签页需要官方云服务或你自己部署的个人服务器。',
+        message: '跨设备标签页需要官方云服务或你自己部署的私有化部署。',
         openPro: false,
         openSyncSettings: true
       };
@@ -242,7 +242,7 @@ export class CrossDeviceTabPresenceCoordinator {
         allowed: false,
         title: proRequired ? 'Aira 云跨设备标签页需要 Pro' : decision.title,
         message: proRequired
-          ? 'Aira 官方托管的跨设备标签页需要 Pro；连接个人服务器后可免费使用。'
+          ? 'Aira 官方托管的跨设备标签页需要 Pro；连接私有化部署后可免费使用。'
           : decision.message,
         openPro: true
       };
@@ -284,7 +284,7 @@ export class CrossDeviceTabPresenceCoordinator {
         const localDevice = await this.preferencesRepository.readLocalDevice();
         const context = await this.resolveProviderContext(settings, localDevice);
         if (context === undefined) {
-          throw new Error('个人服务器尚未连接。');
+          throw new Error('私有化部署尚未连接。');
         }
         await this.enableProviderByDefault(context);
       } catch (_error) {
@@ -368,7 +368,7 @@ export class CrossDeviceTabPresenceCoordinator {
       host.showUnavailable(decision.title, decision.message);
     } catch (_error) {
       host.showUnavailable(
-        '暂时无法打开电脑标签页',
+        '暂时无法打开跨设备标签页',
         '跨设备标签页暂时不可用，请稍后重试。'
       );
     } finally {
@@ -631,7 +631,7 @@ export class CrossDeviceTabPresenceCoordinator {
       const config = AIRA_PERSONAL_SERVER_INSTANCE_SERVICE.requireConfigured(settings);
       const pairedDeviceId = settings.sourceId.trim();
       if (pairedDeviceId.length === 0) {
-        throw new Error('个人服务器设备标识不可用，请重新连接。');
+        throw new Error('私有化部署设备标识不可用，请重新连接。');
       }
       return {
         kind: 'self_hosted',
@@ -666,8 +666,8 @@ export class CrossDeviceTabPresenceCoordinator {
 
   private resolveUnsupportedProviderMessage(): string {
     return AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')
-      ? '请选择个人服务器或 Aira 云同步后再使用跨设备标签页。'
-      : '请选择个人服务器后再使用跨设备标签页。';
+      ? '请选择私有化部署或 Aira 云同步后再使用跨设备标签页。'
+      : '请选择私有化部署后再使用跨设备标签页。';
   }
 
   private isActiveProState(state: AiraMembershipState, uid: string): boolean {

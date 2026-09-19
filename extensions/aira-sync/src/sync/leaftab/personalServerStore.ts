@@ -63,25 +63,25 @@ export class LeafTabSyncPersonalServerStore implements LeafTabSyncRemoteStore {
       ? null
       : parseCanonicalLeafTabSyncWireSnapshot(response.snapshot);
     if (response.snapshot != null && !snapshot) {
-      throw new PersonalServerRemoteError('invalid_snapshot', '个人服务器书签快照格式无效。');
+      throw new PersonalServerRemoteError('invalid_snapshot', '私有化部署书签快照格式无效。');
     }
     const history = response.history == null
       ? null
       : this.historyLifecycle.validateHistory(response.history);
     const commitId = normalizeCommitId(response.commitId);
     if (Boolean(snapshot) !== Boolean(commitId) || Boolean(snapshot) !== Boolean(history)) {
-      throw new PersonalServerRemoteError('invalid_snapshot', '个人服务器书签同步状态不完整。');
+      throw new PersonalServerRemoteError('invalid_snapshot', '私有化部署书签同步状态不完整。');
     }
     if (snapshot && history) {
-      this.historyLifecycle.assertSnapshotWithinHistory(snapshot, history, '个人服务器');
+      this.historyLifecycle.assertSnapshotWithinHistory(snapshot, history, '私有化部署');
     }
     return { snapshot, history, commitId };
   }
 
   async writeState(params: LeafTabSyncWriteStateParams): Promise<LeafTabSyncWriteStateResult> {
-    const snapshot = validateCanonicalLeafTabSyncSnapshot(params.snapshot, '个人服务器');
+    const snapshot = validateCanonicalLeafTabSyncSnapshot(params.snapshot, '私有化部署');
     const history = this.historyLifecycle.validateHistory(params.history);
-    this.historyLifecycle.assertSnapshotWithinHistory(snapshot, history, '个人服务器');
+    this.historyLifecycle.assertSnapshotWithinHistory(snapshot, history, '私有化部署');
     const response = await this.post('/write', {
       protocol: AIRA_CLOUD_BOOKMARK_SYNC_PROTOCOL,
       deviceId: params.deviceId,
@@ -93,7 +93,7 @@ export class LeafTabSyncPersonalServerStore implements LeafTabSyncRemoteStore {
     this.assertProtocol(response);
     const commitId = normalizeCommitId(response.commitId);
     if (!commitId) {
-      throw new PersonalServerRemoteError('invalid_response', '个人服务器没有返回书签 commitId。');
+      throw new PersonalServerRemoteError('invalid_response', '私有化部署没有返回书签 commitId。');
     }
     return {
       commitId,
@@ -114,7 +114,7 @@ export class LeafTabSyncPersonalServerStore implements LeafTabSyncRemoteStore {
     if (response.protocol !== AIRA_CLOUD_BOOKMARK_SYNC_PROTOCOL) {
       throw new PersonalServerRemoteError(
         'client_update_required',
-        '个人服务器返回了不兼容的书签协议，请重新配对最新版本。'
+        '私有化部署返回了不兼容的书签协议，请重新配对最新版本。'
       );
     }
   }

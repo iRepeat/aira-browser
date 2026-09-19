@@ -95,6 +95,7 @@ import { UserScriptUpdateSheet } from '../userscripts/UserScriptUpdateSheet';
 import { UserScriptManagementHost } from '../userscripts/UserScriptManagementHost';
 import { UserScriptsScreen } from '../userscripts/UserScriptsScreen';
 import { SyncExperienceHost } from '../sync/SyncExperienceHost';
+import { CrossDeviceLinkHost } from '../sync/CrossDeviceLinkHost';
 import { BrowserUserAgentSettingsScreen } from './BrowserUserAgentSettingsScreen';
 import { SettingsNavigationCoordinator } from '../../router/SettingsNavigationCoordinator';
 import { SettingsInlineDetailPanel } from './SettingsInlineDetailPanel';
@@ -173,6 +174,7 @@ export struct SettingsEmbeddedDetailPanel {
   onOpenAppProxySettings?: () => void;
   onOpenEmbeddedSubpage?: (subpageId: string) => void;
   onOpenUserScriptGallerySource?: (url: string) => void;
+  onOpenExternalUrl?: (url: string) => void;
   onSettingsChanged?: () => void;
   @State private theme: BrowserThemeViewState =
     this.themeViewStateFactory.build(sharedPreferencesRepository.getPreferences());
@@ -271,6 +273,8 @@ export struct SettingsEmbeddedDetailPanel {
       this.buildUserAgentPanel()
     } else if (this.selectedDestination === 'sync') {
       this.buildSyncPanel()
+    } else if (this.selectedDestination === 'cross_device_link') {
+      this.buildCrossDeviceLinkPanel()
     } else if (this.selectedDestination === 'aira_pro') {
       this.buildAiraProPanel()
     } else {
@@ -693,6 +697,34 @@ export struct SettingsEmbeddedDetailPanel {
       onSettingsChange: (settings: BrowserUserAgentSettings): void => {
         this.userAgentState = this.userAgentViewModel.buildState(settings);
         this.handleSettingsChanged();
+      }
+    })
+  }
+
+  @Builder
+  private buildCrossDeviceLinkPanel() {
+    CrossDeviceLinkHost({
+      showBackButton: false,
+      showTitleBar: false,
+      useTopSafeInset: false,
+      contentKind: 'unframed',
+      desktopPresentation: this.shellFamily === 'large_screen',
+      onExit: () => {
+        if (this.onSelectDestination !== undefined) {
+          this.onSelectDestination('general');
+          return;
+        }
+        this.settingsNavigationCoordinator.back();
+      },
+      onOpenExternalUrl: (url: string): void => {
+        this.onOpenExternalUrl?.(url);
+      },
+      onOpenSyncSettings: (): void => {
+        if (this.onSelectDestination !== undefined) {
+          this.onSelectDestination('sync');
+          return;
+        }
+        this.settingsNavigationCoordinator.back();
       }
     })
   }

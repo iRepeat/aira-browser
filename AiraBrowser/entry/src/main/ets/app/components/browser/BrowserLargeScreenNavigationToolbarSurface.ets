@@ -78,6 +78,7 @@ import {
   createBrowserUserScriptApplicationSnapshot
 } from '../../../core/userscripts/BrowserUserScriptApplicationCoordinator';
 import { UserScriptPageActionsSheet } from '../userscripts/UserScriptPageActionsSheet';
+import { BrowserCrossDeviceTabsSheet } from './BrowserCrossDeviceTabsOverlay';
 import { AppWindowModalLayoutService } from '../../../services/layout/AppWindowModalLayoutService';
 
 const LARGE_SCREEN_NAVIGATION_TOOLBAR_HEIGHT_VP: number = 48;
@@ -96,6 +97,8 @@ const LARGE_SCREEN_SITE_INFO_POPUP_WIDTH_VP: number = 520;
 const LARGE_SCREEN_SITE_INFO_POPUP_HEIGHT_VP: number = 580;
 const LARGE_SCREEN_USER_SCRIPT_POPUP_WIDTH_VP: number = 420;
 const LARGE_SCREEN_USER_SCRIPT_POPUP_HEIGHT_VP: number = 560;
+const LARGE_SCREEN_CROSS_DEVICE_TABS_POPUP_WIDTH_VP: number = 420;
+const LARGE_SCREEN_CROSS_DEVICE_TABS_POPUP_HEIGHT_VP: number = 560;
 type BrowserLargeScreenNavigationControlKind = 'back' | 'forward' | 'reload_or_stop';
 
 const EMPTY_ACTIVE_TAB_CHROME: BrowserLargeScreenActiveTabChromePresentation = {
@@ -179,6 +182,7 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
   @State private omniboxInputFocused: boolean = false;
   @State private omniboxDraftText: string = '';
   @State private siteInfoPopupVisible: boolean = false;
+  @State private crossDeviceTabsPopupVisible: boolean = false;
   @State private hoveredOverflowActionId: string = '';
   private toolbarMenuViewModel: BrowserLargeScreenToolbarMenuViewModel =
     new BrowserLargeScreenToolbarMenuViewModel();
@@ -340,6 +344,7 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
             })
           }
 
+          this.buildCrossDeviceTabsButton()
           this.buildUserScriptButton()
         }
 
@@ -457,6 +462,65 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
 
   private syncSiteInfoPopup(): void {
     this.siteInfoPopupVisible = this.siteInfoVisible;
+  }
+
+  @Builder
+  private buildCrossDeviceTabsButton() {
+    Button({ type: ButtonType.Circle }) {
+      AiraIcon({
+        airaIconId: 'browser.toolbar.tabs',
+        iconSize: LARGE_SCREEN_NAVIGATION_ICON_SIZE_VP,
+        iconColor: this.storedPrimaryTextColor
+      })
+    }
+    .width(LARGE_SCREEN_NAVIGATION_BUTTON_SIZE_VP)
+    .height(LARGE_SCREEN_NAVIGATION_BUTTON_SIZE_VP)
+    .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
+    .stateEffect(true)
+    .accessibilityText('跨设备标签页')
+    .onClick(() => {
+      this.crossDeviceTabsPopupVisible = true;
+    })
+    .bindPopup(this.crossDeviceTabsPopupVisible, {
+      builder: this.buildCrossDeviceTabsPopup,
+      placement: Placement.BottomRight,
+      popupColor: this.storedSurfaceBackgroundColor,
+      enableArrow: false,
+      autoCancel: true,
+      mask: false,
+      targetSpace: 6,
+      width: this.resolvePopupWidth(LARGE_SCREEN_CROSS_DEVICE_TABS_POPUP_WIDTH_VP),
+      onStateChange: (event: PopupStateChangeParam): void => {
+        this.crossDeviceTabsPopupVisible = event.isVisible;
+      }
+    })
+  }
+
+  @Builder
+  private buildCrossDeviceTabsPopup() {
+    Column() {
+      Text('跨设备标签页')
+        .width('100%')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.storedPrimaryTextColor)
+        .padding({ left: 16, right: 16, top: 14, bottom: 6 })
+
+      Column() {
+        BrowserCrossDeviceTabsSheet({
+          onOpenRemoteTab: (url: string, title: string): void => {
+            this.crossDeviceTabsPopupVisible = false;
+            this.onIntent({ kind: 'open_external_url', text: '', url: url, title: title });
+          }
+        })
+      }
+      .width('100%')
+      .layoutWeight(1)
+    }
+    .width(this.resolvePopupWidth(LARGE_SCREEN_CROSS_DEVICE_TABS_POPUP_WIDTH_VP))
+    .height(this.resolvePopupHeight(LARGE_SCREEN_CROSS_DEVICE_TABS_POPUP_HEIGHT_VP))
+    .borderRadius(BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP)
+    .clip(true)
   }
 
   @Builder

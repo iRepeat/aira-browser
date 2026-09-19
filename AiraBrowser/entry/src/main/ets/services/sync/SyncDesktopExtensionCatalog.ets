@@ -38,21 +38,21 @@ export const SYNC_DESKTOP_EXTENSION_LOCAL_PACKAGE_PASSWORD: string = 'aira';
 const SYNC_DESKTOP_EXTENSION_STORE_ENTRIES: SyncDesktopExtensionEntry[] = [
   {
     id: 'chrome',
-    title: 'Chrome 插件',
+    title: 'Chrome 扩展',
     url: SYNC_DESKTOP_EXTENSION_CHROME_URL,
     action: 'copy_link',
     password: ''
   },
   {
     id: 'edge',
-    title: 'Edge 插件',
+    title: 'Edge 扩展',
     url: SYNC_DESKTOP_EXTENSION_EDGE_URL,
     action: 'copy_link',
     password: ''
   },
   {
     id: 'firefox',
-    title: 'Firefox 插件',
+    title: 'Firefox 扩展',
     url: SYNC_DESKTOP_EXTENSION_FIREFOX_URL,
     action: 'copy_link',
     password: ''

@@ -26,6 +26,7 @@ import { SYNC_SETTINGS_REFRESH_REVISION_KEY } from '../../../core/sync/SyncSetti
 import { AIRA_DISTRIBUTION_CAPABILITY_OWNER } from '../../../common/config/AiraDistributionCapabilityOwner';
 import { BrowserBoundaryRouteState, readBrowserBoundaryRouteState } from '../../../common/utils/RouteParamUtils';
 import { SettingsNavigationCoordinator } from '../../router/SettingsNavigationCoordinator';
+import { SettingsContentKind } from '../../../core/settings/SettingsContentLayoutPolicy';
 import {
   BrowserThemeViewState,
   BrowserThemeViewStateFactory
@@ -35,8 +36,9 @@ import { sharedPreferencesRepository } from '../../bootstrap/BrowserAppRuntime';
 import { BrowserCrossDeviceTabsSheet } from '../browser/BrowserCrossDeviceTabsOverlay';
 import { DesktopLoginConfirmSheetContent } from '../settings/DesktopLoginConfirmSheetContent';
 import { CrossDeviceLinkScreen } from './CrossDeviceLinkScreen';
+import { CrossDeviceLinkSetupScreen } from './CrossDeviceLinkSetupScreen';
 
-const DEVICE_TABS_SHEET_TITLE: string = '电脑标签页';
+const DEVICE_TABS_SHEET_TITLE: string = '跨设备标签页';
 const CROSS_DEVICE_LINK_LOG_DOMAIN: number = 0x0A1A;
 const CROSS_DEVICE_LINK_LOG_TAG: string = 'CrossDeviceLink';
 
@@ -45,8 +47,22 @@ export struct CrossDeviceLinkHost {
   @StorageLink(SYNC_SETTINGS_REFRESH_REVISION_KEY) @Watch('handleSyncSettingsSignal')
   private syncSettingsRefreshRevision: number = 0;
   @Prop @Watch('handlePageShowRefresh') refreshToken: number = 0;
+  /** Embedded in the large-screen settings workspace instead of its own routed page. */
+  @Prop showBackButton: boolean = true;
+  @Prop showTitleBar: boolean = true;
+  @Prop useTopSafeInset: boolean = true;
+  @Prop contentKind: SettingsContentKind = 'standard';
+  @Prop desktopPresentation: boolean = false;
+  /** When embedded, back exits the workspace pane instead of popping the router. */
+  onExit?: () => void;
+  /** Native-tab (PC) shell opens a tapped install link instead of routing back to the shell. */
+  onOpenExternalUrl?: (url: string) => void;
+  /** PC pane selects the 同步 destination so the centered dialogs are used, not the routed page. */
+  onOpenSyncSettings?: () => void;
   @State private viewState: CrossDeviceLinkViewState = lastPublishedViewState ?? buildInitialViewState();
   @State private isAddingDevice: boolean = false;
+  /** Large-screen workspace shows the install/pairing recipe inline instead of routing. */
+  @State private showSetupInline: boolean = false;
   /** Remembered so the install sub-page can show the right recipe. */
   @State private providerKind: CrossDeviceLinkProviderKind = 'none';
   @State private confirmSheetVisible: boolean = false;
@@ -99,48 +115,72 @@ export struct CrossDeviceLinkHost {
 
   build() {
     Column() {
-      CrossDeviceLinkScreen({
-        state: this.viewState,
-        settingsIconBackgrounds: this.theme.settingsIconBackgrounds,
-        syncProviderIconBackgrounds: this.theme.syncProviderIconBackgrounds,
-        isAddingDevice: this.isAddingDevice,
-        showBackButton: true,
-        onBack: (): void => {
-          this.navigationCoordinator.back();
-        },
-        onHelp: (): void => {
-          this.navigationCoordinator.openSyncDesktopBookmarkGuide(this.boundary);
-        },
-        onAddDevice: (): void => {
-          this.addDevice();
-        },
-        onOpenSetup: (): void => {
-          this.navigationCoordinator.openCrossDeviceLinkSetup(this.boundary, this.providerKind);
-        },
-        onOpenDeviceTabs: (deviceId: string): void => {
-          this.openDeviceTabs(deviceId);
-        },
-        onAction: (action: CrossDeviceLinkActionId): void => {
-          this.handleAction(action);
-        }
-      })
+      if (this.showSetupInline) {
+        CrossDeviceLinkSetupScreen({
+          embedded: true,
+          desktopPresentation: this.desktopPresentation,
+          providerKind: this.providerKind,
+          onOpenExternalUrl: this.onOpenExternalUrl,
+          onExit: (): void => {
+            this.showSetupInline = false;
+          }
+        })
+      } else {
+        CrossDeviceLinkScreen({
+          state: this.viewState,
+          settingsIconBackgrounds: this.theme.settingsIconBackgrounds,
+          syncProviderIconBackgrounds: this.theme.syncProviderIconBackgrounds,
+          isAddingDevice: this.isAddingDevice,
+          showBackButton: this.showBackButton,
+          showTitleBar: this.showTitleBar,
+          useTopSafeInset: this.useTopSafeInset,
+          contentKind: this.contentKind,
+          desktopPresentation: this.desktopPresentation,
+          onBack: (): void => {
+            if (this.onExit !== undefined) {
+              this.onExit();
+              return;
+            }
+            this.navigationCoordinator.back();
+          },
+          onHelp: (): void => {
+            this.navigationCoordinator.openSyncDesktopBookmarkGuide(this.boundary);
+          },
+          onAddDevice: (): void => {
+            this.addDevice();
+          },
+          onOpenSetup: (): void => {
+            if (this.desktopPresentation) {
+              this.showSetupInline = true;
+              return;
+            }
+            this.navigationCoordinator.openCrossDeviceLinkSetup(this.boundary, this.providerKind);
+          },
+          onOpenDeviceTabs: (deviceId: string): void => {
+            this.openDeviceTabs(deviceId);
+          },
+          onAction: (action: CrossDeviceLinkActionId): void => {
+            this.handleAction(action);
+          }
+        })
+      }
     }
     .width('100%')
     .height('100%')
     .bindSheet($$this.confirmSheetVisible, this.buildDesktopLoginConfirmSheet(), {
-      preferType: SheetType.BOTTOM,
+      preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
       height: SheetSize.FIT_CONTENT,
-      dragBar: true,
+      dragBar: !this.desktopPresentation,
       showClose: false,
       onDisappear: (): void => {
         this.handleConfirmSheetDisappear();
       }
     })
     .bindSheet($$this.deviceTabsSheetVisible, this.buildDeviceTabsSheet(), {
-      preferType: SheetType.BOTTOM,
+      preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
       height: SheetSize.LARGE,
       title: { title: DEVICE_TABS_SHEET_TITLE },
-      dragBar: true,
+      dragBar: !this.desktopPresentation,
       showClose: true
     })
   }
@@ -270,6 +310,12 @@ export struct CrossDeviceLinkHost {
       void this.refresh();
       return;
     }
+    // PC hosts sync inside the settings workspace, whose dialogs are centered; pushing the
+    // routed sync page there would drop the user back onto the phone presentation.
+    if (this.onOpenSyncSettings !== undefined) {
+      this.onOpenSyncSettings();
+      return;
+    }
     this.navigationCoordinator.openSyncSettings(this.boundary);
   }
 
@@ -306,6 +352,12 @@ export struct CrossDeviceLinkHost {
    */
   private openUrlInBrowser(url: string): void {
     if (url.length === 0) {
+      return;
+    }
+    // The PC shell hosts settings in the tab's native route, where router.back cannot bring
+    // the page forward; it hands us its own opener so the link really opens.
+    if (this.onOpenExternalUrl !== undefined) {
+      this.onOpenExternalUrl(url);
       return;
     }
     this.navigationCoordinator.openBrowserUrlFromGuide(url, this.boundary);

@@ -86,7 +86,7 @@ import { SettingsHdsScaffold } from '../components/settings/SettingsHdsScaffold'
 import { SettingsAboutOverviewContent } from '../components/settings/SettingsAboutOverviewContent';
 import { SettingsDetailContent } from '../components/settings/SettingsDetailContent';
 import { AlwaysPrivateModeConfirmationDialog } from '../components/settings/AlwaysPrivateModeConfirmationDialog';
-import { ClearBrowsingDataDialog } from '../components/settings/ClearBrowsingDataDialog';
+import { ClearBrowsingDataContent } from '../components/settings/ClearBrowsingDataDialog';
 import { SupportQqGroupDialog } from '../components/settings/SupportQqGroupDialog';
 import { SettingsScrollBody } from '../components/settings/SettingsLayout';
 import {
@@ -205,20 +205,7 @@ struct SettingsDetailPage {
   @StorageProp(BROWSER_THEME_STORAGE_PRESSED_BACKGROUND_KEY) private storedPressedBackgroundColor: string = '#DDE4EC';
   @StorageProp(BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY) @Watch('handleStoredThemeChanged')
   private storedResolvedThemeMode: string = 'light';
-  private clearBrowsingDataDialogController: CustomDialogController = new CustomDialogController({
-    builder: ClearBrowsingDataDialog({
-      dialogState: $clearBrowsingDataDialogState,
-      selectedTimeRangeId: $clearBrowsingDataTimeRangeId,
-      selectedItemIds: $clearBrowsingDataSelectedItemIds,
-      confirm: () => {
-        void this.clearSelectedBrowsingData();
-      }
-    }),
-    alignment: DialogAlignment.Center,
-    autoCancel: true,
-    customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
-  });
+  @State private clearBrowsingDataSheetVisible: boolean = false;
   private supportQqGroupDialogController: CustomDialogController = new CustomDialogController({
     builder: SupportQqGroupDialog({
       groupNumber: AIRA_SUPPORT_QQ_GROUP_NUMBER,
@@ -339,6 +326,33 @@ struct SettingsDetailPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.themedPageBackground)
+    .bindSheet($$this.clearBrowsingDataSheetVisible, this.buildClearBrowsingDataSheet(), {
+      // Phone shell: the clear-data picker is a tall bottom sheet, not a centered dialog.
+      preferType: SheetType.BOTTOM,
+      height: SheetSize.LARGE,
+      dragBar: true,
+      showClose: false,
+      onDisappear: () => {
+        this.clearBrowsingDataSheetVisible = false;
+      }
+    })
+  }
+
+  @Builder
+  private buildClearBrowsingDataSheet() {
+    ClearBrowsingDataContent({
+      dialogState: $clearBrowsingDataDialogState,
+      selectedTimeRangeId: $clearBrowsingDataTimeRangeId,
+      selectedItemIds: $clearBrowsingDataSelectedItemIds,
+      layoutMode: 'sheet',
+      onConfirm: () => {
+        this.clearBrowsingDataSheetVisible = false;
+        void this.clearSelectedBrowsingData();
+      },
+      onCancel: () => {
+        this.clearBrowsingDataSheetVisible = false;
+      }
+    })
   }
 
   private isPrivateContext(): boolean {
@@ -785,7 +799,7 @@ struct SettingsDetailPage {
     this.clearBrowsingDataDialogState = clearState;
     this.clearBrowsingDataTimeRangeId = clearState.defaultTimeRangeId;
     this.clearBrowsingDataSelectedItemIds = this.buildDefaultClearBrowsingDataItemIds(clearState);
-    this.clearBrowsingDataDialogController.open();
+    this.clearBrowsingDataSheetVisible = true;
   }
 
   private async clearSelectedBrowsingData(): Promise<void> {

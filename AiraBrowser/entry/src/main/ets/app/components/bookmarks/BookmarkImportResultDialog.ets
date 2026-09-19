@@ -43,6 +43,7 @@ export struct BookmarkImportResultDialog {
       .width('100%')
 
       BrowserSheetActionButton({
+        stacked: true,
         label: '知道了',
         emphasis: 'primary',
         accentColor: this.storedAccentColor,

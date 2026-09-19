@@ -59,6 +59,7 @@ struct ClientUpdateRequiredDialog {
 
       Column({ space: 10 }) {
         BrowserSheetActionButton({
+          stacked: true,
           label: '前往升级',
           emphasis: 'primary',
           accentColor: this.storedAccentColor,
@@ -66,6 +67,7 @@ struct ClientUpdateRequiredDialog {
         })
 
         BrowserSheetActionButton({
+          stacked: true,
           label: '继续使用本地功能',
           textColor: this.storedAccentColor,
           onAction: (): void => this.commit('continue_local')

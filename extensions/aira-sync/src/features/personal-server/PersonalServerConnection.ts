@@ -113,7 +113,7 @@ export async function pairPersonalServer(
     ) {
       throw new PersonalServerRemoteError(
         'invalid_pairing_response',
-        response.message || '个人服务器没有返回完整的设备凭据。',
+        response.message || '私有化部署没有返回完整的设备凭据。',
       );
     }
     const connection: PersonalServerConnection = {
@@ -154,7 +154,7 @@ export async function postPersonalServerJson<T extends RemoteResponse>(
 ): Promise<T> {
   const connection = connectionOverride || await readPersonalServerConnection();
   if (!connection) {
-    throw new PersonalServerRemoteError('personal_server_required', '请先连接个人服务器。');
+    throw new PersonalServerRemoteError('personal_server_required', '请先连接私有化部署。');
   }
   return requestJson<T>(
     `${connection.baseUrl}${path.startsWith('/') ? path : `/${path}`}`,
@@ -299,12 +299,12 @@ async function requestJson<T extends RemoteResponse>(
     try {
       parsed = text ? JSON.parse(text) as RemoteResponse : {};
     } catch {
-      throw new PersonalServerRemoteError('invalid_response', '个人服务器返回了无法解析的数据。', response.status);
+      throw new PersonalServerRemoteError('invalid_response', '私有化部署返回了无法解析的数据。', response.status);
     }
     if (!response.ok || parsed.ok !== true) {
       throw new PersonalServerRemoteError(
         String(parsed.code || (response.ok ? 'remote_rejected' : 'http_error')),
-        String(parsed.message || `个人服务器请求失败（${response.status}）。`),
+        String(parsed.message || `私有化部署请求失败（${response.status}）。`),
         response.status,
       );
     }
@@ -313,7 +313,7 @@ async function requestJson<T extends RemoteResponse>(
     if (error instanceof PersonalServerRemoteError) throw error;
     throw new PersonalServerRemoteError(
       'network_unavailable',
-      String((error as Error)?.message || '无法连接个人服务器。'),
+      String((error as Error)?.message || '无法连接私有化部署。'),
     );
   } finally {
     globalThis.clearTimeout(timeout);

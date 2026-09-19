@@ -53,6 +53,7 @@ export struct DocumentViewerFileInfoDialog {
       .width('100%')
 
       BrowserSheetActionButton({
+        stacked: true,
         label: '知道了',
         emphasis: 'primary',
         accentColor: this.storedAccentColor,
@@ -153,23 +154,25 @@ export struct HomeShortcutEditDialog {
           this.draft = nextDraft;
         })
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '保存',
           emphasis: 'primary',
           buttonHeight: 44,
           fontSize: 15,
           onAction: () => {
             this.confirm();
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
             this.controller?.close();
           }
         })
@@ -261,23 +264,25 @@ export struct SiteReportDialog {
           this.remark = value;
         })
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '确定',
           emphasis: 'primary',
           buttonHeight: 44,
           fontSize: 15,
           onAction: () => {
             this.confirm();
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
             this.controller?.close();
           }
         })
@@ -388,6 +393,7 @@ export struct DesktopShortcutNameDialog {
 
         if (this.snapshot.iconCustomized && !this.snapshot.iconProcessing) {
           BrowserSheetActionButton({
+            stacked: true,
             label: '恢复网站图标',
             fillAvailableWidth: false,
             buttonWidth: 136,
@@ -434,17 +440,9 @@ export struct DesktopShortcutNameDialog {
         .backgroundColor(this.storedControlBackgroundColor)
         .borderRadius(14)
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '安装',
           emphasis: 'primary',
           actionEnabled: !this.snapshot.iconProcessing,
@@ -452,6 +450,16 @@ export struct DesktopShortcutNameDialog {
           fontSize: 15,
           onAction: () => {
             this.onAction({ type: 'confirm' });
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
             this.controller?.close();
           }
         })
@@ -510,24 +518,26 @@ export struct BrowserShellWebPromptDialog {
           };
         })
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.cancel();
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '确定',
           emphasis: 'primary',
           buttonHeight: 44,
           fontSize: 15,
           onAction: () => {
             this.confirm(this.presentation.inputValue);
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
+            this.cancel();
             this.controller?.close();
           }
         })
@@ -609,24 +619,26 @@ export struct BrowserShellHttpAuthDialog {
           };
         })
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.cancel();
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '登录',
           emphasis: 'primary',
           buttonHeight: 44,
           fontSize: 15,
           onAction: () => {
             this.confirm(this.presentation.username, this.presentation.password);
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
+            this.cancel();
             this.controller?.close();
           }
         })

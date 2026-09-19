@@ -244,7 +244,7 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
       return {
         code: 'BKM-PROTOCOL-UPDATE-001',
         stage: 'authentication',
-        safeDetail: '当前书签同步协议已停止服务，请升级鸿蒙 App 或 Aira-sync 插件后再试。本机和云端书签均未被覆盖。'
+        safeDetail: '当前书签同步协议已停止服务，请升级鸿蒙 App 或 Aira-sync 扩展后再试。本机和云端书签均未被覆盖。'
       };
     }
     return this.createBookmarkSyncFailure('unknown');
@@ -532,7 +532,7 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
         settings,
         this.createPersonalServerRemoteStore(settings),
         'self_hosted',
-        '个人服务器'
+        '私有化部署'
       );
     }
     return this.readAiraWebdavRemoteSummary();
@@ -2209,7 +2209,7 @@ export class SyncService implements AiraCloudBookmarkV4BootstrapDomain {
       return 'WebDAV';
     }
     if (remoteKind === 'self_hosted') {
-      return '个人服务器';
+      return '私有化部署';
     }
     return '同步服务';
   }

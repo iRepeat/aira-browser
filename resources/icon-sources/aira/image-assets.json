@@ -330,6 +330,15 @@
         "base/media/webdav_provider_pcloud_eu.svg",
         "base/media/webdav_provider_pcloud_us.svg"
       ]
+    },
+    {
+      "owner": "browser-store-brand-artwork",
+      "reason": "Third-party browser identity artwork must preserve the vendor's original geometry and colors.",
+      "resourcePaths": [
+        "base/media/sync_browser_chrome.svg",
+        "base/media/sync_browser_edge.svg",
+        "base/media/sync_browser_firefox.svg"
+      ]
     }
   ]
 }

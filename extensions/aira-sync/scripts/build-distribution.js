@@ -60,7 +60,7 @@ const localeMessages = distribution === 'community'
       zh_CN: {
         appTitle: { message: 'Aira-sync', description: 'The title of the application' },
         appDescription: {
-          message: '通过个人服务器连接 Aira 浏览器，同步书签、历史记录、网页推送和跨设备标签页。',
+          message: '通过私有化部署连接 Aira 浏览器，同步书签、历史记录、网页推送和跨设备标签页。',
           description: 'The description of the application',
         },
         commandOpenHistory: {

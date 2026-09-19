@@ -11,8 +11,9 @@ user into pairing, and hands every dependent capability to the owner that alread
 
 ## Decision
 
-One routed destination, `cross_device_link`, registered in the settings catalog beside `Aira Pro` and `同步`, and one
-page behind it. The page is deliberately a **read-only projection plus deep links**:
+One destination, `cross_device_link`, registered in the settings catalog beside `Aira Pro` and `同步`, and one
+content component behind it. It embeds as a settings pane on the PC shell exactly like `同步`, and stays a routed page
+on phone and touch two-pane where there is no pane. The page is deliberately a **read-only projection plus deep links**:
 
 - `CrossDeviceLinkViewModel` builds the whole page state from facts: the bookmark and history switches come from
   `SyncExperienceCoordinator`, the online computers come from `CrossDeviceTabPresenceCoordinator`, and the desktop-link
@@ -33,8 +34,17 @@ page behind it. The page is deliberately a **read-only projection plus deep link
   `BrowserCrossDeviceTabsSheet`, so the cross-device tab list has exactly one implementation.
 - The install-and-pair recipe is a second level, `CrossDeviceLinkSetupPage`, reached from one row. The overview answers
   "can this mode reach a desktop"; the recipe is only needed once, so it does not sit in front of a user who is already
-  paired. That page takes the active mode from its route params and derives the steps with a pure function, so it loads
-  no sync state of its own.
+  paired. On phone and touch two-pane that page takes the active mode from its route params; in the PC pane the same
+  `CrossDeviceLinkSetupScreen` is embedded with the mode passed as a prop and the scaffold header hidden. Both paths
+  derive the steps with a pure function, so the recipe loads no sync state of its own. A tapped install link opens the
+  same way on both: on the routed page it goes back to the browser shell, and in the PC pane the settings center asks
+  the shell to open it (`open_external_url`) because `router.back` cannot leave a native-route settings scene.
+- The PC address bar also offers the same tab list directly: a 跨设备标签页 button sits between the account popover and
+  the user-script button and opens `BrowserCrossDeviceTabsSheet` in a popup. Tapping a remote tab reuses the shell's URL
+  intent (`open_external_url`), so the two entries share one implementation.
+- On the PC shell the page keeps sync inside the settings workspace: 去开启同步 / 更换同步方式 selects the 同步
+  destination instead of pushing the routed sync page, whose selection sheets are bottom sheets. The pane's own sheets
+  (desktop login confirmation, device tabs) also present as centered dialogs there.
 - 添加设备 starts the existing QR scanner with the existing `DesktopLoginConfirmSheetContent` confirmation. Pairing stays
   one-directional: the computer shows a login QR code and the phone scans it. There is still no server flow for the
   reverse, and this page does not invent one.
@@ -77,8 +87,10 @@ Entry is gated by the same optional-service check as 同步, so a basic service 
 
 ## Consequences
 
-- The entry is one settings row with a connection-status value; the page is reachable on phone and large screen through
-  the routed presentation (`twoPanePresentation: 'routed'`), so there is no second embedded panel to keep in sync.
+- The entry is one settings row with a connection-status value. On the PC shell it embeds in the detail pane
+  (`twoPanePresentation: 'desktop_embedded'`, the same presentation as `同步`); on phone and touch two-pane it stays the
+  routed page (`CrossDeviceLinkPage`). The embedded pane hosts the same `CrossDeviceLinkScreen`, with the scaffold title
+  bar and back button hidden and `onExit` returning to the destination list.
 - The page owns no timers and no persistence: it reloads on appear and on the existing `SyncSettingsRefreshSignal`, and
   reflects whatever the sync and presence owners report, including their own empty and error messages.
 - The device list stays ephemeral by construction: it shows only what the presence owner currently reports as online.
@@ -87,5 +99,6 @@ Entry is gated by the same optional-service check as 同步, so a basic service 
 
 Proportional evidence is a Community build, the Official build, the architecture guardrails, and
 `scripts/check-aira-cross-device-link-contract.sh`, which pins the single state builder, the owner-sourced facts, the
-read-only rule, the always-on rows, the routed destination registration, and the link catalog. The pure state builder is
+read-only rule, the always-on rows, the routed destination registration, the PC-shell embedded pane, and the link
+catalog. The pure state builder is
 pinned by `AiraBrowser/entry/src/test/CrossDeviceLinkViewModel.test.ets`.

@@ -124,7 +124,6 @@ export default function crossDeviceLinkViewModelTest(): void {
       expect(state.providerNotice.length).assertEqual(0);
       expect(findRow(state, PAGE_PUSH_ROW_TITLE).available).assertTrue();
       expect(state.selfHostedSectionTitle).assertEqual('推荐方式');
-      expect(state.capabilitiesFooter.indexOf('Aira 云') < 0).assertTrue();
       expect(state.steps[1].indexOf('账号') < 0).assertTrue();
     });
 
@@ -136,7 +135,6 @@ export default function crossDeviceLinkViewModelTest(): void {
       expect(state.primaryActionLabel).assertEqual('去配置私有化部署');
       expect(state.primaryAction).assertEqual('open_personal_server');
       expect(state.providerNotice.indexOf('Aira 云') < 0).assertTrue();
-      expect(state.capabilitiesFooter.indexOf('Aira 云') < 0).assertTrue();
       expect(findRow(state, PAGE_PUSH_ROW_TITLE).available).assertFalse();
     });
 
@@ -146,15 +144,15 @@ export default function crossDeviceLinkViewModelTest(): void {
       const state = buildState(facts);
 
       expect(state.providerNotice.indexOf('Aira 云') < 0).assertTrue();
-      expect(state.capabilitiesFooter.indexOf('Aira 云') < 0).assertTrue();
-      expect(state.selfHostedFooter.indexOf('登录账号') < 0).assertTrue();
+      // The community footer may say an account is not needed; what it must never do is
+      // promise Aira Cloud on a build that cannot sign in to it.
+      expect(state.selfHostedFooter.indexOf('Aira 云') < 0).assertTrue();
       expect(state.primaryAction).assertEqual('open_personal_server');
     });
 
     it('keeps the account wording on a build that can sign in', 0, () => {
       const state = buildState(buildFacts('aira_cloud'));
 
-      expect(state.capabilitiesFooter.indexOf('Aira 云') >= 0).assertTrue();
       expect(state.selfHostedSectionTitle).assertEqual('不想登录账号');
       expect(state.steps[1].indexOf('账号') >= 0).assertTrue();
     });

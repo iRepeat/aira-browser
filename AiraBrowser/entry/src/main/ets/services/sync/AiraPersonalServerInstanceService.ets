@@ -94,7 +94,7 @@ export class AiraPersonalServerDeviceAuthProvider implements AiraCloudBookmarkAp
 
   getAuthorizationHeader(_expectedUid: string): Promise<string> {
     if (this.token.length <= 0) {
-      return Promise.reject(new Error('个人服务器设备凭据为空，请重新配对。'));
+      return Promise.reject(new Error('私有化部署设备凭据为空，请重新配对。'));
     }
     return Promise.resolve(`Bearer ${this.token}`);
   }
@@ -104,10 +104,10 @@ export class AiraPersonalServerInstanceService {
   normalizeBaseUrl(value: string): string {
     const normalized = value.trim().replace(/\/+$/, '');
     if (!/^https?:\/\/[^\s/?#]+(?::\d+)?(?:\/[^\s?#]*)?$/i.test(normalized)) {
-      throw new Error('请输入完整的 HTTP 或 HTTPS 个人服务器地址。');
+      throw new Error('请输入完整的 HTTP 或 HTTPS 私有化部署地址。');
     }
     if (normalized.indexOf('@') >= 0) {
-      throw new Error('个人服务器地址不能包含用户名或密码。');
+      throw new Error('私有化部署地址不能包含用户名或密码。');
     }
     return normalized;
   }
@@ -131,7 +131,7 @@ export class AiraPersonalServerInstanceService {
       capabilities.history?.version !== 1 ||
       capabilities.personalization?.version !== 2 || capabilities.novelBookshelf?.version !== 2 ||
       capabilities.pagePush?.version !== 1 || capabilities.crossDeviceTabs?.version !== 1) {
-      throw new Error('该地址不是兼容的 Aira 个人服务器，或协议版本暂不受支持。');
+      throw new Error('该地址不是兼容的 Aira 私有化部署，或协议版本暂不受支持。');
     }
     return {
       baseUrl: normalizedBaseUrl,
@@ -165,7 +165,7 @@ export class AiraPersonalServerInstanceService {
     const credentialId = `${response.credentialId ?? ''}`.trim();
     if (response.ok !== true || response.instanceId !== discovery.instanceId || token.length <= 0 ||
       credentialId.length <= 0 || response.deviceId !== request.deviceId) {
-      throw new Error(response.message ?? '个人服务器没有返回完整的设备凭据。');
+      throw new Error(response.message ?? '私有化部署没有返回完整的设备凭据。');
     }
     return {
       config: {
@@ -204,10 +204,10 @@ export class AiraPersonalServerInstanceService {
       `${config.baseUrl}/v1/sync/personalization`,
       config.instanceId,
       {
-        serviceLabel: '个人服务器个性化同步',
+        serviceLabel: '私有化部署个性化同步',
         conflictResponseCode: 'personalization_sync_write_conflict',
         conflictErrorMessage: PERSONALIZATION_SYNC_WRITE_CONFLICT,
-        missingUidMessage: '请先连接个人服务器。'
+        missingUidMessage: '请先连接私有化部署。'
       },
       new AiraPersonalServerDeviceAuthProvider(config.deviceToken)
     );
@@ -219,10 +219,10 @@ export class AiraPersonalServerInstanceService {
       `${config.baseUrl}/v1/sync/novel-bookshelf`,
       config.instanceId,
       {
-        serviceLabel: '个人服务器小说书架同步',
+        serviceLabel: '私有化部署小说书架同步',
         conflictResponseCode: 'novel_bookshelf_sync_write_conflict',
         conflictErrorMessage: NOVEL_BOOKSHELF_SYNC_WRITE_CONFLICT,
-        missingUidMessage: '请先连接个人服务器。'
+        missingUidMessage: '请先连接私有化部署。'
       },
       new AiraPersonalServerDeviceAuthProvider(config.deviceToken)
     );
@@ -233,7 +233,7 @@ export class AiraPersonalServerInstanceService {
     if (config.baseUrl.trim().length <= 0 || config.instanceId.trim().length <= 0 ||
       config.protocolVersion !== 1 || config.credentialId.trim().length <= 0 ||
       config.deviceToken.trim().length <= 0) {
-      throw new Error('请先完成个人服务器发现与设备配对。');
+      throw new Error('请先完成私有化部署发现与设备配对。');
     }
     return config;
   }
@@ -267,11 +267,11 @@ export class AiraPersonalServerInstanceService {
       try {
         value = JSON.parse(raw) as T;
       } catch (_error) {
-        throw new Error('个人服务器返回了无法解析的响应。');
+        throw new Error('私有化部署返回了无法解析的响应。');
       }
       if (response.responseCode < 200 || response.responseCode >= 300) {
         const failure = value as PersonalServerPairingResponse;
-        throw new Error(failure.message ?? `个人服务器请求失败（${response.responseCode}）。`);
+        throw new Error(failure.message ?? `私有化部署请求失败（${response.responseCode}）。`);
       }
       return value;
     } finally {

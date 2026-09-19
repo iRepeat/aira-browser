@@ -26,7 +26,7 @@ const AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS: number = 18;
 const AIRA_PRO_PLAN_RADIO_GROUP: string = 'aira_pro_overview_plan';
 const AIRA_PRO_PLAN_ROW_HEIGHT: number = 86;
 const AIRA_PRO_PROMOTION_PLAN_ROW_HEIGHT: number = 102;
-const AIRA_PRO_PLAN_PRICE_MAX_WIDTH: number = 112;
+const AIRA_PRO_PLAN_PRICE_MAX_WIDTH: number = 150;
 const AIRA_PRO_PLAN_ROW_CORNER_RADIUS: number = 18;
 const AIRA_PRO_SUBSCRIBE_BUTTON_HEIGHT: number = 50;
 const AIRA_PRO_RESTORE_BUTTON_HEIGHT: number = 36;
@@ -288,7 +288,13 @@ export struct AiraProOverviewScreen {
           .fontWeight(FontWeight.Bold)
           .fontColor(plan.originalPriceText.length > 0 ? this.accentColor : this.primaryTextColor)
           .textAlign(TextAlign.End)
-          .maxLines(2)
+          // Keep the price on one line: at 112 vp "¥7.89 / 年自动续费" wrapped and left a
+          // single trailing 费 on the second line. A wider box plus adaptive shrinking keeps
+          // any longer local price (currency or renewal wording) whole instead.
+          .maxLines(1)
+          .minFontSize(plan.originalPriceText.length > 0 ? 14 : 11)
+          .maxFontSize(plan.originalPriceText.length > 0 ? 18 : 14)
+          .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
           .constraintSize({ maxWidth: AIRA_PRO_PLAN_PRICE_MAX_WIDTH })
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 

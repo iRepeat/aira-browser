@@ -10,12 +10,15 @@ import {
 } from './ArkUiMaterialAccess';
 import { display } from '@kit.ArkUI';
 import {
+  CENTERED_DIALOG_ALERT_WIDTH_RATIO,
   CENTERED_DIALOG_MAX_WIDTH_VP,
   CenteredDialogWidthViewModel
 } from '../../../core/browser/CenteredDialogWidthViewModel';
 
 export { CENTERED_DIALOG_MAX_WIDTH_VP };
 export const CENTERED_DIALOG_HORIZONTAL_MARGIN_VP: number = 12;
+/** Width the PC/large-screen shell gives a tall centered dialog that holds a list. */
+export const CENTERED_DIALOG_WIDE_MAX_WIDTH_VP: number = 560;
 export const CENTERED_DIALOG_CORNER_RADIUS_VP: number = 28;
 export const CENTERED_DIALOG_CONTENT_GAP_VP: number = 16;
 export const CENTERED_DIALOG_HORIZONTAL_PADDING_VP: number = 20;
@@ -61,6 +64,27 @@ function resolveCenteredAlertDialogWidth(): Dimension {
   return resolved.widthVp;
 }
 
+function resolveCenteredWideDialogWidth(): Dimension {
+  const windowWidthVp = readDisplayWidthVp();
+  if (!Number.isFinite(windowWidthVp) || windowWidthVp <= 0 ||
+    windowWidthVp * CENTERED_DIALOG_ALERT_WIDTH_RATIO <= CENTERED_DIALOG_WIDE_MAX_WIDTH_VP) {
+    return CENTERED_DIALOG_ALERT_WIDTH_PERCENT;
+  }
+  return Math.min(CENTERED_DIALOG_WIDE_MAX_WIDTH_VP,
+    windowWidthVp - CENTERED_DIALOG_HORIZONTAL_MARGIN_VP * 2);
+}
+
+/**
+ * Width for a wide centered dialog on the PC/large-screen shell.
+ *
+ * A CustomDialogController caps its own box at 400 vp by default, so a caller that
+ * needs a wider surface must widen the controller box as well as the content; the
+ * content alone just overflows and gets clipped.
+ */
+export function resolveWideCenteredDialogWidth(): Dimension {
+  return resolveCenteredWideDialogWidth();
+}
+
 function readDisplayWidthVp(): number {
   try {
     const defaultDisplay = display.getDefaultDisplaySync();
@@ -95,6 +119,7 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
   private readonly paddingTop: number;
   private readonly paddingBottom: number;
   private readonly materialEnabled: boolean;
+  private readonly definiteWidth: boolean;
 
   constructor(
     fillHeight: boolean,
@@ -102,7 +127,8 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
     contentPadding: boolean = false,
     paddingTop: number = CENTERED_DIALOG_TOP_PADDING_VP,
     paddingBottom: number = CENTERED_DIALOG_BOTTOM_PADDING_VP,
-    materialEnabled: boolean = true
+    materialEnabled: boolean = true,
+    definiteWidth: boolean = false
   ) {
     this.fillHeight = fillHeight;
     this.boundHeight = boundHeight;
@@ -110,14 +136,20 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
     this.paddingTop = paddingTop;
     this.paddingBottom = paddingBottom;
     this.materialEnabled = materialEnabled;
+    this.definiteWidth = definiteWidth;
   }
 
   applyNormalAttribute(instance: CommonAttribute): void {
-    instance.width(CENTERED_DIALOG_WIDTH)
+    // Content that itself wraps a Navigation/Scroll has no intrinsic width, so a
+    // percentage here resolves against an indeterminate parent and the dialog
+    // collapses to its content. Those surfaces take the same definite width the
+    // AlertDialog path already resolves instead of the calc() expression. The
+    // wide variant uses the PC dialog width rather than the phone alert width.
+    instance.width(this.definiteWidth ? resolveCenteredWideDialogWidth() : CENTERED_DIALOG_WIDTH)
     if (this.fillHeight) {
       instance.height(CENTERED_DIALOG_TALL_HEIGHT)
       instance.constraintSize({
-        maxWidth: CENTERED_DIALOG_MAX_WIDTH_VP,
+        maxWidth: this.definiteWidth ? CENTERED_DIALOG_WIDE_MAX_WIDTH_VP : CENTERED_DIALOG_MAX_WIDTH_VP,
         maxHeight: CENTERED_DIALOG_TALL_MAX_HEIGHT_VP
       })
     } else if (this.boundHeight) {
@@ -161,6 +193,10 @@ export const CENTERED_DIALOG_SYSTEM_COMPACT_SURFACE_MODIFIER: AttributeModifier<
   new CenteredDialogSurfaceModifier(false, false, true, 16, 12, false);
 export const CENTERED_DIALOG_SYSTEM_TALL_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
   new CenteredDialogSurfaceModifier(true, false, false, CENTERED_DIALOG_TOP_PADDING_VP, CENTERED_DIALOG_BOTTOM_PADDING_VP, false);
+// Same tall surface, but with a definite width for content that has no intrinsic width
+// (a wrapped Navigation or Scroll) and would otherwise collapse narrower than its peers.
+export const CENTERED_DIALOG_SYSTEM_TALL_DEFINITE_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
+  new CenteredDialogSurfaceModifier(true, false, false, CENTERED_DIALOG_TOP_PADDING_VP, CENTERED_DIALOG_BOTTOM_PADDING_VP, false, true);
 export const CENTERED_DIALOG_SYSTEM_TALL_PADDED_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
   new CenteredDialogSurfaceModifier(true, false, true, CENTERED_DIALOG_TOP_PADDING_VP, CENTERED_DIALOG_BOTTOM_PADDING_VP, false);
 export const CENTERED_DIALOG_SYSTEM_SCROLL_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =

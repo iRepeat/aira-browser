@@ -49,7 +49,7 @@ export class AiraDistributionCapabilityOwner {
       return '';
     }
     if (capability === 'aira_cloud') {
-      return 'Aira 云服务仅包含在 Official 发行版中。Community 版本可使用本地功能、WebDAV 或未来接入的个人服务器。';
+      return 'Aira 云服务仅包含在 Official 发行版中。Community 版本可使用本地功能、WebDAV 或未来接入的私有化部署。';
     }
     if (capability === 'personal_server') {
       return '';

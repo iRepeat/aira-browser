@@ -763,6 +763,10 @@ import {
 } from '../../core/membership/NewUserGiftCoordinator';
 import { AIRA_NEW_USER_GIFT_REVISION_KEY } from '../../core/membership/NewUserGiftRefreshSignal';
 import {
+  BrowserDeviceFormFactor,
+  BrowserDeviceFormFactorCoordinator
+} from '../../core/browser/BrowserDeviceFormFactorCoordinator';
+import {
   BottomToolbarGuideAction,
   BottomToolbarGuideCoordinator,
   BottomToolbarGuideShellFacts,
@@ -1049,6 +1053,9 @@ import {
   DEFAULT_BROWSER_QR_SCAN_SESSION_SNAPSHOT
 } from '../../core/browser/BrowserQrScanCoordinator';
 import { BrowserStatusBarStyleService } from '../../services/browser/BrowserStatusBarStyleService';
+import {
+  BrowserWindowPresentationProfileInputService
+} from '../../services/browser/BrowserWindowPresentationProfileInputService';
 import { BrowserWebTopSafeAreaColorSampler } from '../../services/browser/BrowserWebTopSafeAreaColorSampler';
 import { SystemSettingsLaunchService } from '../../services/system/SystemSettingsLaunchService';
 import {
@@ -5118,6 +5125,10 @@ struct BrowserShellPage {
       showToast: (message: string): void => this.showNativeToast(message)
     }
   );
+  private readonly browserWindowPresentationProfileInputService: BrowserWindowPresentationProfileInputService =
+    new BrowserWindowPresentationProfileInputService();
+  private readonly browserDeviceFormFactorCoordinator: BrowserDeviceFormFactorCoordinator =
+    new BrowserDeviceFormFactorCoordinator();
   private bottomToolbarGuideSurface: BottomToolbarGuideSurface = {
     present: (request: BrowserTransientSurfacePresentationRequest): BrowserTransientSurfaceToken =>
       this.browserTransientSurfaceCoordinator.present(request),
@@ -5134,6 +5145,7 @@ struct BrowserShellPage {
       resolveFacts: (): BottomToolbarGuideShellFacts => {
         return {
           shellFamily: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
+          deviceFormFactor: this.resolveGuideDeviceFormFactor(),
           appVisible: this.isBrowserShellVisible,
           privacyMode: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().privacyMode,
           promptBlockingFacts: this.buildTransientPromptBlockingFacts()
@@ -10037,6 +10049,17 @@ struct BrowserShellPage {
       logSync: (_syncSource: string): void => {
       }
     }, WEB_SAFE_INSET_SETTLE_SYNC_DELAY_MS, WEB_SAFE_INSET_SYSTEM_BAR_REFRESH_SETTLE_DELAY_MS);
+  }
+
+  /**
+   * The device class behind the current shell, read through the same policy the window
+   * presentation uses, so a PC is recognised even when it runs the phone shell.
+   */
+  private resolveGuideDeviceFormFactor(): BrowserDeviceFormFactor {
+    return this.browserDeviceFormFactorCoordinator.resolveShellEligibility({
+      platformDeviceType: this.browserWindowPresentationProfileInputService.resolvePlatformDeviceType(),
+      windowWidthVp: 0
+    }).detectedFormFactor;
   }
 
   private getWindowScopeId(): string {

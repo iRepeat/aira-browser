@@ -51,7 +51,7 @@ export function resolveReadingExperienceSystemSheetTitle(
   type: BrowserSystemSheetType
 ): SheetTitleOptions | undefined {
   if (type === 'crossDeviceTabs') {
-    return { title: '电脑标签页' };
+    return { title: '跨设备标签页' };
   }
   const novelReaderTitle: string = resolveNovelReaderSystemSurfaceTitle(type);
   if (novelReaderTitle.length > 0) {

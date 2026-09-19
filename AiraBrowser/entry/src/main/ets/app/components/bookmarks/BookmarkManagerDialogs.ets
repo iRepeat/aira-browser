@@ -52,23 +52,25 @@ export struct BookmarkManagerCreateFolderDialog {
           this.folderTitle = value;
         })
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '确定',
           emphasis: 'primary',
           buttonHeight: 44,
           fontSize: 15,
           onAction: () => {
             this.confirm(this.folderTitle);
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
             this.controller?.close();
           }
         })
@@ -151,23 +153,25 @@ export struct BookmarkManagerEditNodeDialog {
           })
       }
 
-      Row({ space: 10 }) {
+      Column({ space: 10 }) {
         BrowserSheetActionButton({
-          label: '取消',
-          buttonHeight: 44,
-          fontSize: 15,
-          onAction: () => {
-            this.controller?.close();
-          }
-        })
-
-        BrowserSheetActionButton({
+          stacked: true,
           label: '保存',
           emphasis: 'primary',
           buttonHeight: 44,
           fontSize: 15,
           onAction: () => {
             this.confirm();
+            this.controller?.close();
+          }
+        })
+
+        BrowserSheetActionButton({
+          stacked: true,
+          label: '取消',
+          buttonHeight: 44,
+          fontSize: 15,
+          onAction: () => {
             this.controller?.close();
           }
         })

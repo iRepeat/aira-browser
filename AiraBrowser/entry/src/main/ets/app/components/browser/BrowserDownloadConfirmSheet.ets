@@ -90,17 +90,9 @@ struct BrowserDownloadConfirmDialog {
     .width('100%')
     .alignItems(VerticalAlign.Center)
 
-    Row({ space: 10 }) {
+    Column({ space: 10 }) {
       BrowserSheetActionButton({
-        label: prompt.cancelLabel,
-        buttonHeight: 44,
-        fontSize: 15,
-        onAction: () => {
-          this.onAction({ type: 'cancel', guid: prompt.guid });
-        }
-      })
-
-      BrowserSheetActionButton({
+        stacked: true,
         label: prompt.confirmLabel,
         emphasis: 'primary',
         actionEnabled: this.fileNameDraft.trim().length > 0,
@@ -115,9 +107,19 @@ struct BrowserDownloadConfirmDialog {
           });
         }
       })
+
+      BrowserSheetActionButton({
+        stacked: true,
+        label: prompt.cancelLabel,
+        buttonHeight: 44,
+        fontSize: 15,
+        onAction: () => {
+          this.onAction({ type: 'cancel', guid: prompt.guid });
+        }
+      })
     }
     .width('100%')
-    .alignItems(VerticalAlign.Center)
+    .alignItems(HorizontalAlign.Center)
   }
 
   private resolveSourceText(prompt: PendingDownloadPromptState): string {

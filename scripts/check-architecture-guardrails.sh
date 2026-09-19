@@ -5122,6 +5122,10 @@ check_file_contains_rule "${LARGE_SCREEN_TAB_SNAPSHOT_ADAPTER}" "${LARGE_SCREEN_
 check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
   "if \(AIRA_DISTRIBUTION_CAPABILITY_OWNER\.isOfficial\(\)\) \{" \
   "must gate the Huawei account popover on Official so Community cannot render an unusable login entry."
+SYNC_SELECTION_DIALOG_REL="AiraBrowser/entry/src/main/ets/app/components/sync/SyncExperienceSelectionDialog.ets"
+check_file_contains_rule "${REPO_ROOT}/${SYNC_SELECTION_DIALOG_REL}" "${SYNC_SELECTION_DIALOG_REL}" \
+  "CENTERED_DIALOG_SYSTEM_TALL_DEFINITE_SURFACE_MODIFIER" \
+  "the sync selection dialog wraps a Navigation, so it must take the definite centered width instead of collapsing."
 check_file_contains_rule "${LARGE_SCREEN_NAV_TOOLBAR}" "${LARGE_SCREEN_NAV_TOOLBAR_REL}" \
   "BrowserLargeScreenAccountPopover\(\{" \
   "must still render the account popover for Official alongside its distribution gate."
@@ -5338,6 +5342,22 @@ fi
 if ! "${REPO_ROOT}/scripts/check-open-source-source-tree.sh"; then
   report_failure "Committed source tree must remain Community; Official identity is a packaging input."
 fi
+
+# Every settings destination must survive the PC settings route round-trip. The native-tab
+# route encodes the destination in a query and decodes it through one switch; a destination
+# missing from that switch silently resolves to 'general' and steals the selection back.
+SETTINGS_CENTER_VM_REL="AiraBrowser/entry/src/main/ets/core/settings/SettingsCenterViewModel.ets"
+SETTINGS_CENTER_VM="${REPO_ROOT}/${SETTINGS_CENTER_VM_REL}"
+settings_destination_ids="$(sed -n "/^export type SettingsCenterDestination =/,/;/p" \
+  "${SETTINGS_CENTER_VM}" | grep -oE "'[a-z_]+'" | tr -d "'")"
+while IFS= read -r settings_destination_id; do
+  if [ -z "${settings_destination_id}" ]; then
+    continue
+  fi
+  if ! grep -q "case '${settings_destination_id}':" "${NATIVE_TAB_SCENE_SERVICE}"; then
+    report_failure "PC settings route must round-trip every destination; normalizeSettingsDestination is missing '${settings_destination_id}'."
+  fi
+done <<< "${settings_destination_ids}"
 
 if [ "${failures}" -gt 0 ]; then
   cat >&2 <<'EOF'

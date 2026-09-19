@@ -142,7 +142,7 @@ export class CrossDeviceTabPresenceApiService {
     this.assertDistributionAvailable();
     const body = await this.buildAccessBody(uid, deviceId, 'harmonyos_cross_device_tabs_list');
     const response = await this.post('/list', body);
-    this.requireSuccess(response, '暂时无法读取电脑标签页。');
+    this.requireSuccess(response, '暂时无法读取跨设备标签页。');
     const devices: CrossDeviceTabPresenceDevice[] = [];
     const rawDevices = response.devices ?? [];
     rawDevices.forEach((raw: Object): void => {
@@ -176,7 +176,7 @@ export class CrossDeviceTabPresenceApiService {
       tabs: tabs
     };
     const response = await this.postPersonalServer(baseUrl, deviceToken, '/publish', body);
-    this.requireSuccess(response, '暂时无法向个人服务器发布这台手机的标签页。');
+    this.requireSuccess(response, '暂时无法向私有化部署发布这台手机的标签页。');
   }
 
   async listPersonalServer(
@@ -189,7 +189,7 @@ export class CrossDeviceTabPresenceApiService {
       '/list',
       new CrossDeviceTabPresenceEmptyBody()
     );
-    this.requireSuccess(response, '暂时无法从个人服务器读取电脑标签页。');
+    this.requireSuccess(response, '暂时无法从私有化部署读取跨设备标签页。');
     return this.parseListResult(response);
   }
 
@@ -200,7 +200,7 @@ export class CrossDeviceTabPresenceApiService {
       '/clear',
       new CrossDeviceTabPresenceEmptyBody()
     );
-    this.requireSuccess(response, '暂时无法清除个人服务器上的手机标签页状态。');
+    this.requireSuccess(response, '暂时无法清除私有化部署上的手机标签页状态。');
   }
 
   private async buildAccessBody(
@@ -257,7 +257,7 @@ export class CrossDeviceTabPresenceApiService {
     if (normalizedBaseUrl.length === 0 || normalizedToken.length === 0) {
       throw new CrossDeviceTabPresenceApiError(
         'personal_server_auth_required',
-        '请重新连接个人服务器后再继续。'
+        '请重新连接私有化部署后再继续。'
       );
     }
     return await this.postUrl(
