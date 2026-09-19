@@ -781,10 +781,6 @@ export class BrowserRootBottomPanelSessionCoordinator {
     return input.currentDetent;
   }
 
-  isScrollPresentationActive(): boolean {
-    return this.presentationSnapshot.scrollPresentation !== 'resting';
-  }
-
   shouldHideBottomChromeForImmersion(input: BrowserRootBottomChromeImmersionInput): boolean {
     if (!input.effectiveWebMode) {
       return false;

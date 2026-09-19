@@ -1153,6 +1153,9 @@ import {
   BrowserWebTopImmersionSessionHost
 } from '../../core/browser/BrowserWebTopImmersionSessionCoordinator';
 import {
+  isBottomPanelEngagedForTopImmersion
+} from '../../core/browser/BrowserTopImmersionScrollCoordinator';
+import {
   BrowserQuickSearchSwitchingCoordinator,
   BrowserQuickSearchSwitchingHost,
   BrowserQuickSearchSwitchingPresentation,
@@ -3471,8 +3474,7 @@ struct BrowserShellPage {
         addressFocused: this.webBottomAddressFocused,
         bottomToolbarPinnedBySafeArea: this.webViewportPresentation.reservedBottomInsetPx > 0 &&
           this.rootBottomAddressPanelDetent === 'low',
-        bottomPanelInteractive: this.rootBottomAddressPanelDetent !== 'peek' &&
-          !this.browserRootBottomPanelSessionCoordinator.isScrollPresentationActive(),
+        bottomPanelInteractive: isBottomPanelEngagedForTopImmersion(this.rootBottomAddressPanelDetent),
         statusBarVisible: this.webStatusBarVisible
       }),
       host: this.browserWebTopImmersionSessionHost

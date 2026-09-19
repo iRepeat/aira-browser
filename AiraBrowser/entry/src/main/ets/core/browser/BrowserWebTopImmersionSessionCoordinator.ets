@@ -207,6 +207,7 @@ export class BrowserWebTopImmersionSessionCoordinator {
       webPageVisible: facts.webPageVisible,
       addressFocused: facts.addressFocused,
       bottomPanelInteractive: facts.bottomPanelInteractive && facts.bottomToolbarPinnedBySafeArea !== true,
+      bottomChromeRestoredByScroll: bottomChromeRestoredByScroll,
       showTabsSheet: facts.tabsSheetVisible,
       scrollImmersionEnabled: facts.scrollTopImmersionEnabled,
       currentStatusBarVisible: facts.statusBarVisible

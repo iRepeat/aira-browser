@@ -67,7 +67,7 @@ import {
   BrowserBottomPanelResponsiveState,
   BrowserBottomPanelResponsiveViewModel
 } from '../../../core/browser/BrowserBottomPanelResponsiveViewModel';
-import { BrowserTopImmersionScrollCoordinator } from '../../../core/browser/BrowserTopImmersionScrollCoordinator';
+import { BrowserTopImmersionScrollCoordinator, isBottomPanelEngagedForTopImmersion } from '../../../core/browser/BrowserTopImmersionScrollCoordinator';
 import { HomeSearchPanelDetent } from '../../../core/browser/HomeSearchPanelDetentViewModel';
 import { OfflinePageListCoordinator } from '../../../core/offline/OfflinePageListCoordinator';
 import { OfflinePageOpenCoordinator } from '../../../core/offline/OfflinePageOpenCoordinator';
@@ -1006,8 +1006,8 @@ export struct OfflinePageViewerScreen {
 
   private handleOfflineWebScroll(event: OnScrollEvent): void {
     this.offlineWebScrollY = Math.max(0, Math.round(event.yOffset));
-    this.applyOfflineBottomChromeScroll();
-    this.applyOfflineStatusBarScroll();
+    const bottomChromeRestored = this.applyOfflineBottomChromeScroll();
+    this.applyOfflineStatusBarScroll(bottomChromeRestored);
   }
 
   private handleOfflineWebTouch(event: TouchEvent): void {
@@ -1028,10 +1028,10 @@ export struct OfflinePageViewerScreen {
     }
   }
 
-  private applyOfflineBottomChromeScroll(): void {
+  private applyOfflineBottomChromeScroll(): boolean {
     if (!this.viewerViewModel.isScrollPresentationChangeAllowed()) {
       this.bottomChromeScrollCoordinator.reset(this.pageId, this.offlineWebScrollY);
-      return;
+      return false;
     }
     const decision = this.bottomChromeScrollCoordinator.handlePresentationScroll({
       surfaceId: this.pageId,
@@ -1044,18 +1044,21 @@ export struct OfflinePageViewerScreen {
       showTabsSheet: false,
       scrollBehavior: sharedPreferencesRepository.getPreferences().appearance.bottomToolbarScrollBehavior
     });
-    if (decision.changed) {
-      this.bottomChromeScrollPresentation = decision.presentation;
+    if (!decision.changed) {
+      return false;
     }
+    this.bottomChromeScrollPresentation = decision.presentation;
+    return decision.reason === 'scroll_reveal';
   }
 
-  private applyOfflineStatusBarScroll(): void {
+  private applyOfflineStatusBarScroll(bottomChromeRestoredByScroll: boolean = false): void {
     const decision = this.topImmersionScrollCoordinator.handleScroll({
       tabId: this.pageId,
       scrollOffsetY: this.offlineWebScrollY,
       webPageVisible: this.viewerState.canOpen,
       addressFocused: this.pageFindBarState.visible || this.detailsSheetVisible,
-      bottomPanelInteractive: this.bottomPanelDetent !== 'peek',
+      bottomPanelInteractive: isBottomPanelEngagedForTopImmersion(this.bottomPanelDetent),
+      bottomChromeRestoredByScroll: bottomChromeRestoredByScroll,
       showTabsSheet: false,
       scrollImmersionEnabled: sharedPreferencesRepository.getPreferences().appearance.globalImmersionEnabled,
       currentStatusBarVisible: this.statusBarVisible

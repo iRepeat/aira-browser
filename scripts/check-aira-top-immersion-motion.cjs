@@ -86,11 +86,13 @@ for (const update of normal.updates) {
 }
 
 // Exercise the actual order: bottom chrome restores first, then top immersion
-// resolves fresh shell facts from that same user scroll event.
+// resolves fresh shell facts from that same user scroll event. The panel detent
+// stays `low` while scrolling, so the engaged fact stays false and the reveal must
+// come from the restore event itself, not from a resting panel.
 for (const behavior of ['compact', 'hidden']) {
   const item = fixture();
   let bottomPresentation = 'resting';
-  item.facts.bottomPanelInteractive = true;
+  item.facts.bottomPanelInteractive = false;
   const interaction = new BrowserWebScrollInteractionCoordinator({
     bottomChromeScrollCoordinator: new BrowserBottomChromeScrollCoordinator({
       applyPresentationDeltaPx: 28, restorePresentationDeltaPx: 24, transitionCooldownMs: 0
@@ -110,7 +112,6 @@ for (const behavior of ['compact', 'hidden']) {
     }),
     applyBottomChromeDecision(decision) {
       bottomPresentation = decision.presentation;
-      item.facts.bottomPanelInteractive = bottomPresentation === 'resting';
     }
   });
   interaction.applyBottomToolbarScrollBehavior(behavior, item.facts.activeTabId);
@@ -126,6 +127,48 @@ for (const behavior of ['compact', 'hidden']) {
     `Top inset must animate when ${behavior} bottom chrome restores during the same scroll event`);
 }
 
+// "Always show" keeps the bottom toolbar at `resting` for the whole scroll, so the
+// resting state must not be read as an engaged panel. Top immersion has to work on
+// its own or the status bar stays pinned and the top never immerses.
+{
+  const item = fixture();
+  const interaction = new BrowserWebScrollInteractionCoordinator({
+    bottomChromeScrollCoordinator: new BrowserBottomChromeScrollCoordinator({
+      applyPresentationDeltaPx: 28, restorePresentationDeltaPx: 24, transitionCooldownMs: 0
+    }),
+    topImmersionSessionCoordinator: item.coordinator,
+    recentActionManager: { recordClick() {} },
+    scrollPerformanceCoordinator: {
+      createState: () => ({}), activateForMove: state => state
+    },
+    smoothModeService: {}, runtimeLifecyclePort: {}
+  }, {
+    resolveFacts: () => ({
+      activeTabId: item.facts.activeTabId, webPageVisible: true, addressFocused: false,
+      currentDetent: 'low', currentPresentation: 'resting', tabsSheetVisible: false,
+      webAppImmersiveMode: false, fullScreenModeEnabled: false,
+      smoothModeRuntimeEnabled: false, experimentSettings: {}
+    }),
+    applyBottomChromeDecision() {}
+  });
+  interaction.applyBottomToolbarScrollBehavior('fixed', item.facts.activeTabId);
+  interaction.handleTouch(item.facts.activeTabId, 'down');
+  interaction.handleTouch(item.facts.activeTabId, 'move');
+  for (const y of [0, 40, 90, 200]) {
+    clockNow += 400;
+    item.facts.scrollOffsetY = y;
+    interaction.handleScroll(item.facts.activeTabId, y);
+  }
+  assert.deepEqual(item.updates.map(update => update.visible), [false],
+    'always-show toolbar must still allow the top to immerse on a downward scroll');
+  assert.equal(item.updates.at(-1).durationMs, 180, 'the immersion must animate');
+  clockNow += 400;
+  item.facts.scrollOffsetY = 40;
+  interaction.handleScroll(item.facts.activeTabId, 40);
+  assert.deepEqual(item.updates.map(update => update.visible), [false, true],
+    'an upward scroll must reveal the top again');
+}
+
 for (const source of ['history-navigation', 'tabs-overview-entry', 'navigation-start']) {
   const item = fixture();
   item.hide();
@@ -138,6 +181,15 @@ for (const field of ['addressFocused', 'bottomPanelInteractive', 'tabsSheetVisib
   item.facts[field] = true;
   item.scroll(0);
   assert.equal(item.updates.at(-1).durationMs, 0, `${field} is not a scroll reveal`);
+}
+
+// The engaged-panel rule is shared: an expanded panel keeps the status bar visible,
+// while the resting toolbar of a normal scroll does not count as engagement.
+{
+  const { isBottomPanelEngagedForTopImmersion } = load('core/browser/BrowserTopImmersionScrollCoordinator.ets');
+  assert.equal(isBottomPanelEngagedForTopImmersion('middle'), true, 'an expanded panel is engaged');
+  assert.equal(isBottomPanelEngagedForTopImmersion('low'), false, 'a resting toolbar is not engaged');
+  assert.equal(isBottomPanelEngagedForTopImmersion('peek'), false, 'a collapsed toolbar is not engaged');
 }
 const disabled = fixture();
 disabled.hide();

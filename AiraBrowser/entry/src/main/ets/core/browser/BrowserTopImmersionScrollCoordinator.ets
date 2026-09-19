@@ -1,7 +1,24 @@
+import { HomeSearchPanelDetent } from './HomeSearchPanelDetentViewModel';
+
 export interface BrowserTopImmersionScrollConfig {
   hideDeltaPx: number;
   revealDeltaPx: number;
   visibilitySwitchCooldownMs: number;
+}
+
+/**
+ * Whether the bottom panel is engaged enough that scroll immersion must keep the status bar visible.
+ *
+ * Only an expanded panel counts: the address input session and a raised action surface both sit at
+ * `middle`. A resting (`low`) or collapsed (`peek`) toolbar does not, because the user is not
+ * interacting with it.
+ *
+ * The resting toolbar must not count. It is the normal state during any scroll, and with the
+ * "always show" scroll behavior it never leaves `resting`, so treating "the toolbar is not
+ * scroll-collapsed" as engaged would pin the status bar visible and disable immersion entirely.
+ */
+export function isBottomPanelEngagedForTopImmersion(detent: HomeSearchPanelDetent): boolean {
+  return detent === 'middle';
 }
 
 export interface BrowserTopImmersionScrollInput {
@@ -10,6 +27,7 @@ export interface BrowserTopImmersionScrollInput {
   webPageVisible: boolean;
   addressFocused: boolean;
   bottomPanelInteractive: boolean;
+  bottomChromeRestoredByScroll?: boolean;
   showTabsSheet: boolean;
   scrollImmersionEnabled: boolean;
   currentStatusBarVisible: boolean;
@@ -106,11 +124,17 @@ export class BrowserTopImmersionScrollCoordinator {
   }
 
   private shouldForceVisible(input: BrowserTopImmersionScrollInput): boolean {
+    // `bottomChromeRestoredByScroll` is the upward scroll that just brought the toolbar back. Both
+    // chromes restore together, so the status bar returns on that same event even when the upward
+    // movement alone is below `revealDeltaPx`. It must be an event, not the ambient resting state:
+    // a toolbar that is resting because it never scroll-collapses ("always show") would otherwise
+    // force the status bar visible on every scroll and cancel immersion.
     return !input.scrollImmersionEnabled ||
       !input.webPageVisible ||
       input.showTabsSheet ||
       input.addressFocused ||
-      input.bottomPanelInteractive;
+      input.bottomPanelInteractive ||
+      input.bottomChromeRestoredByScroll === true;
   }
 
   private isVisibilitySwitchCoolingDown(now: number): boolean {
