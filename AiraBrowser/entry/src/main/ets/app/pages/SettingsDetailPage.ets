@@ -51,8 +51,12 @@ import {
   sharedSearchEngineRepository,
   sharedSearchEngineSettingsCoordinator,
   sharedSecureDnsSettingsCoordinator,
-  sharedSyncExperienceCoordinator
+  sharedSyncExperienceCoordinator,
+  sharedCommunityUpdateCheckService
 } from '../bootstrap/BrowserAppRuntime';
+import {
+  CommunityUpdateCheckService
+} from '../../services/update/CommunityUpdateCheckService';
 import { BrowserThemeModeBoundary } from '../../core/browser/BrowserThemeModeCoordinator';
 import { SettingsSiteDataClearCoordinator } from '../../core/settings/SettingsSiteDataClearCoordinator';
 import {
@@ -88,6 +92,7 @@ import { SettingsDetailContent } from '../components/settings/SettingsDetailCont
 import { AlwaysPrivateModeConfirmationDialog } from '../components/settings/AlwaysPrivateModeConfirmationDialog';
 import { ClearBrowsingDataContent } from '../components/settings/ClearBrowsingDataDialog';
 import { SupportQqGroupDialog } from '../components/settings/SupportQqGroupDialog';
+import { BrowserNativeAlertDialogPresenter } from '../components/browser/BrowserNativeAlertDialogPresenter';
 import { SettingsScrollBody } from '../components/settings/SettingsLayout';
 import {
   SettingsNavigationCoordinator
@@ -160,6 +165,9 @@ struct SettingsDetailPage {
     new SettingsDetailInteractionCoordinator(sharedPreferencesRepository);
   private themePaletteService: BrowserThemePaletteService = new BrowserThemePaletteService();
   private systemSettingsLaunchService: SystemSettingsLaunchService = new SystemSettingsLaunchService();
+  private nativeAlertDialogPresenter: BrowserNativeAlertDialogPresenter = new BrowserNativeAlertDialogPresenter();
+  private communityUpdateCheckService: CommunityUpdateCheckService = sharedCommunityUpdateCheckService;
+  private communityUpdateChecking: boolean = false;
   private navigationActionCoordinator: SettingsDetailNavigationActionCoordinator =
     new SettingsDetailNavigationActionCoordinator(this.navigationCoordinator, this.systemSettingsLaunchService);
   private appModeSwitchRestartService: AppModeSwitchRestartService = new AppModeSwitchRestartService();
@@ -561,6 +569,9 @@ struct SettingsDetailPage {
         this.supportQqGroupDialogController.open();
       },
       (): void => {
+        void this.checkCommunityUpdate();
+      },
+      (): void => {
         this.confirmClearAllSiteData();
       },
       (): void => {
@@ -570,6 +581,29 @@ struct SettingsDetailPage {
         this.confirmRefreshSiteIcons();
       }
     );
+  }
+
+  private async checkCommunityUpdate(): Promise<void> {
+    if (this.communityUpdateChecking) {
+      return;
+    }
+    this.communityUpdateChecking = true;
+    try {
+      const result = await this.communityUpdateCheckService.check();
+      this.nativeAlertDialogPresenter.inform({
+        title: '检查更新',
+        message: result.message,
+        confirmLabel: '知道了'
+      });
+    } catch (_error) {
+      this.nativeAlertDialogPresenter.inform({
+        title: '检查更新',
+        message: '检查更新失败，请稍后再试。',
+        confirmLabel: '知道了'
+      });
+    } finally {
+      this.communityUpdateChecking = false;
+    }
   }
 
   private async applyThemeMode(themeMode: BrowserThemeMode): Promise<void> {

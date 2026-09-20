@@ -82,8 +82,15 @@ import {
   sharedSearchEngineRepository,
   sharedSearchEngineSettingsCoordinator,
   sharedSecureDnsSettingsCoordinator,
-  sharedSyncExperienceCoordinator
+  sharedSyncExperienceCoordinator,
+  sharedCommunityUpdateCheckService
 } from '../../bootstrap/BrowserAppRuntime';
+import {
+  CommunityUpdateCheckService
+} from '../../../services/update/CommunityUpdateCheckService';
+import {
+  BrowserNativeAlertDialogPresenter
+} from '../browser/BrowserNativeAlertDialogPresenter';
 import { SettingsNavigationCoordinator } from '../../router/SettingsNavigationCoordinator';
 import {
   SettingsDetailNavigationActionCallbackHandlers,
@@ -147,6 +154,9 @@ export struct SettingsInlineDetailPanel {
   private interactionCoordinator: SettingsDetailInteractionCoordinator =
     new SettingsDetailInteractionCoordinator(sharedPreferencesRepository);
   private systemSettingsLaunchService: SystemSettingsLaunchService = new SystemSettingsLaunchService();
+  private nativeAlertDialogPresenter: BrowserNativeAlertDialogPresenter = new BrowserNativeAlertDialogPresenter();
+  private communityUpdateCheckService: CommunityUpdateCheckService = sharedCommunityUpdateCheckService;
+  private communityUpdateChecking: boolean = false;
   private navigationActionCoordinator: SettingsDetailNavigationActionCoordinator =
     new SettingsDetailNavigationActionCoordinator(this.navigationCoordinator, this.systemSettingsLaunchService);
   private appModeSwitchRestartService: AppModeSwitchRestartService = new AppModeSwitchRestartService();
@@ -462,6 +472,9 @@ export struct SettingsInlineDetailPanel {
         this.supportQqGroupDialogController.open();
       },
       (): void => {
+        void this.checkCommunityUpdate();
+      },
+      (): void => {
         this.confirmClearAllSiteData();
       },
       (): void => {
@@ -471,6 +484,29 @@ export struct SettingsInlineDetailPanel {
         this.confirmRefreshSiteIcons();
       }
     );
+  }
+
+  private async checkCommunityUpdate(): Promise<void> {
+    if (this.communityUpdateChecking) {
+      return;
+    }
+    this.communityUpdateChecking = true;
+    try {
+      const result = await this.communityUpdateCheckService.check();
+      this.nativeAlertDialogPresenter.inform({
+        title: '检查更新',
+        message: result.message,
+        confirmLabel: '知道了'
+      });
+    } catch (_error) {
+      this.nativeAlertDialogPresenter.inform({
+        title: '检查更新',
+        message: '检查更新失败，请稍后再试。',
+        confirmLabel: '知道了'
+      });
+    } finally {
+      this.communityUpdateChecking = false;
+    }
   }
 
   private async copySupportQqGroupNumber(): Promise<void> {

@@ -49,6 +49,7 @@ NEW_USER_GIFT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-new-user-gift-contra
 PRO_RENEWAL_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-pro-renewal-contract.sh"
 BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bottom-toolbar-guide-contract.sh"
 CROSS_DEVICE_LINK_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-cross-device-link-contract.sh"
+COMMUNITY_UPDATE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-community-update-contract.sh"
 SYNC_CLOSED_LOOP_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-closed-loop.cjs"
 HUAWEI_APP_IDENTITY_RESOLVER="${REPO_ROOT}/scripts/huawei-app-identity.js"
 HUAWEI_APP_IDENTITY_TEST="${REPO_ROOT}/scripts/huawei-app-identity.test.js"
@@ -355,6 +356,10 @@ if [ ! -x "${BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT}" ]; then
 fi
 
 "${BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT}"
+if [ ! -x "${COMMUNITY_UPDATE_GUARD_SCRIPT}" ]; then
+  fail "Community Update contract guard not executable: ${COMMUNITY_UPDATE_GUARD_SCRIPT}"
+fi
+"${COMMUNITY_UPDATE_GUARD_SCRIPT}"
 if [ ! -x "${CROSS_DEVICE_LINK_GUARD_SCRIPT}" ]; then
   fail "Cross Device Link contract guard not executable: ${CROSS_DEVICE_LINK_GUARD_SCRIPT}"
 fi

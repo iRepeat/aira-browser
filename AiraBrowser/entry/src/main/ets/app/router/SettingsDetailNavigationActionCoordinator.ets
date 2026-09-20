@@ -16,6 +16,7 @@ export interface SettingsDetailNavigationActionHandlers {
   getAbilityContext(): common.UIAbilityContext;
   showToast(message: string): void;
   openSupportQqGroupDialog(): void;
+  checkCommunityUpdate(): void;
   confirmClearAllSiteData(): void;
   confirmResetSitePermissions(): void;
   confirmRefreshSiteIcons(): void;
@@ -26,6 +27,7 @@ export class SettingsDetailNavigationActionCallbackHandlers implements SettingsD
   private getAbilityContextHandler: () => common.UIAbilityContext;
   private showToastHandler: (message: string) => void;
   private openSupportQqGroupDialogHandler: () => void;
+  private checkCommunityUpdateHandler: () => void;
   private confirmClearAllSiteDataHandler: () => void;
   private confirmResetSitePermissionsHandler: () => void;
   private confirmRefreshSiteIconsHandler: () => void;
@@ -35,6 +37,7 @@ export class SettingsDetailNavigationActionCallbackHandlers implements SettingsD
     getAbilityContextHandler: () => common.UIAbilityContext,
     showToastHandler: (message: string) => void,
     openSupportQqGroupDialogHandler: () => void,
+    checkCommunityUpdateHandler: () => void,
     confirmClearAllSiteDataHandler: () => void,
     confirmResetSitePermissionsHandler: () => void,
     confirmRefreshSiteIconsHandler: () => void
@@ -43,6 +46,7 @@ export class SettingsDetailNavigationActionCallbackHandlers implements SettingsD
     this.getAbilityContextHandler = getAbilityContextHandler;
     this.showToastHandler = showToastHandler;
     this.openSupportQqGroupDialogHandler = openSupportQqGroupDialogHandler;
+    this.checkCommunityUpdateHandler = checkCommunityUpdateHandler;
     this.confirmClearAllSiteDataHandler = confirmClearAllSiteDataHandler;
     this.confirmResetSitePermissionsHandler = confirmResetSitePermissionsHandler;
     this.confirmRefreshSiteIconsHandler = confirmRefreshSiteIconsHandler;
@@ -62,6 +66,10 @@ export class SettingsDetailNavigationActionCallbackHandlers implements SettingsD
 
   openSupportQqGroupDialog(): void {
     this.openSupportQqGroupDialogHandler();
+  }
+
+  checkCommunityUpdate(): void {
+    this.checkCommunityUpdateHandler();
   }
 
   confirmClearAllSiteData(): void {
@@ -94,6 +102,10 @@ export class SettingsDetailNavigationActionCoordinator {
     const boundary = handlers.buildBoundaryRouteState();
     if (action === 'open_changelog') {
       this.navigationCoordinator.openChangelog(boundary);
+      return true;
+    }
+    if (action === 'check_community_update') {
+      handlers.checkCommunityUpdate();
       return true;
     }
     if (action === 'open_privacy_statement') {

@@ -55,6 +55,7 @@ import browserSearchEnginePopupLayoutViewModelTest from './BrowserSearchEnginePo
 import browserTabsOverviewSwipeDismissPolicyTest from './BrowserTabsOverviewSwipeDismissPolicy.test';
 import bottomToolbarGuideCoordinatorTest from './BottomToolbarGuideCoordinator.test';
 import crossDeviceLinkViewModelTest from './CrossDeviceLinkViewModel.test';
+import communityUpdateCheckCoordinatorTest from './CommunityUpdateCheckCoordinator.test';
 
 export default function tests(): void {
   userScriptValueStateStoreTest();
@@ -112,4 +113,5 @@ export default function tests(): void {
   browserTabsOverviewSwipeDismissPolicyTest();
   bottomToolbarGuideCoordinatorTest();
   crossDeviceLinkViewModelTest();
+  communityUpdateCheckCoordinatorTest();
 }

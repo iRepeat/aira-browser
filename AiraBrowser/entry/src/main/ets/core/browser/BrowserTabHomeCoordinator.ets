@@ -62,6 +62,7 @@ import {
 import { ReleaseNoticePresentationCoordinator } from '../update/ReleaseNoticePresentationCoordinator';
 import { NewUserGiftCoordinator } from '../membership/NewUserGiftCoordinator';
 import { RenewalReminderCoordinator } from '../membership/RenewalReminderCoordinator';
+import { CommunityUpdateCheckCoordinator } from '../update/CommunityUpdateCheckCoordinator';
 import { HomeWallpaperCoordinator, HomeWallpaperRefreshResult } from '../wallpaper/HomeWallpaperCoordinator';
 import { HomeWallpaperInteractionColorViewModel } from '../wallpaper/HomeWallpaperInteractionColorViewModel';
 import {
@@ -260,6 +261,7 @@ interface BrowserTabHomeDependencies {
   appReviewPromptCoordinator: AppReviewPromptCoordinator;
   resolveReleaseNoticePresentationCoordinator: () => ReleaseNoticePresentationCoordinator;
   resolveNewUserGiftCoordinator: () => NewUserGiftCoordinator;
+  resolveCommunityUpdateCheckCoordinator: () => CommunityUpdateCheckCoordinator;
   resolveRenewalReminderCoordinator: () => RenewalReminderCoordinator;
   resolveTabsOverviewSessionCoordinator: () => BrowserTabsOverviewSessionCoordinator;
   resolveHomePresentationSessionCoordinator: () => BrowserHomePresentationSessionCoordinator;
@@ -427,6 +429,7 @@ export class BrowserTabHomeCoordinator {
     this.dependencies.resolveReleaseNoticePresentationCoordinator().scheduleEvaluation();
     this.dependencies.resolveNewUserGiftCoordinator().scheduleEvaluation();
     this.dependencies.resolveRenewalReminderCoordinator().scheduleEvaluation();
+    this.dependencies.resolveCommunityUpdateCheckCoordinator().scheduleEvaluation();
   }
 
   buildResponsiveLayoutState(

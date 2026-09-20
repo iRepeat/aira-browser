@@ -39,6 +39,7 @@ export type SettingsDetailRowKind = 'static' | 'navigation' | 'option' | 'switch
 export type SettingsDetailRowAction =
   'none' |
   'open_changelog' |
+  'check_community_update' |
   'open_privacy_statement' |
   'open_user_service_agreement_web' |
   'open_pro_membership_service_agreement' |
@@ -1052,6 +1053,11 @@ export class SettingsDetailViewModel {
     const supportRows: SettingsDetailRowState[] = [
       this.navigationRow('changelog', '更新日志', '', '', 'open_changelog')
     ];
+    if (AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity()) {
+      supportRows.push(
+        this.navigationRow('check_update', '检查更新', '', '', 'check_community_update')
+      );
+    }
     if (AIRA_DISTRIBUTION_CAPABILITY_OWNER.isOfficial()) {
       supportRows.push(
         this.navigationRow('app_review', '好评鼓励', '', '', 'open_app_review_page')

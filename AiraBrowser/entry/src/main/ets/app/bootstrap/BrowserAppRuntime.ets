@@ -53,6 +53,7 @@ import { GestureOnboardingPromptRepository } from '../../data/onboarding/Gesture
 import { AppReviewPromptRepository } from '../../data/review/AppReviewPromptRepository';
 import { ActivityRepository } from '../../data/activity/ActivityRepository';
 import { ReleaseNoticeRepository } from '../../data/update/ReleaseNoticeRepository';
+import { CommunityUpdateCheckRepository } from '../../data/update/CommunityUpdateCheckRepository';
 import { BookmarkFolderCountCacheRepository } from '../../data/bookmarks/BookmarkFolderCountCacheRepository';
 import { AiraLocalBookmarkOverviewCacheRepository } from '../../data/sync/AiraLocalBookmarkOverviewCacheRepository';
 import { PersonalizationSyncConfigStore } from '../../data/sync/PersonalizationSyncConfigStore';
@@ -93,6 +94,9 @@ import { HuaweiAccountMutationCoordinator } from '../../core/account/HuaweiAccou
 import { sharedCrossDeviceTabPresenceCoordinator } from '../../core/deviceTabs/CrossDeviceTabPresenceCoordinator';
 import { ActivityForegroundSessionCoordinator } from '../../core/activity/ActivityForegroundSessionCoordinator';
 import { ReleaseNoticeCoordinator } from '../../core/update/ReleaseNoticeCoordinator';
+import { CommunityReleaseFeedService } from '../../services/update/CommunityReleaseFeedService';
+import { CommunityUpdateCheckService } from '../../services/update/CommunityUpdateCheckService';
+import { CommunityUpdateCheckCoordinator } from '../../core/update/CommunityUpdateCheckCoordinator';
 import { sharedClientUpdatePolicyService } from '../../services/update/ClientUpdatePolicyService';
 import { BrowserGestureOnboardingPromptCoordinator } from '../../core/browser/BrowserGestureOnboardingPromptCoordinator';
 import { SearchEngineSettingsCoordinator } from '../../core/search/SearchEngineSettingsCoordinator';
@@ -327,6 +331,12 @@ export const sharedActivityForegroundSessionCoordinator: ActivityForegroundSessi
 export const sharedReleaseNoticeRepository: ReleaseNoticeRepository = new ReleaseNoticeRepository();
 export const sharedReleaseNoticeCoordinator: ReleaseNoticeCoordinator =
   new ReleaseNoticeCoordinator(sharedReleaseNoticeRepository);
+export const sharedCommunityUpdateCheckRepository: CommunityUpdateCheckRepository =
+  new CommunityUpdateCheckRepository();
+export const sharedCommunityReleaseFeedService: CommunityReleaseFeedService =
+  new CommunityReleaseFeedService();
+export const sharedCommunityUpdateCheckService: CommunityUpdateCheckService =
+  new CommunityUpdateCheckService(sharedCommunityUpdateCheckRepository, sharedCommunityReleaseFeedService);
 export { sharedClientUpdatePolicyService };
 export const sharedSitePolicyService: SitePolicyService =
   new SitePolicyService(sharedPreferencesRepository);
@@ -939,6 +949,9 @@ function buildBrowserRuntimeIdleWarmupTasks(): BrowserRuntimeIdleWarmupTask[] {
     id: 'release_notice_runtime',
     run: () => initializeReleaseNoticeRuntimeSafely()
   }, {
+    id: 'community_update_check_runtime',
+    run: () => initializeCommunityUpdateCheckRuntimeSafely()
+  }, {
     id: 'new_user_gift_runtime',
     run: () => sharedNewUserGiftRepository.initialize()
   }, {
@@ -1279,6 +1292,14 @@ async function initializeReleaseNoticeRuntimeSafely(): Promise<void> {
     await sharedReleaseNoticeCoordinator.initializeForCurrentVersion();
   } catch (error) {
     hilog.warn(DOMAIN, TAG, 'Release notice init skipped: %{public}s', JSON.stringify(error));
+  }
+}
+
+async function initializeCommunityUpdateCheckRuntimeSafely(): Promise<void> {
+  try {
+    await sharedCommunityUpdateCheckService.initialize();
+  } catch (error) {
+    hilog.warn(DOMAIN, TAG, 'Community update check init skipped: %{public}s', JSON.stringify(error));
   }
 }
 

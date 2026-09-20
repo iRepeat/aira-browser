@@ -3,6 +3,9 @@ import { CustomHomepageRuntimeCoordinator } from '../customhome/CustomHomepageRu
 import { FeatureGateCoordinator } from '../membership/FeatureGateCoordinator';
 import { NewUserGiftCoordinator } from '../membership/NewUserGiftCoordinator';
 import { BottomToolbarGuideCoordinator } from '../onboarding/BottomToolbarGuideCoordinator';
+import {
+  CommunityUpdateCheckCoordinator
+} from '../update/CommunityUpdateCheckCoordinator';
 import { AppProxyQuickSheetCoordinator } from '../settings/AppProxyQuickSheetCoordinator';
 import { HomeShortcutStateCoordinator } from '../shortcuts/HomeShortcutStateCoordinator';
 import { WebpageTranslationCoordinator } from '../translation/WebpageTranslationCoordinator';
@@ -55,6 +58,7 @@ export interface BrowserMainBackDependencies {
   featureGateCoordinator: FeatureGateCoordinator;
   newUserGiftCoordinator: NewUserGiftCoordinator;
   bottomToolbarGuideCoordinator: BottomToolbarGuideCoordinator;
+  communityUpdateCheckCoordinator: CommunityUpdateCheckCoordinator;
   homeShortcutStateCoordinator: HomeShortcutStateCoordinator;
   releaseNoticePresentationCoordinator: ReleaseNoticePresentationCoordinator;
   unifiedLinkApplicationCoordinator: BrowserUnifiedLinkApplicationCoordinator;
@@ -182,6 +186,9 @@ export class BrowserMainBackCoordinator {
         return true;
       case 'dismiss_bottom_toolbar_guide':
         this.dependencies.bottomToolbarGuideCoordinator.handleAction('acknowledge');
+        return true;
+      case 'dismiss_community_update':
+        this.dependencies.communityUpdateCheckCoordinator.handleAction('dismiss');
         return true;
       case 'handle_home_shortcut_selection_back':
         this.dependencies.homeShortcutStateCoordinator.handleSelectionBack();

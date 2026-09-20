@@ -143,6 +143,7 @@ import {
   sharedNewUserGiftRepository,
   sharedBottomToolbarGuideRepository,
   sharedReleaseNoticeCoordinator,
+  sharedCommunityUpdateCheckService,
   sharedClientUpdatePolicyService,
   sharedAiraCloudBookmarkV4BootstrapRuntime,
   sharedBrowserGestureOnboardingPromptCoordinator,
@@ -169,6 +170,14 @@ import {
   ReleaseNoticePresentationCoordinator,
   ReleaseNoticePresentationShellFacts
 } from '../../core/update/ReleaseNoticePresentationCoordinator';
+import {
+  CommunityUpdateAction,
+  CommunityUpdateCheckCoordinator,
+  CommunityUpdateCheckShellFacts,
+  CommunityUpdateCheckSnapshot,
+  CommunityUpdateCheckSurface,
+  createIdleCommunityUpdateSnapshot
+} from '../../core/update/CommunityUpdateCheckCoordinator';
 import {
   BrowserHomePagePresentationState,
   BrowserHomePresentationViewModel,
@@ -977,6 +986,7 @@ import {
   BrowserHostedWebParkingSlots
 } from '../components/browser/BrowserHostedWebSurfaceSlots';
 import { ReleaseNoticeSheet } from '../components/update/ReleaseNoticeSheet';
+import { CommunityUpdateOverlay } from '../components/update/CommunityUpdateOverlay';
 import {
   ClientUpdateRequiredAction,
   ClientUpdateRequiredOverlay
@@ -4630,6 +4640,8 @@ struct BrowserShellPage {
         this.releaseNoticePresentationCoordinator,
       resolveNewUserGiftCoordinator: (): NewUserGiftCoordinator =>
         this.newUserGiftCoordinator,
+      resolveCommunityUpdateCheckCoordinator: (): CommunityUpdateCheckCoordinator =>
+        this.communityUpdateCheckCoordinator,
       resolveRenewalReminderCoordinator: (): RenewalReminderCoordinator =>
         this.renewalReminderCoordinator,
       resolveTabsOverviewSessionCoordinator: (): BrowserTabsOverviewSessionCoordinator =>
@@ -5127,6 +5139,41 @@ struct BrowserShellPage {
   );
   private readonly browserWindowPresentationProfileInputService: BrowserWindowPresentationProfileInputService =
     new BrowserWindowPresentationProfileInputService();
+  private communityUpdateCheckSurface: CommunityUpdateCheckSurface = {
+    present: (request: BrowserTransientSurfacePresentationRequest): BrowserTransientSurfaceToken =>
+      this.browserTransientSurfaceCoordinator.present(request),
+    dismiss: (id: BrowserTransientSurfaceId): void => {
+      this.browserTransientSurfaceCoordinator.dismiss(id);
+    },
+    isReleaseNoticeBlocked: (facts: BrowserTransientPromptBlockingFacts): boolean =>
+      this.browserTransientSurfaceCoordinator.isReleaseNoticeBlocked(facts)
+  };
+  private communityUpdateCheckCoordinator: CommunityUpdateCheckCoordinator =
+    new CommunityUpdateCheckCoordinator(
+      sharedCommunityUpdateCheckService,
+      this.communityUpdateCheckSurface,
+      {
+        resolveFacts: (): CommunityUpdateCheckShellFacts => {
+          return {
+            appVisible: this.isBrowserShellVisible,
+            privacyMode: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().privacyMode,
+            promptBlockingFacts: this.buildTransientPromptBlockingFacts()
+          };
+        },
+        publishState: (snapshot: CommunityUpdateCheckSnapshot): void => {
+          this.communityUpdateSnapshot = snapshot;
+        },
+        openReleasePage: (url: string): void => {
+          this.browserAppUrlOpenCoordinator.open({
+            url: url,
+            title: 'Aira Community 版本下载',
+            intent: 'new_tab',
+            source: 'app_ui'
+          });
+        },
+        showToast: (message: string): void => this.showNativeToast(message)
+      }
+    );
   private readonly browserDeviceFormFactorCoordinator: BrowserDeviceFormFactorCoordinator =
     new BrowserDeviceFormFactorCoordinator();
   private bottomToolbarGuideSurface: BottomToolbarGuideSurface = {
@@ -5478,6 +5525,7 @@ struct BrowserShellPage {
     DEFAULT_BROWSER_QR_SCAN_SESSION_SNAPSHOT;
   @State releaseNoticeState: ReleaseNoticeUiState = this.releaseNoticePresentationCoordinator.getSnapshot();
   @State newUserGiftSnapshot: NewUserGiftSnapshot = createHiddenNewUserGiftSnapshot();
+  @State communityUpdateSnapshot: CommunityUpdateCheckSnapshot = createIdleCommunityUpdateSnapshot();
   @State bottomToolbarGuideSnapshot: BottomToolbarGuideSnapshot = createHiddenBottomToolbarGuideSnapshot();
   @StorageProp(AIRA_NEW_USER_GIFT_REVISION_KEY) @Watch('handleNewUserGiftRefreshSignal')
   private newUserGiftRefreshRevision: number = 0;
@@ -5932,6 +5980,7 @@ struct BrowserShellPage {
     featureGateCoordinator: this.featureGateCoordinator,
     newUserGiftCoordinator: this.newUserGiftCoordinator,
     bottomToolbarGuideCoordinator: this.bottomToolbarGuideCoordinator,
+    communityUpdateCheckCoordinator: this.communityUpdateCheckCoordinator,
     homeShortcutStateCoordinator: this.homeShortcutStateCoordinator,
     releaseNoticePresentationCoordinator: this.releaseNoticePresentationCoordinator,
     unifiedLinkApplicationCoordinator: this.browserUnifiedLinkApplicationCoordinator,
@@ -8186,6 +8235,8 @@ struct BrowserShellPage {
         this.newUserGiftCoordinator.handleSurfaceDismissed();
       } else if (update.surfaceId === 'bottom_toolbar_guide') {
         this.bottomToolbarGuideCoordinator.handleSurfaceDismissed();
+      } else if (update.surfaceId === 'community_update') {
+        this.communityUpdateCheckCoordinator.handleSurfaceDismissed();
       }
     }
     if (update.lane === 'custom_bottom' &&
@@ -8208,6 +8259,12 @@ struct BrowserShellPage {
       // Same rule for the renewal reminder: only a sheet that reached the user
       // consumes the once-per-lapse record.
       this.renewalReminderCoordinator.handleSurfaceRevealed();
+    }
+    if (update.lane === 'custom_bottom' &&
+      update.reason === 'reveal' &&
+      update.surfaceId === 'community_update') {
+      // Only a card that reached the user spends the one-time notice for that release.
+      this.communityUpdateCheckCoordinator.handleSurfaceRevealed();
     }
     if (!update.snapshot.blocksAutomaticPrompts) {
       // The reminder can only present on a free lane. Without this it would be
@@ -8285,6 +8342,15 @@ struct BrowserShellPage {
         layoutMode: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
         onAction: (action: BottomToolbarGuideAction) => {
           this.bottomToolbarGuideCoordinator.handleAction(action);
+        }
+      })
+    } else if (this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceId === 'community_update') {
+      CommunityUpdateOverlay({
+        visible: this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceVisible,
+        state: this.communityUpdateSnapshot,
+        layoutMode: this.browserShellPresentationOperations?.snapshot()?.shellFamily ?? 'phone',
+        onAction: (action: CommunityUpdateAction) => {
+          this.communityUpdateCheckCoordinator.handleAction(action);
         }
       })
     } else if (this.browserTransientSurfaceSnapshot.activeCustomBottomSurfaceId === 'bookmark_folder_selection') {
@@ -10513,6 +10579,7 @@ struct BrowserShellPage {
     this.browserWebPageToolsCoordinator.reset();
     this.releaseNoticePresentationCoordinator.handleShellReset();
     this.newUserGiftCoordinator.handleShellReset();
+    this.communityUpdateCheckCoordinator.handleShellReset();
     this.bottomToolbarGuideCoordinator.handleShellReset();
     this.renewalReminderCoordinator.handleShellReset();
     this.applyBrowserSystemSheetDisappearEffect(systemSheetResetEffect);
