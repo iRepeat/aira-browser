@@ -209,7 +209,7 @@ export const DEFAULT_BROWSER_APPEARANCE_SETTINGS: BrowserAppearanceSettings = {
   homeShortcutIconSizeRatio: 0.54,
   siteIconCornerRadiusRatio: 0.3,
   themePaletteId: DEFAULT_BROWSER_THEME_PALETTE_ID,
-  tabsOverviewLayoutStyle: 'grid',
+  tabsOverviewLayoutStyle: 'horizontal_cards',
   tabsOverviewCloseButtonAlwaysVisible: false,
   showDesktopBookmarkBar: true
 };
@@ -1038,11 +1038,17 @@ export class PreferencesRepository {
     return DEFAULT_BROWSER_APPEARANCE_SETTINGS.bottomToolbarScrollBehavior;
   }
 
+  /**
+   * Both styles are their own value; only an unknown one falls back to the default.
+   *
+   * The default is the stacked deck, so an unrecognised value must be tested against `grid` as well:
+   * naming only the other style would quietly turn a stored `grid` back into the default.
+   */
   private normalizeTabsOverviewLayoutStyle(
     value: BrowserTabsOverviewLayoutStyle | string | undefined
   ): BrowserTabsOverviewLayoutStyle {
-    return value === 'horizontal_cards' ?
-      'horizontal_cards' :
+    return value === 'grid' || value === 'horizontal_cards' ?
+      value :
       DEFAULT_BROWSER_APPEARANCE_SETTINGS.tabsOverviewLayoutStyle;
   }
 

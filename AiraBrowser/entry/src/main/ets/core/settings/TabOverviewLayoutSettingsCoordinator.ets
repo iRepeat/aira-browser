@@ -180,17 +180,18 @@ export class TabOverviewLayoutSettingsCoordinator {
       });
   }
 
+  /** The stacked deck is the default style, so it leads the list. */
   buildOptions(state: TabOverviewLayoutSettingsState): TabOverviewLayoutOptionState[] {
     return [
-      {
-        style: 'grid',
-        title: '卡片平铺',
-        isSelected: state.draftStyle === 'grid'
-      },
       {
         style: 'horizontal_cards',
         title: '堆叠式',
         isSelected: state.draftStyle === 'horizontal_cards'
+      },
+      {
+        style: 'grid',
+        title: '卡片平铺',
+        isSelected: state.draftStyle === 'grid'
       }
     ];
   }
@@ -198,7 +199,8 @@ export class TabOverviewLayoutSettingsCoordinator {
   private normalizeStyle(
     style: BrowserTabsOverviewLayoutStyle | string | undefined
   ): BrowserTabsOverviewLayoutStyle {
-    return style === 'horizontal_cards' ? 'horizontal_cards' : 'grid';
+    // Both styles are their own value; anything else is the default, which is the stacked deck.
+    return style === 'grid' ? 'grid' : 'horizontal_cards';
   }
 
   private buildState(

@@ -313,7 +313,7 @@ export class SettingsDetailViewModel {
       homeShortcutIconSizeRatio: 0.54,
       siteIconCornerRadiusRatio: 0.3,
       themePaletteId: 'default',
-      tabsOverviewLayoutStyle: 'grid',
+      tabsOverviewLayoutStyle: 'horizontal_cards',
       tabsOverviewCloseButtonAlwaysVisible: false,
       showDesktopBookmarkBar: true
     },

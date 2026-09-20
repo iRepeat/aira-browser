@@ -342,6 +342,24 @@ test('a removal moves only the cards beyond it, and only towards the focus', () 
   assert.deepEqual(shift(tabs, 'zz', 2), { nextPosition: 2, moved: {} });
 });
 
+test('the stacked deck is the default style and leads the appearance settings', () => {
+  const read = relative => fs.readFileSync(path.resolve(__dirname, '..', relative), 'utf8');
+  const coordinator = read('AiraBrowser/entry/src/main/ets/core/settings/TabOverviewLayoutSettingsCoordinator.ets');
+  const options = coordinator.slice(coordinator.indexOf('buildOptions('),
+    coordinator.indexOf('private normalizeStyle('));
+  assert.ok(options.indexOf("style: 'horizontal_cards'") >= 0 &&
+    options.indexOf("style: 'horizontal_cards'") < options.indexOf("style: 'grid'"),
+  'the stacked deck must lead the styles offered');
+  // Every normaliser has to name both styles. Naming only the non-default one would quietly turn a
+  // stored `grid` back into the default the moment the default changed.
+  assert.match(coordinator, /return style === 'grid' \? 'grid' : 'horizontal_cards';/);
+  const preferences = read('AiraBrowser/entry/src/main/ets/data/preferences/PreferencesRepository.ets');
+  assert.match(preferences, /tabsOverviewLayoutStyle: 'horizontal_cards',/);
+  assert.match(preferences, /return value === 'grid' \|\| value === 'horizontal_cards' \?/);
+  const layoutViewModel = read('AiraBrowser/entry/src/main/ets/core/browser/BrowserTabsOverviewLayoutViewModel.ets');
+  assert.match(layoutViewModel, /return style === 'grid' \? 'grid' : 'horizontal_cards';/);
+});
+
 test('the overlay deck wires the policy, per-frame motion and the reference visuals', () => {
   const overlay = fs.readFileSync(path.resolve(__dirname,
     '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsFloatingOverlay.ets'), 'utf8');

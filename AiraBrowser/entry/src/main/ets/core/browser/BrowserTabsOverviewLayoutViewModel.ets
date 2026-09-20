@@ -220,7 +220,8 @@ export class BrowserTabsOverviewLayoutViewModel {
   }
 
   private normalizeLayoutStyle(style: BrowserTabsOverviewLayoutStyle | string | undefined): BrowserTabsOverviewLayoutStyle {
-    return style === 'horizontal_cards' ? 'horizontal_cards' : 'grid';
+    // Both styles are their own value; anything else is the default, which is the stacked deck.
+    return style === 'grid' ? 'grid' : 'horizontal_cards';
   }
 
   private buildColumnsTemplate(columnCount: number): string {

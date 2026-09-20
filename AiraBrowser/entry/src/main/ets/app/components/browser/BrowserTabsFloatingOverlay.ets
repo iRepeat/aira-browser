@@ -123,7 +123,7 @@ interface BrowserTabsFloatingContentPadding {
 export struct BrowserTabsFloatingOverlay {
   @StorageProp(BROWSER_APPEARANCE_STORAGE_TABS_OVERVIEW_LAYOUT_STYLE_KEY)
   @Watch('handleStoredTabsOverviewLayoutStyleChanged')
-  private storedTabsOverviewLayoutStyle: string = 'grid';
+  private storedTabsOverviewLayoutStyle: string = 'horizontal_cards';
   @StorageProp(BROWSER_APPEARANCE_STORAGE_TABS_OVERVIEW_CLOSE_BUTTON_ALWAYS_VISIBLE_KEY)
   private storedTabsOverviewCloseButtonAlwaysVisible: boolean = false;
   @StorageProp(BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY) private storedPageBackgroundColor: string = DEFAULT_THEME_PALETTE.light.pageBackground;
@@ -179,7 +179,7 @@ export struct BrowserTabsFloatingOverlay {
       gridWidth: 0,
       sheetWidth: 360,
       sheetHeight: 844,
-      layoutStyle: 'grid'
+      layoutStyle: 'horizontal_cards'
     });
   @State private entryProgress: number = 0;
   @State private removalState: BrowserTabsOverviewLocalRemovalState =
