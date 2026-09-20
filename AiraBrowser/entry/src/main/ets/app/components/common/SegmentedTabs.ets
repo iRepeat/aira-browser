@@ -13,7 +13,7 @@ export interface SegmentedTabOption {
 
 @Component
 export struct SegmentedTabs {
-  @Prop options: SegmentedTabOption[] = [];
+  @Prop @Watch('handleOptionsChanged') options: SegmentedTabOption[] = [];
   @Prop
   @Watch('syncSelectedIndex')
   selectedId: string = '';
@@ -27,12 +27,18 @@ export struct SegmentedTabs {
   @Prop fallbackColor: ResourceColor = $r('app.color.surface_glass_background');
   @Prop barMaterialEnabled: boolean = true;
   @State private selectedIndex: number = 0;
+  // The tab bar is keyed by option id, so a changed title under the same id would
+  // never repaint. This revision is bumped only when a title really changes and is
+  // folded into the key to force that one rebuild.
+  @State private optionsRevision: number = 0;
+  private cachedOptionTitles: string = '';
   private tabsController: HdsTabsController = new HdsTabsController();
   private synchronizingController: boolean = false;
   private cachedHdsMaterialAvailable: boolean | undefined = undefined;
   onSelect: (id: string) => void = (_id: string) => {};
 
   aboutToAppear(): void {
+    this.cachedOptionTitles = this.buildOptionTitlesSignature();
     this.syncSelectedIndex();
   }
 
@@ -49,7 +55,8 @@ export struct SegmentedTabs {
           }
         }
           .tabBar(this.buildTabBar(option))
-      }, (option: SegmentedTabOption) => option.id)
+      }, (option: SegmentedTabOption) =>
+        `${option.id}:${option.title}:${this.optionsRevision}`)
     }
     .vertical(false)
     .scrollable(false)
@@ -128,6 +135,30 @@ export struct SegmentedTabs {
     this.synchronizingController = true;
     this.tabsController.changeIndex(nextIndex);
     this.synchronizingController = false;
+  }
+
+  /**
+   * A caller may pass a fresh options array on every render, so an object-identity
+   * watch alone would churn. Only a real title change needs the tab bar rebuilt,
+   * and rebuilding the TabContent nodes can reset the controller's own index, so
+   * the current selection is re-applied here.
+   */
+  private handleOptionsChanged(): void {
+    const signature = this.buildOptionTitlesSignature();
+    if (signature === this.cachedOptionTitles) {
+      return;
+    }
+    this.cachedOptionTitles = signature;
+    this.optionsRevision += 1;
+    const nextIndex = this.resolveSelectedIndex();
+    this.selectedIndex = nextIndex;
+    this.synchronizingController = true;
+    this.tabsController.changeIndex(nextIndex);
+    this.synchronizingController = false;
+  }
+
+  private buildOptionTitlesSignature(): string {
+    return this.options.map((option: SegmentedTabOption) => `${option.id}:${option.title}`).join('|');
   }
 
   private isMaterialAvailable(): boolean {
