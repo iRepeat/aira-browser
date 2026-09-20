@@ -26,7 +26,7 @@ and `BrowserTabsOverviewStackMotion.ets`, with ArkUI wiring in
 | `cardCenterX(index, sp)` | `BrowserTabsOverviewStackLayoutPolicy.resolveCard().offsetX` | Offset from the deck centre instead of the screen centre, so the caller owns the sheet geometry. |
 | `depthScale(relPos)` | `resolveCard().scale` | Left cards decay `0.98 -> 0.96`; focused and trailing cards ramp `0.98 -> 1.0`. |
 | `overscrollSinkScale(index)` | folded into `resolveCard().scale` | Right-edge overscroll sinks the cards that trail the focus. |
-| `leftFadeAlpha`, `titleAlpha`, `titleBlurRadius`, `darkOverlayAlpha` | `opacity`, `titleOpacity`, `titleBlurRadius`, `shadeOpacity` | `shadeOpacity` is painted as a black overlay on the card, `titleBlurRadius` blurs the title label. |
+| `leftFadeAlpha`, `titleAlpha`, `titleBlurRadius`, `darkOverlayAlpha` | `opacity`, `titleOpacity`, `shadeOpacity` | `shadeOpacity` is painted as a black overlay on the card. `titleAlpha` becomes `titleOpacity`; upstream's companion `titleBlurRadius` is not ported (see below). |
 | `Modifier.zIndex(index)` | `zIndex` | Fixed draw order by tab index, so trailing cards cover leading ones. |
 | `onDrag` | `advanceDrag` | `0.70` base friction, then `0.6 / (1 + overscroll * 0.5)` edge resistance. |
 | `onDragEnd` | `release` | `velocityInIndex = -velocityX / (width * 0.60)`, then `position + velocityInIndex * 0.25` rounded to a card. An overscrolled release keeps the projected card but drops the initial velocity. |
@@ -61,6 +61,36 @@ and `BrowserTabsOverviewStackMotion.ets`, with ArkUI wiring in
 - **No deck-level expand fade.** Upstream multiplies each card's alpha by `expandFade` during its
   open/close expansion. Aira's shared-snapshot morph already owns that transition, so the deck only
   fades through `leftFadeAlpha`.
+- **The title fades through opacity, not blur.** Upstream pairs `titleAlpha` with
+  `titleBlurRadius = ((1f - titleAlpha).coerceAtMost(0.5f) * 2f * 10f).dp`, so every card one slot
+  from the focus re-blurs its label on each display frame. Aira keeps the same `titleAlpha` tent in
+  `titleOpacity` and drops the blur channel entirely: the title transition is carried by opacity
+  alone. Blurring text per frame on top of the deck's translate/scale pass costs far more than the
+  fade it decorates, and the deck is already the busiest frame in the tab overview.
+- **The entering morph is a deck slot, not a layer above the deck.** Upstream has no shared-snapshot
+  morph, so it has nothing to say about where one belongs. Aira's entering morph first shipped as an
+  overlay above the whole cards layer, which put it above cards it must sit behind: the cards that
+  trail the covered one were covered by the snapshot for the whole entry and then took the frame at
+  the handover, which read as the target card piercing its right neighbour. The morph now occupies a
+  slot *inside* the deck's `Stack`, so its `zIndex` competes with the cards themselves. Card slots are
+  therefore doubled (`item.index * 2`) and the morph holds `slot * 2 + 1`: strictly above the covered
+  card, strictly below its successor, with no tie to break. The slot holder stays mounted while empty,
+  so the deck's child list never changes mid-entry, and the morph's own 20/25 z-index is zeroed while
+  it sits in that slot so it cannot flatten above every card. The deck keeps `clip(true)` for its
+  whole lifetime: toggling clip at the handover re-rasterises every card in the same frame the current
+  card is revealed. The exit morph still grows back out to the page from above every card, where it
+  belongs.
+- **Entry displacement waits at the origin, then flies in once.** While the morph is still preparing,
+  motion duration is 0 and progress is 0: the trailing cards snap off-screen behind an opacity-0 layer.
+  When settling starts, duration becomes the 350ms enter animation and progress goes to 1, so the cards
+  fly in once. Duration 0 for the whole displacement made ArkUI snap the derived translate to rest;
+  duration 350 during prepare made them fly out and reverse. An in-flight progress is never yanked
+  back to 0 when `settlingEnabled` drops one `@Watch` before the tab id clears.
+- **The covered card stays painted under an in-deck morph.** Zeroing its preview left a hole the frame
+  the morph unmounted — the current card vanished and then popped back. The morph already sits one slot
+  above that card and covers its preview, so unmount only has to remove the overlay. Morph unmount and
+  the covered-tab id clear still land in one presentation publish; the home-reveal settle timer must
+  not cut a still-morphing web entry short.
 - **`onAreaChange` cannot describe a deck card.** It reports layout bounds and ignores `translate`,
   `scale` and `transform`, so every deck card would report the same centred rectangle. The deck path
   derives the morph rectangle from the same geometry that paints the card, and ignores the reported

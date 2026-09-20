@@ -20,17 +20,17 @@ export default function browserTabsOverviewStackLayoutPolicyTest(): void {
     const policy = new BrowserTabsOverviewStackLayoutPolicy();
 
     it('places every focused and trailing card at the reference offset and scale', 0, () => {
-      // index, scroll position, count, card width -> offsetX, scale, opacity, title, blur, shade, z
+      // index, scroll position, count, card width -> offsetX, scale, opacity, title, shade, z
       const goldens: number[][] = [
-        [2, 2, 6, 250, 0, 0.98, 1, 1, 0, 0, 2],
-        [1, 2, 6, 250, -55, 0.97, 1, 0, 10, 0.25, 1],
-        [0, 2, 6, 250, -70.39999999999999, 0.965, 1, 0, 10, 0.5, 0],
-        [3, 2, 6, 250, 212.5, 1, 1, 1, 0, 0, 3],
-        [0, 2.5, 6, 250, -73.21986676296929, 0.9635355339059327, 0.5, 0, 10, 0.5, 0],
-        [2, 2.5, 6, 250, -35.96768830317987, 0.974142135623731, 1, 0.5, 10, 0.125, 2],
-        [3, 2.5, 6, 250, 92.4959973502132, 0.99, 1, 1, 0, 0, 3],
-        [4, 2.5, 6, 250, 345.67537706926646, 1, 1, 0.5, 10, 0, 4],
-        [5, 2.5, 6, 250, 638.0973555526352, 1, 1, 0, 10, 0, 5]
+        [2, 2, 6, 250, 0, 0.98, 1, 1, 0, 2],
+        [1, 2, 6, 250, -55, 0.97, 1, 0, 0.25, 1],
+        [0, 2, 6, 250, -70.39999999999999, 0.965, 1, 0, 0.5, 0],
+        [3, 2, 6, 250, 212.5, 1, 1, 1, 0, 3],
+        [0, 2.5, 6, 250, -73.21986676296929, 0.9635355339059327, 0.5, 0, 0.5, 0],
+        [2, 2.5, 6, 250, -35.96768830317987, 0.974142135623731, 1, 0.5, 0.125, 2],
+        [3, 2.5, 6, 250, 92.4959973502132, 0.99, 1, 1, 0, 3],
+        [4, 2.5, 6, 250, 345.67537706926646, 1, 1, 0.5, 0, 4],
+        [5, 2.5, 6, 250, 638.0973555526352, 1, 1, 0, 0, 5]
       ];
       for (const golden of goldens) {
         const metrics = policy.resolveCard(golden[0], golden[1], golden[2], golden[3]);
@@ -38,9 +38,8 @@ export default function browserTabsOverviewStackLayoutPolicyTest(): void {
         close(metrics.scale, golden[5]);
         close(metrics.opacity, golden[6]);
         close(metrics.titleOpacity, golden[7]);
-        close(metrics.titleBlurRadius, golden[8]);
-        close(metrics.shadeOpacity, golden[9]);
-        close(metrics.zIndex, golden[10]);
+        close(metrics.shadeOpacity, golden[8]);
+        close(metrics.zIndex, golden[9]);
       }
     });
 
@@ -89,16 +88,16 @@ export default function browserTabsOverviewStackLayoutPolicyTest(): void {
     });
 
     it('runs the title tent between one card either side of focus', 0, () => {
-      // titleAlpha = clamp(min(1 + relPos, 2 - relPos), 0, 1); blur caps at 10 for alpha <= 0.5.
+      // titleAlpha = clamp(min(1 + relPos, 2 - relPos), 0, 1). The deck fades the title through
+      // this channel only; upstream's per-frame label blur is deliberately dropped.
       const rows: number[][] = [
-        [-3, 0, 10], [-2.75, 0, 10], [-2, 0, 10], [-1.5, 0, 10],
-        [-1, 0, 10], [-0.75, 0.25, 10], [-0.5, 0.5, 10], [-0.25, 0.75, 5],
-        [0, 1, 0], [0.5, 1, 0], [1, 1, 0], [1.25, 0.75, 5], [2, 0, 10], [3, 0, 10]
+        [-3, 0], [-2.75, 0], [-2, 0], [-1.5, 0],
+        [-1, 0], [-0.75, 0.25], [-0.5, 0.5], [-0.25, 0.75],
+        [0, 1], [0.5, 1], [1, 1], [1.25, 0.75], [2, 0], [3, 0]
       ];
       for (const row of rows) {
         const metrics = policy.resolveCard(5, 5 - row[0], 12, 250);
         close(metrics.titleOpacity, row[1]);
-        close(metrics.titleBlurRadius, row[2]);
       }
     });
 

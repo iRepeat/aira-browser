@@ -341,6 +341,13 @@ export class BrowserTabsOverviewSceneDriver {
       currentSceneState.phase === 'openingWaitingForActiveCard';
   }
 
+  /**
+   * A still-playing web-entry morph owns the settle. The home-reveal timer must not cut it short.
+   */
+  shouldDeferEntryAnimationSettle(currentSceneState: BrowserTabsOverviewSceneState): boolean {
+    return currentSceneState.phase === 'openingMorphingActiveTab';
+  }
+
   private beginOpening(openedFromHome: boolean, activeTabIdValue: string): BrowserTabsOverviewSceneState {
     const activeTabId = activeTabIdValue.trim();
     if (!openedFromHome && activeTabId.length <= 0) {

@@ -26,7 +26,7 @@ const exportsUnderTest = load(
 const policy = new exportsUnderTest.BrowserTabsOverviewStackLayoutPolicy();
 const close = (actual, expected, tolerance = 1e-9) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
-const fields = ['offsetX', 'scale', 'opacity', 'titleOpacity', 'titleBlurRadius', 'shadeOpacity', 'zIndex'];
+const fields = ['offsetX', 'scale', 'opacity', 'titleOpacity', 'shadeOpacity', 'zIndex'];
 
 test('the Hyperion suite executes against the actual transpiled ETS source', () => {
   let cases = 0;
@@ -51,21 +51,21 @@ test('the Hyperion suite executes against the actual transpiled ETS source', () 
 // Fixed values independently evaluated by transliterating AppSwitcherOverlay.kt (commit 8298945).
 // Inputs: index, raw scroll position, count, card width. Outputs follow `fields`.
 const goldens = [
-  [[2, 2, 6, 250], [0, .98, 1, 1, 0, 0, 2]],
-  [[1, 2, 6, 250], [-55, .97, 1, 0, 10, .25, 1]],
-  [[0, 2, 6, 250], [-70.4, .965, 1, 0, 10, .5, 0]],
-  [[3, 2, 6, 250], [212.5, 1, 1, 1, 0, 0, 3]],
-  [[0, 2.5, 6, 250], [-73.21986676296929, .9635355339059327, .5, 0, 10, .5, 0]],
-  [[2, 2.5, 6, 250], [-35.96768830317987, .974142135623731, 1, .5, 10, .125, 2]],
-  [[3, 2.5, 6, 250], [92.4959973502132, .99, 1, 1, 0, 0, 3]],
-  [[4, 2.5, 6, 250], [345.67537706926646, 1, 1, .5, 10, 0, 4]],
-  [[5, 2.5, 6, 250], [638.0973555526352, 1, 1, 0, 10, 0, 5]],
-  [[0, -.5, 6, 250], [54.64285714285714, .98, 1, 1, 0, 0, 0]],
-  [[1, -.5, 6, 250], [293.2310267857143, 1, 1, 1, 0, 0, 1]],
-  [[2, -.5, 6, 250], [574.9481745001135, 1, 1, 0, 10, 0, 2]],
-  [[5, 5.5, 6, 250], [-49.33035714285714, .96425, 1, 1, 0, 0, 5]],
-  [[4, 5.5, 6, 250], [-79.66517857142858, .934202380952381, 1, 0, 10, .25, 4]],
-  [[3, 5.5, 6, 250], [-86.84345238095237, .9236428571428571, 1, 0, 10, .5, 3]]
+  [[2, 2, 6, 250], [0, .98, 1, 1, 0, 2]],
+  [[1, 2, 6, 250], [-55, .97, 1, 0, .25, 1]],
+  [[0, 2, 6, 250], [-70.4, .965, 1, 0, .5, 0]],
+  [[3, 2, 6, 250], [212.5, 1, 1, 1, 0, 3]],
+  [[0, 2.5, 6, 250], [-73.21986676296929, .9635355339059327, .5, 0, .5, 0]],
+  [[2, 2.5, 6, 250], [-35.96768830317987, .974142135623731, 1, .5, .125, 2]],
+  [[3, 2.5, 6, 250], [92.4959973502132, .99, 1, 1, 0, 3]],
+  [[4, 2.5, 6, 250], [345.67537706926646, 1, 1, .5, 0, 4]],
+  [[5, 2.5, 6, 250], [638.0973555526352, 1, 1, 0, 0, 5]],
+  [[0, -.5, 6, 250], [54.64285714285714, .98, 1, 1, 0, 0]],
+  [[1, -.5, 6, 250], [293.2310267857143, 1, 1, 1, 0, 1]],
+  [[2, -.5, 6, 250], [574.9481745001135, 1, 1, 0, 0, 2]],
+  [[5, 5.5, 6, 250], [-49.33035714285714, .96425, 1, 1, 0, 5]],
+  [[4, 5.5, 6, 250], [-79.66517857142858, .934202380952381, 1, 0, .25, 4]],
+  [[3, 5.5, 6, 250], [-86.84345238095237, .9236428571428571, 1, 0, .5, 3]]
 ];
 test('independent goldens cover depth, parallax, fades and differential overscroll', () => {
   for (const [input, expected] of goldens) {
@@ -74,15 +74,21 @@ test('independent goldens cover depth, parallax, fades and differential overscro
     fields.forEach((field, i) => close(actual[field], expected[i]));
   }
 });
-test('title tent, blur cap, shade and left fade have exact boundaries', () => {
-  for (const [relative, title, blur, shade, opacity] of [
-    [-3, 0, 10, .5, 0], [-2.75, 0, 10, .5, .25], [-2, 0, 10, .5, 1],
-    [-.75, .25, 10, .1875, 1], [-.25, .75, 5, .0625, 1],
-    [0, 1, 0, 0, 1], [.75, 1, 0, 0, 1], [1.25, .75, 5, 0, 1], [2, 0, 10, 0, 1]
+test('title tent, shade and left fade have exact boundaries', () => {
+  for (const [relative, title, shade, opacity] of [
+    [-3, 0, .5, 0], [-2.75, 0, .5, .25], [-2, 0, .5, 1],
+    [-.75, .25, .1875, 1], [-.25, .75, .0625, 1],
+    [0, 1, 0, 1], [.75, 1, 0, 1], [1.25, .75, 0, 1], [2, 0, 0, 1]
   ]) {
     const m = policy.resolveCard(4, 4 - relative, 10, 250);
-    [m.titleOpacity, m.titleBlurRadius, m.shadeOpacity, m.opacity]
-      .forEach((value, i) => close(value, [title, blur, shade, opacity][i]));
+    [m.titleOpacity, m.shadeOpacity, m.opacity]
+      .forEach((value, i) => close(value, [title, shade, opacity][i]));
+  }
+  // The title fades through opacity alone: the deck must not expose a blur channel at all.
+  for (let relative = -3; relative <= 3; relative += 0.25) {
+    const metrics = policy.resolveCard(4, 4 - relative, 10, 250);
+    assert.deepEqual(Object.keys(metrics).sort(), [...fields].sort());
+    assert.ok(metrics.titleOpacity >= 0 && metrics.titleOpacity <= 1);
   }
 });
 test('release projects the velocity and only discards it after an overscroll', () => {
@@ -300,6 +306,47 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
     '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabOverviewCard.ets'), 'utf8');
   assert.match(card, /ImageFit\.Cover/);
   assert.match(card, /private buildDeckShadeOverlay\(\)/);
+  // The title transition rides on opacity alone. Upstream's per-frame label blur is not ported, so
+  // no deck path may reintroduce a title blur radius.
+  const item = fs.readFileSync(path.resolve(__dirname,
+    '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabOverviewItem.ets'), 'utf8');
+  const policySource = fs.readFileSync(path.resolve(__dirname,
+    '../AiraBrowser/entry/src/main/ets/core/browser/tabsOverview/BrowserTabsOverviewStackLayoutPolicy.ets'), 'utf8');
+  assert.doesNotMatch(item, /identityBlurRadius|\.blur\(this\.identity/);
+  assert.doesNotMatch(overlay, /identityBlurRadius|titleBlurRadius/);
+  // The metrics contract carries no blur field; the header comment may still name upstream's term.
+  assert.doesNotMatch(policySource, /titleBlurRadius\s*[,:=]/);
+  // Card slots are doubled so the entering morph can hold a slot of its own strictly between the
+  // covered card and its successor, instead of becoming one more layer above the whole deck. The
+  // holder is inside the deck's own Stack, so its `zIndex` competes with the cards' and not with the
+  // cards layer as a whole.
+  assert.match(horizontal, /this\.buildDeckEntryMorphSlot\(\)/);
+  assert.match(horizontal, /\.zIndex\(item\.index \* 2\)/);
+  assert.match(horizontal, /\.zIndex\(this\.resolveDeckEntryMorphLayerZIndex\(\)\)/);
+  // Clip stays on for the deck's lifetime. Toggling it at the morph handover re-rasterises every
+  // card in the same frame the current card is revealed.
+  assert.match(horizontal, /\.clip\(true\)/);
+  assert.match(horizontal, /Stack\(\) \{\s*if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(true\)/);
+  assert.match(overlay, /private shouldMountSharedSnapshotInDeck\(\): boolean \{\s*return this\.entrySharedSnapshotMounted &&\s*this\.entrySharedSnapshotState\.direction === 'enter' &&/);
+  assert.match(overlay, /return slot < 0 \? 0 : slot \* 2 \+ 1;/);
+  assert.match(overlay, /if \(this\.entrySharedSnapshotMounted && !this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(\)/);
+  // In-deck morph must not reuse the overlay-root 20/25 z-index; the slot wrapper owns stacking.
+  assert.match(overlay, /snapshotLayerZIndex: inDeck \? 0 : FLOATING_TABS_SHARED_SNAPSHOT_Z_INDEX/);
+  assert.match(overlay, /this\.buildSharedSnapshotOverlay\(true\)/);
+  // Waiting snaps to the origin (duration 0). Settling uses the 350ms implicit fly-in. A duration of
+  // 0 for the whole displacement made ArkUI snap the derived translate to rest with no motion.
+  assert.match(overlay, /if \(!this\.entryDisplacementSettlingEnabled\) \{\s*return 0;/);
+  assert.match(overlay, /return this\.animationViewModel\.getSharedSnapshotEnterDurationMs\(\);/);
+  // SettlingEnabled dropping must not yank an in-flight displacement back to the origin.
+  assert.match(overlay, /if \(this\.entryDisplacementProgress > 0 && this\.entryDisplacementProgress < 1\) \{\s*return;/);
+  // In-deck morph already covers the current card; hiding that preview leaves a hole at unmount.
+  assert.match(overlay, /coveredByMorph: this\.shouldHideCardSurfaceUnderMorph\(item\.tab\.id\)/);
+  assert.match(overlay, /if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*return false;/);
+  const coordinator = fs.readFileSync(path.resolve(__dirname,
+    '../AiraBrowser/entry/src/main/ets/core/browser/BrowserTabsOverviewSessionCoordinator.ets'), 'utf8');
+  // Morph unmount and the covered-card reveal land in one presentation publish.
+  assert.match(coordinator, /sharedSnapshotState: buildBrowserTabsSharedSnapshotIdleState\(\),\s*sceneState: this\.sceneDriver\.buildSettledState/);
+  assert.match(coordinator, /shouldDeferEntryAnimationSettle\(this\.presentationState\.sceneState\)/);
   // The grid path keeps its own scroller and must not be switched to the deck.
   const grid = overlay.slice(overlay.indexOf('private buildGridCardsLayer'),
     overlay.indexOf('private buildHorizontalCardsLayer'));

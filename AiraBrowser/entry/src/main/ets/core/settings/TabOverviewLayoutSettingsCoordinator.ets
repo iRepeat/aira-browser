@@ -189,7 +189,7 @@ export class TabOverviewLayoutSettingsCoordinator {
       },
       {
         style: 'horizontal_cards',
-        title: '横向大卡片',
+        title: '堆叠式',
         isSelected: state.draftStyle === 'horizontal_cards'
       }
     ];

@@ -206,7 +206,7 @@ const GENERAL_TARGETS: SettingsDestinationCatalogTarget[] = [
   target('force_dark_web_content', 'appearance_toolbar', 'appearance_toolbar', '强制网页深色',
     '通用 / 外观设置 / 网页外观', 'row', 'force_dark_web_content', '', ['网页深色'], ['暗色网页']),
   target('tab_overview_layout', 'appearance_toolbar', 'appearance_toolbar', '标签页样式',
-    '通用 / 外观设置 / 外观样式', 'row', 'tab_overview_layout', '', ['标签管理'], ['卡片平铺', '横向大卡片'],
+    '通用 / 外观设置 / 外观样式', 'row', 'tab_overview_layout', '', ['标签管理'], ['卡片平铺', '堆叠式'],
     true, false),
   target('tablet_interface_mode', 'appearance_toolbar', 'appearance_toolbar', '界面模式',
     '通用 / 外观设置 / 界面', 'subpage', '', 'tablet_interface_mode', ['平板界面模式'], ['桌面界面']),

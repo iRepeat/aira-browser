@@ -48,7 +48,6 @@ export struct BrowserTabOverviewItem {
   @Prop snapshotAspectFitEnabled: boolean = false;
   @Prop snapshotCoverEnabled: boolean = false;
   @Prop deckShadeOpacity: number = 0;
-  @Prop identityBlurRadius: number = 0;
   @Prop previewHeight: number = 1;
   @Prop cardWidth: number = 132;
   @Prop identityHeaderHeight: number = BROWSER_TABS_OVERVIEW_IDENTITY_HEADER_HEIGHT;
@@ -126,7 +125,6 @@ export struct BrowserTabOverviewItem {
     this.snapshotAspectFitEnabled = (params.snapshotAspectFitEnabled as boolean) === true;
     this.snapshotCoverEnabled = (params.snapshotCoverEnabled as boolean) === true;
     this.deckShadeOpacity = this.resolveReusableNumber(params.deckShadeOpacity as number, 0);
-    this.identityBlurRadius = this.resolveReusableNumber(params.identityBlurRadius as number, 0);
     this.previewHeight = params.previewHeight as number;
     this.cardWidth = params.cardWidth as number;
     this.identityHeaderHeight = this.resolveReusableNumber(
@@ -323,9 +321,6 @@ export struct BrowserTabOverviewItem {
         .fontColor(this.storedPrimaryTextColor)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        // The reference blurs the title text as it fades, not the icon, so the label is what gets
-        // the depth blur.
-        .blur(this.identityBlurRadius)
     }
     .width(this.resolveIdentityHeaderWidth())
     .height(this.identityHeaderHeight)

@@ -367,21 +367,11 @@ export struct BrowserTabsFloatingOverlay {
         this.buildEmptyDismissLayer()
       }
 
-      if (this.entrySharedSnapshotMounted) {
-        BrowserTabsSharedSnapshotOverlay({
-          state: this.entrySharedSnapshotState,
-          snapshotBackgroundColor: this.entrySharedSnapshotBackgroundColor,
-          snapshotLayerZIndex: FLOATING_TABS_SHARED_SNAPSHOT_Z_INDEX,
-          snapshotDecorationLayerZIndex: FLOATING_TABS_SHARED_SNAPSHOT_DECORATION_Z_INDEX,
-          viewportLeft: this.resolveRootLeft(),
-          viewportTop: this.resolveRootTop(),
-          onSnapshotRectChange: (rect: BrowserTabsOverlayRect) => {
-            this.onEntrySharedSnapshotRectChange(rect);
-          },
-          onSnapshotTap: (tabId: string) => {
-            this.onEntrySharedSnapshotTap(tabId);
-          }
-        })
+      // The entering morph is stacked inside the deck instead of above the cards layer, so the
+      // cards that trail the covered one keep the slot they own at rest. Every other case — the
+      // grid, the exit back to the page — still paints it from here.
+      if (this.entrySharedSnapshotMounted && !this.shouldMountSharedSnapshotInDeck()) {
+        this.buildSharedSnapshotOverlay()
       }
 
       if (this.chromeMounted) {
@@ -521,6 +511,26 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   @Builder
+  private buildSharedSnapshotOverlay(inDeck: boolean = false) {
+    BrowserTabsSharedSnapshotOverlay({
+      state: this.entrySharedSnapshotState,
+      snapshotBackgroundColor: this.entrySharedSnapshotBackgroundColor,
+      // Inside the deck the slot wrapper already owns stacking. Passing the overlay-root
+      // 20/25 here would let the morph compete with every card if ArkUI flattens z-index.
+      snapshotLayerZIndex: inDeck ? 0 : FLOATING_TABS_SHARED_SNAPSHOT_Z_INDEX,
+      snapshotDecorationLayerZIndex: inDeck ? 0 : FLOATING_TABS_SHARED_SNAPSHOT_DECORATION_Z_INDEX,
+      viewportLeft: this.resolveRootLeft(),
+      viewportTop: this.resolveRootTop(),
+      onSnapshotRectChange: (rect: BrowserTabsOverlayRect) => {
+        this.onEntrySharedSnapshotRectChange(rect);
+      },
+      onSnapshotTap: (tabId: string) => {
+        this.onEntrySharedSnapshotTap(tabId);
+      }
+    })
+  }
+
+  @Builder
   private buildCardsLayer() {
     if (this.layoutState.layoutStyle === 'horizontal_cards') {
       this.buildHorizontalCardsLayer()
@@ -564,12 +574,17 @@ export struct BrowserTabsFloatingOverlay {
 
   // Each tab has one render node. Fixed index order matches StackSwipe, so a trailing card
   // covers a leading one throughout the drag; no layer swaps at rounded-index boundaries.
+  //
+  // Card slots are doubled so the entering morph can hold a slot of its own strictly between the
+  // covered card and its successor, instead of being one more layer painted above the whole deck.
   @Builder
   private buildHorizontalCardsLayer() {
     Stack({ alignContent: Alignment.Center }) {
       ForEach(this.resolveDeckItems(), (item: BrowserTabsFloatingItem) => {
         this.buildDeckCard(item)
       }, (item: BrowserTabsFloatingItem) => this.resolveCardIdentityKey(item))
+
+      this.buildDeckEntryMorphSlot()
     }
     .width('100%')
     .height('100%')
@@ -609,8 +624,33 @@ export struct BrowserTabsFloatingOverlay {
     .translate({ x: this.resolveDeckMetrics(item).offsetX })
     .scale({ x: this.resolveDeckMetrics(item).scale, y: this.resolveDeckMetrics(item).scale })
     .opacity(this.resolveDeckMetrics(item).opacity)
-    .zIndex(item.index)
+    // Doubled so the entering morph owns the odd slot between this card and the next one.
+    .zIndex(item.index * 2)
     .hitTestBehavior(this.resolveDeckMetrics(item).opacity > 0 ? HitTestMode.Default : HitTestMode.None)
+  }
+
+  /**
+   * The slot the entering morph plays in while it settles into the covered card.
+   *
+   * It is held to the covered card's own stacking slot, one level under the cards that trail it, so
+   * those cards stay in front of the snapshot for the whole entry and the handover has nothing left
+   * to reorder. The holder stays mounted even while it is empty: changing the deck's child list
+   * mid-entry would re-run the deck layout and re-measure every card beside the morph.
+   */
+  @Builder
+  private buildDeckEntryMorphSlot() {
+    Stack() {
+      if (this.shouldMountSharedSnapshotInDeck()) {
+        this.buildSharedSnapshotOverlay(true)
+      }
+    }
+    .width('100%')
+    .height(this.resolveRootHeight())
+    // `position()` resolves against the parent's content box, so the holder is pulled back out of
+    // the deck's vertical padding and the morph keeps addressing root coordinates.
+    .position({ x: 0, y: -this.resolveHorizontalContentPadding().top })
+    .hitTestBehavior(HitTestMode.None)
+    .zIndex(this.resolveDeckEntryMorphLayerZIndex())
   }
 
   @Builder
@@ -639,7 +679,6 @@ export struct BrowserTabsFloatingOverlay {
       snapshotAspectFitEnabled: this.isHorizontalCardsLayout(),
       snapshotCoverEnabled: this.isHorizontalCardsLayout(),
       deckShadeOpacity: this.isHorizontalCardsLayout() ? this.resolveDeckMetrics(item).shadeOpacity : 0,
-      identityBlurRadius: this.isHorizontalCardsLayout() ? this.resolveDeckMetrics(item).titleBlurRadius : 0,
       previewHeight: this.layoutState.previewHeight,
       cardWidth: this.layoutState.cardWidth,
       identityHeaderHeight: this.layoutState.identityHeaderHeight,
@@ -654,7 +693,7 @@ export struct BrowserTabsFloatingOverlay {
       previewCardOpacity: 1,
       snapshotImageOpacity: 1,
       decorationOpacity: 1,
-      coveredByMorph: this.isMorphCoveredTab(item.tab.id),
+      coveredByMorph: this.shouldHideCardSurfaceUnderMorph(item.tab.id),
       tabEnabled: this.interactionEnabled && !this.exiting && !this.closeAllExitActive &&
         !this.isSelectionDisplacementActive() && !this.isEntryDisplacementActive() &&
         !this.isMorphCoveredTab(item.tab.id),
@@ -856,6 +895,12 @@ export struct BrowserTabsFloatingOverlay {
       this.prepareBottomEntryAnimation();
     }
     if (!this.entryDisplacementSettlingEnabled) {
+      // An in-flight value is the settle-watch race: settlingEnabled can drop one @Watch
+      // before the tab id clears. Leave it alone. Anything else (including a leftover 1)
+      // snaps to the origin; motion duration is 0 here, so this is not a visible fly-out.
+      if (this.entryDisplacementProgress > 0 && this.entryDisplacementProgress < 1) {
+        return;
+      }
       this.entryDisplacementProgress = 0;
       return;
     }
@@ -1393,6 +1438,12 @@ export struct BrowserTabsFloatingOverlay {
       return 0;
     }
     if (this.isEntryDisplacementActive()) {
+      // Waiting: duration 0 so the origin is a snap while the layer is still hidden.
+      // Settling: the same 350ms implicit animation that carries the fly-in. Animating
+      // progress while this duration was 0 made ArkUI snap the derived translate to rest.
+      if (!this.entryDisplacementSettlingEnabled) {
+        return 0;
+      }
       return this.animationViewModel.getSharedSnapshotEnterDurationMs();
     }
     if (this.resolveHomeExitProgress() > 0 && !this.exiting && !this.closeAllExitActive) {
@@ -1594,9 +1645,59 @@ export struct BrowserTabsFloatingOverlay {
     return this.morphCoveredTabId.trim();
   }
 
+  /**
+   * Whether the entering morph has to be painted from inside the deck.
+   *
+   * Only an entering morph settles into a deck card and therefore has to interleave with the deck's
+   * own draw order. The exit morph grows back out to the page and stays above every card.
+   */
+  private shouldMountSharedSnapshotInDeck(): boolean {
+    return this.entrySharedSnapshotMounted &&
+      this.entrySharedSnapshotState.direction === 'enter' &&
+      this.resolveDeckEntryMorphSlot() >= 0;
+  }
+
+  /** The covered card's slot, or -1 when the morph is not settling into a card of this deck. */
+  private resolveDeckEntryMorphSlot(): number {
+    if (!this.isHorizontalCardsLayout()) {
+      return -1;
+    }
+    const coveredTabId = this.resolveMorphCoveredTabId();
+    if (coveredTabId.length <= 0) {
+      return -1;
+    }
+    for (let position = 0; position < this.deckItems.length; position += 1) {
+      const item: BrowserTabsFloatingItem = this.deckItems[position];
+      if (item.id === coveredTabId) {
+        return item.index;
+      }
+    }
+    return -1;
+  }
+
+  /** The deck slot's own layer: strictly above the covered card, strictly below its successor. */
+  private resolveDeckEntryMorphLayerZIndex(): number {
+    const slot = this.shouldMountSharedSnapshotInDeck() ? this.resolveDeckEntryMorphSlot() : -1;
+    return slot < 0 ? 0 : slot * 2 + 1;
+  }
+
   private isMorphCoveredTab(tabId: string): boolean {
     const coveredTabId = this.resolveMorphCoveredTabId();
     return coveredTabId.length > 0 && coveredTabId === tabId;
+  }
+
+  /**
+   * Hide the card surface only when the morph is not already painting in front of it.
+   *
+   * An in-deck morph sits one slot above the covered card and covers its preview for the whole
+   * entry. Zeroing that preview left a hole the frame the morph unmounted — the current card
+   * vanished and then popped back. Keeping it painted means unmount only removes the overlay.
+   */
+  private shouldHideCardSurfaceUnderMorph(tabId: string): boolean {
+    if (this.shouldMountSharedSnapshotInDeck()) {
+      return false;
+    }
+    return this.isMorphCoveredTab(tabId);
   }
 
   private isSelectionDisplacementActive(): boolean {

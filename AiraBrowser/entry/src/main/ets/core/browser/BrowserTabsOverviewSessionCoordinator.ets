@@ -1523,11 +1523,12 @@ export class BrowserTabsOverviewSessionCoordinator {
     }
     this.playSharedSnapshotTransition(transitionPlan, (): void => {
       this.sharedSnapshotEntryState = this.sharedSnapshotEntryCoordinator.finish();
-      this.updatePresentationState({
-        sharedSnapshotState: buildBrowserTabsSharedSnapshotIdleState()
-      }, host);
       this.snapshotPipelineCoordinator.resetMeasuredEntryFrameForOwner();
+      // Morph unmount and the covered-card reveal have to land in one publish. Splitting them
+      // left a frame where the snapshot was gone and the card was still opacity 0 — a flash
+      // of whatever sat behind the current tab.
       this.updatePresentationState({
+        sharedSnapshotState: buildBrowserTabsSharedSnapshotIdleState(),
         sceneState: this.sceneDriver.buildSettledState(this.presentationState.sceneState)
       }, host);
     }, host);
@@ -2227,6 +2228,12 @@ export class BrowserTabsOverviewSessionCoordinator {
   }
 
   private settleTabsOverviewEntryAnimation(host: BrowserTabsOverviewSessionHost): void {
+    if (this.sceneDriver.shouldDeferEntryAnimationSettle(this.presentationState.sceneState)) {
+      // The morph still owns the handover. Settling here would uncover the current card
+      // under a snapshot that is still shrinking, then flash again when the morph unmounts.
+      this.updatePresentationState({ entryAnimationActive: false }, host);
+      return;
+    }
     this.updatePresentationState({
       entryAnimationActive: false,
       sceneState: this.sceneDriver.buildSettledState(this.presentationState.sceneState)

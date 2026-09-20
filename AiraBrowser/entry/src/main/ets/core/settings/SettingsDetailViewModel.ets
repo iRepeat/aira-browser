@@ -456,7 +456,7 @@ export class SettingsDetailViewModel {
   /**
    * 大屏（鼠标键盘）下隐藏只对触屏有意义的设置项：
    * - 实验室"页面手势"整组（下拉刷新 / 强制网页缩放 / 智感握姿）
-   * - 外观里的"标签页样式"行（大屏标签管理默认平铺，不提供大卡片切换）
+   * - 外观里的"标签页样式"行（大屏标签管理默认平铺，不提供堆叠式切换）
    * 若某组去掉该行后变空且无操作按钮，则整组略过，避免空卡片。
    */
   private filterLargeScreenHiddenGroups(groups: SettingsDetailGroupState[]): SettingsDetailGroupState[] {
@@ -1822,7 +1822,7 @@ export class SettingsDetailViewModel {
   }
 
   private getTabOverviewLayoutStyleLabel(style: BrowserTabsOverviewLayoutStyle): string {
-    return style === 'horizontal_cards' ? '横向大卡片' : '卡片平铺';
+    return style === 'horizontal_cards' ? '堆叠式' : '卡片平铺';
   }
 
   private resolvePermissionDefaultAction(kind: SitePermissionKind): SettingsDetailRowAction {

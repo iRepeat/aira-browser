@@ -79,5 +79,30 @@ export default function browserTabsOverviewSceneDriverTest(): void {
       expect(shouldUseHomeSurfaceForLargeScreen(false, residentHomeRenderState)).assertFalse();
       expect(shouldUseHomeSurfaceForLargeScreen(true, residentHomeRenderState)).assertTrue();
     });
+
+    it('defers the home-reveal settle while a web-entry morph is still playing', 0, () => {
+      const driver = new BrowserTabsOverviewSceneDriver();
+      expect(driver.shouldDeferEntryAnimationSettle({
+        phase: 'openingMorphingActiveTab',
+        backgroundMode: 'home',
+        openedFromHome: false,
+        activeTabIdAtOpen: 'tab-1',
+        morphCoveredTabId: 'tab-1'
+      })).assertTrue();
+      expect(driver.shouldDeferEntryAnimationSettle({
+        phase: 'openingHomeCards',
+        backgroundMode: 'home',
+        openedFromHome: true,
+        activeTabIdAtOpen: 'home-tab',
+        morphCoveredTabId: ''
+      })).assertFalse();
+      expect(driver.shouldDeferEntryAnimationSettle({
+        phase: 'settled',
+        backgroundMode: 'home',
+        openedFromHome: false,
+        activeTabIdAtOpen: 'tab-1',
+        morphCoveredTabId: ''
+      })).assertFalse();
+    });
   });
 }

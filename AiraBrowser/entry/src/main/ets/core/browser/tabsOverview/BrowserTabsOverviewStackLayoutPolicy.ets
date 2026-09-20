@@ -8,7 +8,9 @@
  * - `cardCenterX`  -> `resolveCard().offsetX`, measured from the deck centre, not the sheet edge
  * - `depthScale`   -> `resolveCard().scale`
  * - `overscrollSinkScale` -> folded into `resolveCard().scale`
- * - `leftFadeAlpha`, `titleAlpha`, `titleBlurRadius`, `darkOverlayAlpha` -> the remaining metrics
+ * - `leftFadeAlpha`, `titleAlpha`, `darkOverlayAlpha` -> the remaining metrics. Upstream's
+ *   `titleBlurRadius` is deliberately not ported: Aira expresses the title transition through
+ *   `titleOpacity` alone instead of re-blurring the label on every display frame.
  * - `onDrag`/`onDragEnd` -> `advanceDrag`/`release`
  * - `spring(stiffness = 80, DampingRatioNoBouncy, visibilityThreshold = 0.0005)` -> `sampleSpring`
  *
@@ -23,7 +25,6 @@ export interface BrowserTabsOverviewStackCardMetrics {
   scale: number;
   opacity: number;
   titleOpacity: number;
-  titleBlurRadius: number;
   shadeOpacity: number;
   zIndex: number;
 }
@@ -130,7 +131,6 @@ export class BrowserTabsOverviewStackLayoutPolicy {
         scale: 0,
         opacity: 0,
         titleOpacity: 0,
-        titleBlurRadius: 0,
         shadeOpacity: 0,
         zIndex: 0
       };
@@ -184,10 +184,10 @@ export class BrowserTabsOverviewStackLayoutPolicy {
 
     // Reference: `leftFadeAlpha`, fully visible at relPos >= -2 and gone by relPos = -3.
     const opacity = Math.max(0, Math.min(1, 3 + relPos));
-    // Reference: `titleAlpha = minOf(1f + relPos, 2f - relPos).coerceIn(0f, 1f)`.
+    // Reference: `titleAlpha = minOf(1f + relPos, 2f - relPos).coerceIn(0f, 1f)`. Upstream then
+    // blurs the label by `((1f - titleAlpha).coerceAtMost(0.5f) * 2f * 10f).dp`; Aira fades the
+    // title through this single opacity channel instead, so the deck never blurs text per frame.
     const titleOpacity = Math.max(0, Math.min(1, Math.min(1 + relPos, 2 - relPos)));
-    // Reference: `((1f - titleAlpha).coerceAtMost(0.5f) * 2f * 10f).dp`.
-    const titleBlurRadius = Math.min(0.5, 1 - titleOpacity) * 2 * 10;
     // Reference: `if (relPos < 0f) (-relPos * 0.25f).coerceAtMost(0.50f) else 0f`.
     const shadeOpacity = relPos < 0 ? Math.min(SHADE_MAX, leftDistance * SHADE_PER_CARD) : 0;
 
@@ -196,7 +196,6 @@ export class BrowserTabsOverviewStackLayoutPolicy {
       scale: depthScale * sinkScale,
       opacity: cardCount <= 0 ? 0 : opacity,
       titleOpacity: titleOpacity,
-      titleBlurRadius: titleBlurRadius,
       shadeOpacity: shadeOpacity,
       // Reference: `Modifier.zIndex(index.toFloat())`, a fixed draw order by tab index.
       zIndex: Math.max(0, Math.floor(this.finite(index)))
