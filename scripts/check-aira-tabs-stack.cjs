@@ -273,6 +273,75 @@ test('an interruption settles the deck onto a card instead of freezing it', () =
   assert.equal(motion.getPosition(), Math.round(motion.getPosition()));
 });
 
+test('a dismissed card leaves at the speed the finger had', () => {
+  const swipeExports = load(
+    'AiraBrowser/entry/src/main/ets/core/browser/tabsOverview/BrowserTabsOverviewSwipeDismissPolicy.ets',
+    name => { throw new Error(`Pure policy must not import ${name}`); });
+  const swipe = new swipeExports.BrowserTabsOverviewSwipeDismissPolicy();
+  const min = swipeExports.BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MIN_DURATION_MS;
+  const max = swipeExports.BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MAX_DURATION_MS;
+  // travel / speed: 800vp at 4000vp/s is 200ms, and a quarter of that speed takes four times as long.
+  close(swipe.resolveFlyoutDurationMs(800, 4000), 200);
+  assert.equal(swipe.resolveFlyoutDurationMs(800, 1000), max);
+  // The bounds only clamp the extremes: a violent flick and a release with no speed at all.
+  assert.equal(swipe.resolveFlyoutDurationMs(800, 20000), min);
+  assert.equal(swipe.resolveFlyoutDurationMs(800, 0), max);
+  assert.equal(swipe.resolveFlyoutDurationMs(0, 4000), min);
+  // Faster is never slower.
+  let previous = Infinity;
+  for (const speed of [200, 500, 1000, 2000, 4000, 8000]) {
+    const duration = swipe.resolveFlyoutDurationMs(800, speed);
+    assert.ok(duration <= previous, `${speed}vp/s took ${duration}ms, longer than ${previous}ms`);
+    previous = duration;
+  }
+  // The sign of the release velocity is the gesture's direction, not its speed.
+  assert.equal(swipe.resolveFlyoutDurationMs(800, -4000), swipe.resolveFlyoutDurationMs(800, 4000));
+  // Invalid input cannot produce a duration outside the bounds.
+  for (const [travel, speed] of [[NaN, NaN], [Infinity, 100], [-100, -100], [800, Infinity]]) {
+    const duration = swipe.resolveFlyoutDurationMs(travel, speed);
+    assert.ok(duration >= min && duration <= max, `${duration} out of bounds`);
+  }
+});
+
+test('a removal moves only the cards beyond it, and only towards the focus', () => {
+  // A card's place in the deck is its slot against the deck scalar, so what a removal changes is the
+  // slot. `reconcilePosition` resolves the scalar the shorter list focuses while keeping the focused
+  // tab, and the slots are the new list's own order, so the movement of each card is the difference
+  // between its relative position before and after.
+  const shift = (previousIds, removedId, position) => {
+    const nextIds = previousIds.filter(id => id !== removedId);
+    const nextPosition = policy.reconcilePosition(position, previousIds, nextIds);
+    const moved = {};
+    nextIds.forEach((id, index) => {
+      const delta = (index - nextPosition) - (previousIds.indexOf(id) - position);
+      if (Math.abs(delta) > 1e-9) moved[id] = delta;
+    });
+    return { nextPosition, moved };
+  };
+  const tabs = ['a', 'b', 'c', 'd', 'e'];
+  // The focused card (index 2) closes: its successor takes the focus and the cards beyond it follow.
+  // The cards before the focus keep their place, which is what makes the gap close from one side.
+  assert.deepEqual(shift(tabs, 'c', 2), { nextPosition: 2, moved: { d: -1, e: -1 } });
+  // The last card closes while it holds the focus: the predecessor takes the focus and every card
+  // before it moves one slot towards it.
+  assert.deepEqual(shift(tabs, 'e', 4), { nextPosition: 3, moved: { a: 1, b: 1, c: 1, d: 1 } });
+  // A card before the focus closes: only the cards beyond it close the gap, and the focus is kept.
+  assert.deepEqual(shift(tabs, 'b', 3), { nextPosition: 2, moved: { a: 1 } });
+  // A card after the focus closes: same rule on the other side.
+  assert.deepEqual(shift(tabs, 'd', 1), { nextPosition: 1, moved: { e: -1 } });
+  // The outermost card behind the focus leaves no slot behind: the deck scalar moves with the slots
+  // and no card changes its relative position, so there is nothing to animate.
+  assert.deepEqual(shift(tabs, 'a', 3), { nextPosition: 2, moved: {} });
+  assert.deepEqual(shift(tabs, 'e', 3), { nextPosition: 3, moved: {} });
+  // The outermost card in front of the focus is a real removal: everything comes forward one slot.
+  assert.deepEqual(shift(tabs, 'a', 0),
+    { nextPosition: 0, moved: { b: -1, c: -1, d: -1, e: -1 } });
+  // Closing the only card empties the deck instead of leaving a position pointing past the end.
+  assert.deepEqual(shift(['a'], 'a', 0), { nextPosition: 0, moved: {} });
+  // Closing a card that is not in the list changes nothing.
+  assert.deepEqual(shift(tabs, 'zz', 2), { nextPosition: 2, moved: {} });
+});
+
 test('the overlay deck wires the policy, per-frame motion and the reference visuals', () => {
   const overlay = fs.readFileSync(path.resolve(__dirname,
     '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsFloatingOverlay.ets'), 'utf8');
@@ -293,7 +362,8 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
     overlay.indexOf('private selectOverviewTab('));
   assert.match(seedBody, /this\.deckPositionSeeded = true/);
   // Anything that interrupts the gesture has to finish the movement.
-  assert.match(overlay, /private abortDeckMotion\(\): void \{\s*this\.stopDeckMotion\(\);\s*this\.settleDeckToNearestCard\(\);/);
+  assert.match(overlay, /private abortDeckMotion\(\): void \{/);
+  assert.match(overlay, /this\.stopDeckMotion\(\);\s*this\.settleDeckToNearestCard\(\);/);
   assert.match(overlay, /this\.abortDeckMotion\(\);/);
   // The deck item key must not include the index, or every later card is rebuilt on a removal.
   assert.doesNotMatch(overlay, /resolveCardIdentityKey\(item\)\}\|\$\{item\.index\}/);
@@ -321,11 +391,22 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   // holder is inside the deck's own Stack, so its `zIndex` competes with the cards' and not with the
   // cards layer as a whole.
   assert.match(horizontal, /this\.buildDeckEntryMorphSlot\(\)/);
-  assert.match(horizontal, /\.zIndex\(item\.index \* 2\)/);
+  // A card's slot, geometry and layer order come from recorded state, never from the `ForEach` item:
+  // a reused node keeps the item it was built with, so reading the index from it left every card on
+  // its old slot after a removal and the gap never closed.
+  assert.match(horizontal, /\.zIndex\(this\.resolveDeckCardLayerZIndex\(item\)\)/);
+  assert.doesNotMatch(horizontal, /item\.index/);
   assert.match(horizontal, /\.zIndex\(this\.resolveDeckEntryMorphLayerZIndex\(\)\)/);
-  // Clip stays on for the deck's lifetime. Toggling it at the morph handover re-rasterises every
-  // card in the same frame the current card is revealed.
-  assert.match(horizontal, /\.clip\(true\)/);
+  assert.match(overlay, /private resolveDeckIndex\(item: BrowserTabsFloatingItem\): number \{\s*const slot = this\.deckSlotIndexById\[item\.id\];/);
+  assert.match(overlay, /@State private deckSlotIndexById: Record<string, number> = \{\};/);
+  assert.match(overlay, /private recordDeckSlots\(items: BrowserTabsFloatingItem\[\]\): void/);
+  assert.match(overlay, /this\.recordDeckSlots\(next\);/);
+  // The metrics memo follows the recorded slots, not the list order.
+  assert.match(overlay, /const slot = this\.resolveDeckIndex\(item\);\s*const key = `\$\{this\.horizontalDeckPosition\}\|\$\{this\.layoutState\.cardWidth\}\|` \+\s*`\$\{this\.deckItemsSignature\}\|\$\{this\.deckSlotSignature\}`;/);
+  assert.match(overlay, /this\.stackLayoutPolicy\.resolveCard\(slot, this\.horizontalDeckPosition,/);
+  // Clip stays on except during a vertical dismiss flight. Toggling it at the morph handover
+  // re-rasterises every card in the same frame the current card is revealed.
+  assert.match(horizontal, /\.clip\(this\.deckSwipeTabId\.length <= 0\)/);
   assert.match(horizontal, /Stack\(\) \{\s*if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(true\)/);
   assert.match(overlay, /private shouldMountSharedSnapshotInDeck\(\): boolean \{\s*return this\.entrySharedSnapshotMounted &&\s*this\.entrySharedSnapshotState\.direction === 'enter' &&/);
   assert.match(overlay, /return slot < 0 \? 0 : slot \* 2 \+ 1;/);
@@ -342,6 +423,13 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   // In-deck morph already covers the current card; hiding that preview leaves a hole at unmount.
   assert.match(overlay, /coveredByMorph: this\.shouldHideCardSurfaceUnderMorph\(item\.tab\.id\)/);
   assert.match(overlay, /if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*return false;/);
+  // The predicted entry target must use the painted (scaled) deck preview, not the unscaled layout
+  // slot. Landing at 1.0 and then revealing the 0.98 focused card was a visible extra shrink.
+  const predicted = overlay.slice(overlay.indexOf('private buildPredictedEntryTargetPreviewRect'),
+    overlay.indexOf('private syncLayoutState'));
+  assert.match(predicted, /this\.resolveDeckPreviewRect\(targetTabId\)/);
+  assert.doesNotMatch(predicted, /targetWidth = this\.layoutState\.cardWidth/);
+  assert.match(overlay, /private buildDeckPreviewRect\(metrics: BrowserTabsOverviewStackCardMetrics\)/);
   const coordinator = fs.readFileSync(path.resolve(__dirname,
     '../AiraBrowser/entry/src/main/ets/core/browser/BrowserTabsOverviewSessionCoordinator.ets'), 'utf8');
   // Morph unmount and the covered-card reveal land in one presentation publish.
@@ -352,4 +440,33 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
     overlay.indexOf('private buildHorizontalCardsLayer'));
   assert.match(grid, /Grid\(this\.scroller\)/);
   assert.doesNotMatch(grid, /resolveDeckMetrics/);
+  // Swipe-to-close must fly the card off-screen before unmounting it. Calling `onSwipeEnd` from
+  // `endLocalSwipe` removed the ForEach node in the release frame, so the fly-out never painted.
+  assert.doesNotMatch(item, /this\.dismissLocalSwipe\([^)]*\);\s*this\.onSwipeEnd/);
+  assert.match(item, /private completePendingSwipeDismiss\(\): void/);
+  assert.match(item, /this\.onSwipeEnd\(tabId, offset, direction\)/);
+  // The flight is as quick as the flick: the duration comes from the release speed, and the node's
+  // own implicit animation reads the same value so both clocks agree.
+  assert.match(item, /this\.swipeFlyoutDurationMs = this\.swipeDismissPolicy\.resolveFlyoutDurationMs\(\s*Math\.abs\(flyout - swipeOffset\), releaseVelocity\);/);
+  assert.match(item, /this\.dismissLocalSwipe\(direction, swipeOffset, releaseVelocity\);/);
+  assert.match(item, /private dismissLocalSwipe\(direction: number, swipeOffset: number, releaseVelocity: number\): void/);
+  assert.match(item, /duration: this\.swipeFlyoutDurationMs,\s*curve: TAB_OVERVIEW_ITEM_SWIPE_FLYOUT_CURVE/);
+  assert.match(item, /\}, this\.swipeFlyoutDurationMs\);/);
+  assert.match(item, /if \(this\.localSwipePhase === 'dismissing'\) \{\s*return this\.swipeFlyoutDurationMs;/);
+  assert.match(item, /if \(this\.localSwipePhase === 'dismissing'\) \{\s*return TAB_OVERVIEW_ITEM_SWIPE_FLYOUT_CURVE;/);
+  assert.doesNotMatch(item, /TAB_OVERVIEW_ITEM_SWIPE_FLYOUT_DURATION_MS/);
+  // Remaining cards fill the gap while the closed card is still in the list as a ghost. One
+  // animation moves the deck scalar and the recorded slots together, so only the cards the removal
+  // actually shifts move, and the committed values are that animation's own end state.
+  assert.match(overlay, /private beginDeckDismiss\(tabId: string\): void/);
+  assert.match(overlay, /private hasDeckSlotChange\(previousIds: string\[\], nextIds: string\[\], position: number\): boolean/);
+  assert.match(overlay, /if \(nextIds\.length <= 0 \|\| !this\.hasDeckSlotChange\(previousIds, nextIds, position\)\) \{\s*this\.commitPendingDeckDismiss\(\);/);
+  assert.match(overlay, /animateTo\(\{\s*duration: FLOATING_TABS_REORDER_DURATION_MS,\s*curve: this\.animationViewModel\.getFloatingCardEntryCurve\(\)\s*\}, \(\) => \{\s*this\.horizontalDeckPosition = position;\s*this\.deckSlotIndexById = slots;\s*this\.deckSlotSignature = slotSignature;/);
+  assert.match(overlay, /private commitPendingDeckDismiss\(\): void/);
+  assert.match(overlay, /this\.scheduleDeckDismissCommit\(\);/);
+  assert.match(overlay, /private scheduleDeckDismissCommit\(\): void/);
+  assert.match(overlay, /this\.clearDeckDismissCommitTimer\(\);/);
+  assert.match(overlay, /swipeFlyoutOffset: this\.isHorizontalCardsLayout\(\) \? this\.resolveRootHeight\(\)/);
+  assert.doesNotMatch(overlay, /private playDeckSlotReorder/);
+  assert.doesNotMatch(overlay, /settleTo\(/);
 });

@@ -30,6 +30,18 @@ export const BROWSER_TABS_OVERVIEW_SWIPE_FLING_VELOCITY_VP_PER_SECOND: number = 
 export const BROWSER_TABS_OVERVIEW_SWIPE_FLING_MIN_DISTANCE_VP: number = 20;
 
 /**
+ * The dismissed card keeps the speed the gesture ended with.
+ *
+ * The flight is `travel / speed`: a quick flick is gone in a blink and a slow drag drifts away, so
+ * the card leaves under the finger's own momentum instead of playing a fixed animation that has
+ * nothing to do with the gesture. Both ends are bounded — a lazy release would otherwise hold the
+ * card on screen for seconds waiting out its own travel, and a violent flick would be over before
+ * the fade reads.
+ */
+export const BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MIN_DURATION_MS: number = 170;
+export const BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MAX_DURATION_MS: number = 620;
+
+/**
  * How far a tab card must travel before releasing it closes the tab.
  *
  * The gesture reports absolute vp, so a single fixed number cannot be right everywhere: the
@@ -72,5 +84,28 @@ export class BrowserTabsOverviewSwipeDismissPolicy {
   private isDismissingFling(distance: number, speed: number): boolean {
     return speed >= BROWSER_TABS_OVERVIEW_SWIPE_FLING_VELOCITY_VP_PER_SECOND &&
       distance >= BROWSER_TABS_OVERVIEW_SWIPE_FLING_MIN_DISTANCE_VP;
+  }
+
+  /**
+   * How long the dismissed card takes to cover the rest of its way out.
+   *
+   * `travelVp` is the distance still to cover when the finger let go and `velocityVpPerSecond` is the
+   * speed it was moving at, both measured along the dismiss axis. The card is given exactly that
+   * speed, so a flick leaves quickly and a slow release drifts; the bounds only clamp the extremes,
+   * where a literal `travel / speed` would hang the card on screen or leave nothing to see.
+   */
+  resolveFlyoutDurationMs(travelVp: number, velocityVpPerSecond: number): number {
+    const travel = Number.isFinite(travelVp) ? Math.max(0, travelVp) : 0;
+    if (travel <= 0) {
+      return BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MIN_DURATION_MS;
+    }
+    const speed = Math.abs(Number.isFinite(velocityVpPerSecond) ? velocityVpPerSecond : 0);
+    if (speed <= 0) {
+      return BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MAX_DURATION_MS;
+    }
+    return Math.min(
+      BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MAX_DURATION_MS,
+      Math.max(BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MIN_DURATION_MS, (travel / speed) * 1000)
+    );
   }
 }

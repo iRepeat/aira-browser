@@ -2,6 +2,8 @@ import { describe, expect, it } from '@ohos/hypium';
 import {
   BROWSER_TABS_OVERVIEW_SWIPE_DISMISS_MAX_THRESHOLD_VP,
   BROWSER_TABS_OVERVIEW_SWIPE_DISMISS_MIN_THRESHOLD_VP,
+  BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MAX_DURATION_MS,
+  BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MIN_DURATION_MS,
   BrowserTabsOverviewSwipeDismissPolicy
 } from '../main/ets/core/browser/tabsOverview/BrowserTabsOverviewSwipeDismissPolicy';
 
@@ -113,6 +115,31 @@ export default function browserTabsOverviewSwipeDismissPolicyTest(): void {
         velocityVpPerSecond: Number.NaN,
         thresholdVp: Number.NaN
       })).assertFalse();
+    });
+
+    /**
+     * The card leaves at the speed the finger had: the flight is the distance left divided by that
+     * speed, so a flick is gone at once and a slow release drifts out.
+     */
+    it('gives a dismissed card the release speed, bounded at both ends', 0, () => {
+      const policy = new BrowserTabsOverviewSwipeDismissPolicy();
+
+      expect(policy.resolveFlyoutDurationMs(800, 4000)).assertEqual(200);
+      expect(policy.resolveFlyoutDurationMs(800, 2000)).assertEqual(400);
+      expect(policy.resolveFlyoutDurationMs(800, 1000))
+        .assertEqual(BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MAX_DURATION_MS);
+      expect(policy.resolveFlyoutDurationMs(800, 20000))
+        .assertEqual(BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MIN_DURATION_MS);
+      expect(policy.resolveFlyoutDurationMs(800, 0))
+        .assertEqual(BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MAX_DURATION_MS);
+    });
+
+    it('rejects non-finite fly-out input and ignores the release direction', 0, () => {
+      const policy = new BrowserTabsOverviewSwipeDismissPolicy();
+
+      expect(policy.resolveFlyoutDurationMs(Number.NaN, Number.NaN))
+        .assertEqual(BROWSER_TABS_OVERVIEW_SWIPE_FLYOUT_MIN_DURATION_MS);
+      expect(policy.resolveFlyoutDurationMs(800, -4000)).assertEqual(200);
     });
   });
 }

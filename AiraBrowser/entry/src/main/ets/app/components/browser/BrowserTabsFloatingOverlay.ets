@@ -199,6 +199,17 @@ export struct BrowserTabsFloatingOverlay {
    */
   @State private horizontalDeckPosition: number = 0;
   @State private deckItems: BrowserTabsFloatingItem[] = [];
+  @State private deckSwipeTabId: string = '';
+  @State private deckDismissGhostTabId: string = '';
+  /**
+   * Each card's slot in the deck, keyed by tab id.
+   *
+   * A card must never read its slot from the `ForEach` item. `ForEach` reuses a node whose key is
+   * unchanged without running the item builder again, so the item captured by that card's builder
+   * keeps the index it had when the node was created. Reading the slot from a list the card does
+   * observe is what lets a removal move the surviving cards at all.
+   */
+  @State private deckSlotIndexById: Record<string, number> = {};
 
   private scroller: Scroller = new Scroller();
   private bottomScrollTimer: number = 0;
@@ -231,7 +242,9 @@ export struct BrowserTabsFloatingOverlay {
     new BrowserTabsOverviewStackLayoutPolicy();
   private deckMotion: BrowserTabsOverviewStackMotion = new BrowserTabsOverviewStackMotion();
   private deckDragActive: boolean = false;
-  private deckSwipeTabId: string = '';
+  private pendingDeckDismissTabId: string = '';
+  private pendingDeckDismissPosition: number = -1;
+  private deckDismissCommitTimer: number = 0;
   /**
    * Whether the deck has been placed on a card for the current entry.
    *
@@ -245,10 +258,12 @@ export struct BrowserTabsFloatingOverlay {
   /**
    * Identity of the current item list, refreshed only when the list is rebuilt.
    *
-   * The memo below caches metrics by card index, so the key has to change when a card leaves or
-   * shifts: two decks of the same length can hold different tabs at the same index.
+   * The memo below caches metrics by card slot, so the key has to change when a card leaves or
+   * shifts: two decks of the same length can hold different tabs at the same slot.
    */
   private deckItemsSignature: string = '';
+  /** Order of the recorded slots, so an unchanged list does not replace the map every frame. */
+  private deckSlotSignature: string = '';
   private selectionDisplacementCoordinator: BrowserTabsOverviewSelectionDisplacementCoordinator =
     new BrowserTabsOverviewSelectionDisplacementCoordinator();
   private entryTargetCoordinator: BrowserTabsFloatingEntryTargetCoordinator =
@@ -315,6 +330,7 @@ export struct BrowserTabsFloatingOverlay {
    * remount and therefore never re-enters aboutToAppear.
    */
   private initializeForOpen(): void {
+    this.commitPendingDeckDismiss();
     this.stopDeckMotion();
     this.deckPositionSeeded = false;
     this.selectedSection = this.activeSection;
@@ -343,6 +359,8 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   aboutToDisappear(): void {
+    this.commitPendingDeckDismiss();
+    this.clearDeckDismissCommitTimer();
     this.stopDeckMotion();
     this.clearBottomScrollTimer();
     this.clearEntryAnimationTimer();
@@ -592,7 +610,10 @@ export struct BrowserTabsFloatingOverlay {
       top: this.resolveHorizontalContentPadding().top,
       bottom: this.resolveHorizontalContentPadding().bottom
     })
-    .clip(true)
+    // Clip stays on for ordinary deck motion so peeking cards don't paint past the sheet. It drops
+    // only while a card is in a vertical dismiss flight, otherwise the fly-out is cut at the stack
+    // edge and reads as an instant vanish.
+    .clip(this.deckSwipeTabId.length <= 0)
     .hitTestBehavior(this.canInteractWithDeck() ? HitTestMode.Transparent : HitTestMode.None)
     .zIndex(FLOATING_TABS_CARDS_Z_INDEX)
     .gesture(
@@ -623,10 +644,23 @@ export struct BrowserTabsFloatingOverlay {
     .height(this.resolveItemHeight())
     .translate({ x: this.resolveDeckMetrics(item).offsetX })
     .scale({ x: this.resolveDeckMetrics(item).scale, y: this.resolveDeckMetrics(item).scale })
-    .opacity(this.resolveDeckMetrics(item).opacity)
-    // Doubled so the entering morph owns the odd slot between this card and the next one.
-    .zIndex(item.index * 2)
-    .hitTestBehavior(this.resolveDeckMetrics(item).opacity > 0 ? HitTestMode.Default : HitTestMode.None)
+    .opacity(item.id === this.deckDismissGhostTabId ? 0 : this.resolveDeckMetrics(item).opacity)
+    .zIndex(this.resolveDeckCardLayerZIndex(item))
+    .hitTestBehavior(this.resolveDeckMetrics(item).opacity > 0 && item.id !== this.deckDismissGhostTabId ?
+      HitTestMode.Default : HitTestMode.None)
+  }
+
+  /**
+   * Draw order by slot, doubled so the entering morph owns the odd slot between two cards.
+   *
+   * The card that is leaving takes the top slot: it is on its way out over the cards that are
+   * closing the gap behind it, and it must not trade places with them mid-flight.
+   */
+  private resolveDeckCardLayerZIndex(item: BrowserTabsFloatingItem): number {
+    if (item.id === this.deckDismissGhostTabId) {
+      return (this.deckItems.length + 1) * 2;
+    }
+    return this.resolveDeckIndex(item) * 2;
   }
 
   /**
@@ -700,14 +734,14 @@ export struct BrowserTabsFloatingOverlay {
       trackPreviewRectChanges: true,
       motionDurationMs: this.resolveCardMotionDurationMs(),
       motionCurve: this.resolveCardMotionCurve(),
-      motionDelayMs: this.resolveCardMotionDelayMs(item.index),
+      motionDelayMs: this.resolveCardMotionDelayMs(this.resolveDeckIndex(item)),
       entryMountAnimationEnabled: this.shouldRunLateMountEntryAnimation(item),
       entryMountOffsetX: this.resolveLateMountEntryOffsetX(item),
       entryMountDurationMs: this.animationViewModel.getFloatingCardEntryDurationMs(),
       entryMountCurve: this.animationViewModel.getFloatingCardEntryCurve(),
-      entryMountDelayMs: this.resolveCardMotionDelayMs(item.index),
+      entryMountDelayMs: this.resolveCardMotionDelayMs(this.resolveDeckIndex(item)),
       swipeDismissThreshold: this.resolveSwipeDismissThreshold(),
-      swipeFlyoutOffset: this.resolveRootWidth(),
+      swipeFlyoutOffset: this.isHorizontalCardsLayout() ? this.resolveRootHeight() : this.resolveRootWidth(),
       swipeDismissMode: this.layoutState.layoutStyle === 'horizontal_cards' ? 'upward' : 'horizontal',
       closeButtonEnabled: true,
       closeButtonAlwaysVisible: this.storedTabsOverviewCloseButtonAlwaysVisible,
@@ -961,10 +995,7 @@ export struct BrowserTabsFloatingOverlay {
       return;
     }
     if (this.isHorizontalCardsLayout()) {
-      this.stopDeckMotion();
-      this.removalState = this.shadowViewModel.markLocalRemoval(this.removalState, tabId);
-      this.refreshDeckPresentation();
-      this.onCloseTab(tabId);
+      this.beginDeckDismiss(tabId);
       return;
     }
     animateTo({
@@ -1233,23 +1264,14 @@ export struct BrowserTabsFloatingOverlay {
       if (visibleTabIds.indexOf(targetTabId) < 0) {
         return undefined;
       }
-      const targetWidth = this.layoutState.cardWidth;
-      const targetHeight = this.layoutState.previewHeight;
-      const targetItemHeight = this.layoutState.itemHeight;
-      const contentPadding = this.resolveHorizontalContentPadding();
-      const topPadding = contentPadding.top;
-      const bottomPadding = contentPadding.bottom;
-      const availableHeight = Math.max(1, this.resolveRootHeight() - topPadding - bottomPadding);
-      const usableWidth = Math.max(1, this.resolveRootWidth() - FLOATING_TABS_HORIZONTAL_PADDING * 2);
-      return {
-        left: this.resolveRootLeft() + FLOATING_TABS_HORIZONTAL_PADDING +
-          Math.max(0, (usableWidth - targetWidth) / 2),
-        top: this.resolveRootTop() + topPadding +
-          Math.max(0, (availableHeight - targetItemHeight) / 2) +
-          this.layoutState.identityHeaderHeight + this.layoutState.identityPreviewGap,
-        width: targetWidth,
-        height: targetHeight
-      };
+      // Same geometry that paints the focused card, including its 0.98 rest scale. The unscaled
+      // layout slot was ~2% larger, so the morph landed full-size and the real card then shrank.
+      const deckRect = this.resolveDeckPreviewRect(targetTabId);
+      if (deckRect !== undefined) {
+        return deckRect;
+      }
+      return this.buildDeckPreviewRect(this.stackLayoutPolicy.resolveCard(
+        0, 0, 1, this.layoutState.cardWidth));
     }
     const columnCount = Math.max(1, Math.floor(this.layoutState.columnCount));
     const slotCount = visibleTabIds.length + this.resolveBlankSlotCount(columnCount, visibleTabIds.length);
@@ -1361,17 +1383,17 @@ export struct BrowserTabsFloatingOverlay {
       return this.resolveEntryDisplacement(item).x * (1 - this.resolveEntryDisplacementProgress());
     }
     if (this.exiting || this.closeAllExitActive) {
-      return this.resolveLeftFlyOffsetX(item.index);
+      return this.resolveLeftFlyOffsetX(this.resolveDeckIndex(item));
     }
     const homeExitProgress = this.resolveHomeExitProgress();
     if (homeExitProgress > 0) {
-      return this.resolveLeftFlyOffsetX(item.index) * homeExitProgress;
+      return this.resolveLeftFlyOffsetX(this.resolveDeckIndex(item)) * homeExitProgress;
     }
     if (!this.sideEntryAnimationEnabled) {
       return 0;
     }
     const progress = this.resolveSurfaceProgress();
-    return this.resolveLeftFlyOffsetX(item.index) * (1 - progress);
+    return this.resolveLeftFlyOffsetX(this.resolveDeckIndex(item)) * (1 - progress);
   }
 
   private resolveCardTranslateY(item: BrowserTabsFloatingItem): number {
@@ -1503,7 +1525,7 @@ export struct BrowserTabsFloatingOverlay {
     if (!this.shouldRunLateMountEntryAnimation(item)) {
       return 0;
     }
-    return this.resolveLeftFlyOffsetX(item.index) * this.resolveSurfaceProgress();
+    return this.resolveLeftFlyOffsetX(this.resolveDeckIndex(item)) * this.resolveSurfaceProgress();
   }
 
   private resolveLateMountEntryAnimationWindowMs(): number {
@@ -1657,7 +1679,12 @@ export struct BrowserTabsFloatingOverlay {
       this.resolveDeckEntryMorphSlot() >= 0;
   }
 
-  /** The covered card's slot, or -1 when the morph is not settling into a card of this deck. */
+  /**
+   * The covered card's slot, or -1 when the morph is not settling into a card of this deck.
+   *
+   * This is the card's position in the deck's own list, which is also the slot the deck records for
+   * it, so the morph holds a stacking slot that belongs to no other card.
+   */
   private resolveDeckEntryMorphSlot(): number {
     if (!this.isHorizontalCardsLayout()) {
       return -1;
@@ -1669,7 +1696,8 @@ export struct BrowserTabsFloatingOverlay {
     for (let position = 0; position < this.deckItems.length; position += 1) {
       const item: BrowserTabsFloatingItem = this.deckItems[position];
       if (item.id === coveredTabId) {
-        return item.index;
+        // The live position, not `item.index`: a reused card keeps the index it was built with.
+        return position;
       }
     }
     return -1;
@@ -1829,21 +1857,57 @@ export struct BrowserTabsFloatingOverlay {
     return this.deckItems.slice(range.first, range.last + 1);
   }
 
+  /**
+   * The card's slot in the deck.
+   *
+   * Read from the recorded map, never from the `ForEach` item: a reused node keeps the item it was
+   * built with, so a removal would leave every surviving card on its old slot. The `item.index`
+   * fallback only covers a card whose map entry has not been written yet.
+   */
+  private resolveDeckIndex(item: BrowserTabsFloatingItem): number {
+    const slot = this.deckSlotIndexById[item.id];
+    return slot === undefined ? item.index : slot;
+  }
+
+  private buildDeckSlotMap(ids: string[]): Record<string, number> {
+    const slots: Record<string, number> = {};
+    for (let index = 0; index < ids.length; index += 1) {
+      slots[ids[index]] = index;
+    }
+    return slots;
+  }
+
+  /** Publish the slots of `items`, unless the deck already holds exactly this order. */
+  private recordDeckSlots(items: BrowserTabsFloatingItem[]): void {
+    const ids: string[] = [];
+    for (const item of items) {
+      ids.push(item.id);
+    }
+    const signature = ids.join('|');
+    if (signature === this.deckSlotSignature) {
+      return;
+    }
+    this.deckSlotSignature = signature;
+    this.deckSlotIndexById = this.buildDeckSlotMap(ids);
+  }
+
   private resolveDeckMetrics(item: BrowserTabsFloatingItem): BrowserTabsOverviewStackCardMetrics {
     // `build()` reads the metrics several times per card per display frame. They are pure in the
-    // deck scalar, the item order and the card width, so one memo table serves the whole frame.
-    const key = `${this.horizontalDeckPosition}|${this.layoutState.cardWidth}|${this.deckItemsSignature}`;
+    // deck scalar, the recorded slots and the card width, so one memo table serves the whole frame.
+    const slot = this.resolveDeckIndex(item);
+    const key = `${this.horizontalDeckPosition}|${this.layoutState.cardWidth}|` +
+      `${this.deckItemsSignature}|${this.deckSlotSignature}`;
     if (key !== this.deckMetricsCacheKey) {
       this.deckMetricsCacheKey = key;
       this.deckMetricsCache = [];
     }
-    const cached = this.deckMetricsCache[item.index];
+    const cached = this.deckMetricsCache[slot];
     if (cached !== undefined) {
       return cached;
     }
-    const metrics = this.stackLayoutPolicy.resolveCard(item.index, this.horizontalDeckPosition,
+    const metrics = this.stackLayoutPolicy.resolveCard(slot, this.horizontalDeckPosition,
       this.deckItems.length, this.layoutState.cardWidth);
-    this.deckMetricsCache[item.index] = metrics;
+    this.deckMetricsCache[slot] = metrics;
     return metrics;
   }
 
@@ -1872,6 +1936,12 @@ export struct BrowserTabsFloatingOverlay {
     }
     this.deckItems = next;
     this.deckItemsSignature = nextIds.join('|');
+    // A fill-in owns the recorded slots until it commits. A preview or an icon can land during those
+    // few hundred milliseconds, and re-recording the list that still holds the closed card would put
+    // every card back on its old slot halfway through the animation.
+    if (this.pendingDeckDismissTabId.length <= 0) {
+      this.recordDeckSlots(next);
+    }
     // A non-gesture state change must not leave the deck between two cards with no frame left.
     if (listChanged && !this.deckMotion.isDragging()) {
       this.settleDeckToNearestCard();
@@ -1880,7 +1950,8 @@ export struct BrowserTabsFloatingOverlay {
 
   private canInteractWithDeck(): boolean {
     return this.interactionEnabled && !this.exiting && !this.closeAllExitActive &&
-      !this.isSelectionDisplacementActive() && !this.isEntryDisplacementActive();
+      !this.isSelectionDisplacementActive() && !this.isEntryDisplacementActive() &&
+      this.pendingDeckDismissTabId.length <= 0;
   }
 
   /** Cancel the gesture and any settle, and leave the position where it is. */
@@ -1888,6 +1959,121 @@ export struct BrowserTabsFloatingOverlay {
     this.deckMotion.stop();
     this.deckDragActive = false;
     this.deckSwipeTabId = '';
+  }
+
+  /**
+   * Close a card without re-indexing first: one animation moves the whole deck into its new shape.
+   *
+   * Taking the card out of the list changes every later card's slot in one assignment, and a card
+   * cannot be moved by animating a `ForEach` index change — the node is reused with the item it was
+   * built with, and the nonlinear deck layout is not something ArkUI interpolates. So the closed card
+   * stays in the list as a ghost while two pieces of state the cards do observe move together: the
+   * deck scalar moves to the focus the shorter list will have, and every surviving card moves to its
+   * new slot. Cards the removal does not affect keep both values and therefore do not move at all.
+   *
+   * The new focus is the closed card's successor when it held the focus, and its predecessor when it
+   * was the last card — which is exactly what `reconcilePosition` resolves against the shorter list.
+   */
+  private beginDeckDismiss(tabId: string): void {
+    if (this.pendingDeckDismissTabId.length > 0) {
+      return;
+    }
+    this.stopDeckMotion();
+    const previousIds = this.deckItems.map((item: BrowserTabsFloatingItem): string => item.id);
+    const nextIds = previousIds.filter((id: string): boolean => id !== tabId);
+    const position = this.stackLayoutPolicy.reconcilePosition(
+      this.horizontalDeckPosition, previousIds, nextIds);
+    this.pendingDeckDismissTabId = tabId;
+    this.pendingDeckDismissPosition = position;
+    this.deckDismissGhostTabId = tabId;
+    // The outermost card leaves no slot behind, so nothing moves and the ghost can go at once.
+    if (nextIds.length <= 0 || !this.hasDeckSlotChange(previousIds, nextIds, position)) {
+      this.commitPendingDeckDismiss();
+      return;
+    }
+    const slots = this.buildDeckSlotMap(nextIds);
+    const slotSignature = nextIds.join('|');
+    // Armed before the animation: a dismissal that never commits would leave the deck holding a
+    // ghost and refusing every pan, which is worse than losing the fill-in's animation.
+    this.scheduleDeckDismissCommit();
+    animateTo({
+      duration: FLOATING_TABS_REORDER_DURATION_MS,
+      curve: this.animationViewModel.getFloatingCardEntryCurve()
+    }, () => {
+      this.horizontalDeckPosition = position;
+      this.deckSlotIndexById = slots;
+      this.deckSlotSignature = slotSignature;
+    });
+    this.deckMotion.setPosition(position);
+  }
+
+  /**
+   * Whether the fill-in has anything to move.
+   *
+   * A card's place is its slot against the deck scalar, so a removal only moves the cards beyond the
+   * removed one, and only towards the focus. Closing the outermost card moves none of them: the fan
+   * simply loses that slot, which is why the two end cases need no fill-in at all.
+   */
+  private hasDeckSlotChange(previousIds: string[], nextIds: string[], position: number): boolean {
+    const previousPosition = this.horizontalDeckPosition;
+    for (let index = 0; index < nextIds.length; index += 1) {
+      const previousIndex = previousIds.indexOf(nextIds[index]);
+      if (previousIndex < 0) {
+        continue;
+      }
+      if (Math.abs((previousIndex - previousPosition) - (index - position)) > 0.000001) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Finish a dismissal once the fill-in has painted.
+   *
+   * The timer owns the commit instead of the animation's completion callback, and it doubles as a
+   * backstop: a dismissal that never commits would leave the deck holding a ghost and refusing every
+   * touch. Committing early is harmless — the committed values are the animation's own end state.
+   */
+  private scheduleDeckDismissCommit(): void {
+    this.clearDeckDismissCommitTimer();
+    this.deckDismissCommitTimer = setTimeout(() => {
+      this.deckDismissCommitTimer = 0;
+      this.commitPendingDeckDismiss();
+    }, FLOATING_TABS_REORDER_DURATION_MS);
+  }
+
+  private clearDeckDismissCommitTimer(): void {
+    if (this.deckDismissCommitTimer <= 0) {
+      return;
+    }
+    clearTimeout(this.deckDismissCommitTimer);
+    this.deckDismissCommitTimer = 0;
+  }
+
+  private commitPendingDeckDismiss(): void {
+    const tabId = this.pendingDeckDismissTabId;
+    const position = this.pendingDeckDismissPosition;
+    this.clearDeckDismissCommitTimer();
+    this.pendingDeckDismissTabId = '';
+    this.pendingDeckDismissPosition = -1;
+    this.deckDismissGhostTabId = '';
+    this.deckSwipeTabId = '';
+    if (tabId.length <= 0) {
+      return;
+    }
+    this.stopDeckMotion();
+    this.removalState = this.shadowViewModel.markLocalRemoval(this.removalState, tabId);
+    this.refreshDeckPresentation();
+    // `refreshDeckPresentation` anchors on the list that still held the closed card, so its position
+    // is not the one the animation already reached. Re-publishing the settled values is a no-op for
+    // the cards, because they are where the animation left them.
+    if (this.deckItems.length > 0) {
+      this.horizontalDeckPosition = this.deckMotion.seed(
+        this.stackLayoutPolicy.clamp(position, this.deckItems.length), this.deckItems.length);
+    }
+    this.recordDeckSlots(this.deckItems);
+    this.onCloseTab(tabId);
   }
 
   /**
@@ -1899,6 +2085,10 @@ export struct BrowserTabsFloatingOverlay {
    * motion to finish it.
    */
   private abortDeckMotion(): void {
+    if (this.pendingDeckDismissTabId.length > 0) {
+      this.commitPendingDeckDismiss();
+      return;
+    }
     this.stopDeckMotion();
     this.settleDeckToNearestCard();
   }
@@ -1989,7 +2179,10 @@ export struct BrowserTabsFloatingOverlay {
   private resolveDeckPreviewRect(tabId: string): BrowserTabsOverlayRect | undefined {
     const item = this.deckItems.find((candidate: BrowserTabsFloatingItem): boolean => candidate.id === tabId);
     if (item === undefined) { return undefined; }
-    const metrics = this.resolveDeckMetrics(item);
+    return this.buildDeckPreviewRect(this.resolveDeckMetrics(item));
+  }
+
+  private buildDeckPreviewRect(metrics: BrowserTabsOverviewStackCardMetrics): BrowserTabsOverlayRect {
     const padding = this.resolveHorizontalContentPadding();
     const centerY = this.resolveRootTop() + padding.top +
       (this.resolveRootHeight() - padding.top - padding.bottom) / 2;

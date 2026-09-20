@@ -25,7 +25,13 @@ const TAB_OVERVIEW_ITEM_PRESSED_SCALE: number = 0.965;
 const TAB_OVERVIEW_ITEM_PRESSED_ANIMATION_MS: number = 120;
 const TAB_OVERVIEW_ITEM_SWIPE_START_DISTANCE: number = 6;
 const TAB_OVERVIEW_ITEM_SWIPE_SNAP_BACK_DURATION_MS: number = 260;
-const TAB_OVERVIEW_ITEM_SWIPE_FLYOUT_DURATION_MS: number = 260;
+/**
+ * The dismissed card leaves on the speed the finger had, so the flight is a fling, not a fixed
+ * animation. The curve gives the flight a constant start and then eases it out, which is what a
+ * decelerating object looks like once it is already past the screen edge; its duration comes from
+ * `resolveFlyoutDurationMs`.
+ */
+const TAB_OVERVIEW_ITEM_SWIPE_FLYOUT_CURVE: string = 'cubic-bezier(0.33, 0.33, 0.6, 1)';
 const TAB_OVERVIEW_ITEM_SWIPE_OPACITY_FADE_START_RATIO: number = 0.25;
 const TAB_OVERVIEW_ITEM_SWIPE_OPACITY_MIN_BEFORE_DISMISS: number = 0.72;
 
@@ -93,6 +99,11 @@ export struct BrowserTabOverviewItem {
   private swipeDismissPolicy: BrowserTabsOverviewSwipeDismissPolicy = new BrowserTabsOverviewSwipeDismissPolicy();
   private identityIconKey: string = '';
   private lastPreviewRect: BrowserTabOverviewCardSelectRect | undefined = undefined;
+  private swipeDismissTimer: number = 0;
+  private swipeFlyoutDurationMs: number = 0;
+  private pendingSwipeDismissTabId: string = '';
+  private pendingSwipeDismissOffset: number = 0;
+  private pendingSwipeDismissDirection: number = -1;
 
   onSelect: (tabId: string, rect?: BrowserTabOverviewCardSelectRect) => void =
     (_tabId: string, _rect?: BrowserTabOverviewCardSelectRect) => {};
@@ -118,6 +129,7 @@ export struct BrowserTabOverviewItem {
   }
 
   aboutToReuse(params: Record<string, Object>): void {
+    this.completePendingSwipeDismiss();
     this.tab = params.tab as BrowserTabState;
     this.presentation = params.presentation as BrowserTabOverviewItemPresentation;
     this.snapshotImageUri = params.snapshotImageUri as string;
@@ -189,6 +201,8 @@ export struct BrowserTabOverviewItem {
   }
 
   aboutToDisappear(): void {
+    this.completePendingSwipeDismiss();
+    this.clearSwipeDismissTimer();
     this.clearMountEntryTimer();
     this.clearCloseSelectionSuppressionTimer();
   }
@@ -409,6 +423,8 @@ export struct BrowserTabOverviewItem {
   }
 
   private resetLocalInteractionStateForReuse(): void {
+    this.clearSwipeDismissTimer();
+    this.pendingSwipeDismissTabId = '';
     this.clearCloseSelectionSuppressionTimer();
     this.isPressed = false;
     this.localSwipeOffsetX = 0;
@@ -521,10 +537,10 @@ export struct BrowserTabOverviewItem {
     const swipeOffset = Number.isFinite(normalizedEventOffset) ?
       normalizedEventOffset : this.resolveActiveLocalSwipeOffset();
     const direction = swipeOffset < 0 ? -1 : 1;
-    if (this.shouldDismissLocalSwipeOnRelease(swipeOffset, this.resolveLocalSwipeReleaseVelocity(event))) {
+    const releaseVelocity = this.resolveLocalSwipeReleaseVelocity(event);
+    if (this.shouldDismissLocalSwipeOnRelease(swipeOffset, releaseVelocity)) {
       this.markLocalSwipeThresholdReached();
-      this.dismissLocalSwipe(direction);
-      this.onSwipeEnd(this.tab.id, swipeOffset, direction);
+      this.dismissLocalSwipe(direction, swipeOffset, releaseVelocity);
       return;
     }
     this.settleLocalSwipe();
@@ -551,16 +567,62 @@ export struct BrowserTabOverviewItem {
     }, TAB_OVERVIEW_ITEM_SWIPE_SNAP_BACK_DURATION_MS);
   }
 
-  private dismissLocalSwipe(direction: number): void {
+  private dismissLocalSwipe(direction: number, swipeOffset: number, releaseVelocity: number): void {
     this.localSwipePhase = 'dismissing';
-    const normalizedDirection = direction < 0 ? -1 : 1;
-    if (this.swipeDismissMode === 'upward') {
-      this.localSwipeOffsetX = 0;
-      this.localSwipeOffsetY = this.resolveLocalSwipeFlyoutOffset(-1);
+    this.pendingSwipeDismissTabId = this.tab.id;
+    this.pendingSwipeDismissOffset = swipeOffset;
+    this.pendingSwipeDismissDirection = direction < 0 ? -1 : 1;
+    const flyout = this.swipeDismissMode === 'upward' ?
+      this.resolveLocalSwipeFlyoutOffset(-1) : this.resolveLocalSwipeFlyoutOffset(this.pendingSwipeDismissDirection);
+    // How fast the card leaves is the finger's business: the distance left is covered at the speed
+    // the gesture ended with, so a flick is gone at once and a slow release drifts out. The node's
+    // own implicit animation reads the same value, so both clocks agree.
+    this.swipeFlyoutDurationMs = this.swipeDismissPolicy.resolveFlyoutDurationMs(
+      Math.abs(flyout - swipeOffset), releaseVelocity);
+    animateTo({
+      duration: this.swipeFlyoutDurationMs,
+      curve: TAB_OVERVIEW_ITEM_SWIPE_FLYOUT_CURVE
+    }, () => {
+      if (this.swipeDismissMode === 'upward') {
+        this.localSwipeOffsetX = 0;
+        this.localSwipeOffsetY = flyout;
+        return;
+      }
+      this.localSwipeOffsetX = flyout;
+      this.localSwipeOffsetY = 0;
+    });
+    this.clearSwipeDismissTimer();
+    this.swipeDismissTimer = setTimeout(() => {
+      this.swipeDismissTimer = 0;
+      this.completePendingSwipeDismiss();
+    }, this.swipeFlyoutDurationMs);
+  }
+
+  /**
+   * Close the tab only after the fly-out has painted, or immediately if the node is taken away
+   * first. Calling `onSwipeEnd` from `endLocalSwipe` unmounted the card in the same frame as the
+   * release, so the fly-out never ran.
+   */
+  private completePendingSwipeDismiss(): void {
+    if (this.localSwipePhase !== 'dismissing' || this.pendingSwipeDismissTabId.length <= 0) {
       return;
     }
-    this.localSwipeOffsetX = this.resolveLocalSwipeFlyoutOffset(normalizedDirection);
-    this.localSwipeOffsetY = 0;
+    const tabId = this.pendingSwipeDismissTabId;
+    const offset = this.pendingSwipeDismissOffset;
+    const direction = this.pendingSwipeDismissDirection;
+    this.clearSwipeDismissTimer();
+    this.pendingSwipeDismissTabId = '';
+    // Stay on `dismissing` so the card does not flash back to opacity 1 at the fly-out offset
+    // for the frame between this callback and the overlay taking it out of the list.
+    this.onSwipeEnd(tabId, offset, direction);
+  }
+
+  private clearSwipeDismissTimer(): void {
+    if (this.swipeDismissTimer <= 0) {
+      return;
+    }
+    clearTimeout(this.swipeDismissTimer);
+    this.swipeDismissTimer = 0;
   }
 
   private markLocalSwipeThresholdReached(): void {
@@ -598,7 +660,7 @@ export struct BrowserTabOverviewItem {
       return TAB_OVERVIEW_ITEM_SWIPE_SNAP_BACK_DURATION_MS;
     }
     if (this.localSwipePhase === 'dismissing') {
-      return TAB_OVERVIEW_ITEM_SWIPE_FLYOUT_DURATION_MS;
+      return this.swipeFlyoutDurationMs;
     }
     return this.motionDurationMs;
   }
@@ -608,7 +670,7 @@ export struct BrowserTabOverviewItem {
       return 'interpolatingSpring(0, 1, 280, 28)';
     }
     if (this.localSwipePhase === 'dismissing') {
-      return 'cubic-bezier(0.32, 0, 0.67, 0)';
+      return TAB_OVERVIEW_ITEM_SWIPE_FLYOUT_CURVE;
     }
     return this.motionCurve;
   }
