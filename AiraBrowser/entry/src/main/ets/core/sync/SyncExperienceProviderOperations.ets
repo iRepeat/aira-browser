@@ -268,12 +268,11 @@ export class SyncExperienceProviderOperations {
         messages.push(bookmarkResult.summary);
       }
       if (personalizationMessage.length > 0) {
-        messages.push(`主页收藏、小说书架和常用设置：${personalizationMessage}`);
+        messages.push(`常用设置：${personalizationMessage}`);
       }
       if (historyMessage.length > 0) {
         messages.push(`历史记录：${historyMessage}`);
       }
-      messages.push(`当前设备已改用${this.resolveProviderLabel(remoteKind)}。`);
       return this.outcome('provider-selected', remoteKind, messages.join('\n'), bookmarkResult);
     } catch (error) {
       const normalizedError = error as Error;

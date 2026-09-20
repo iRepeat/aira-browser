@@ -1,54 +1,59 @@
 import {
   BROWSER_THEME_STORAGE_ACCENT_KEY,
   BROWSER_THEME_STORAGE_DIVIDER_KEY,
-  BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
-  BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
+  BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { BrowserSheetActionButton } from '../browser/BrowserModalBottomSheet';
 import { CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER } from '../common/CenteredDialogSurface';
 
+type SyncResultDialogRowKind = 'status' | 'paragraph';
+
 interface SyncResultDialogRow {
   key: string;
+  kind: SyncResultDialogRowKind;
   label: string;
   value: string;
-  isKeyValue: boolean;
 }
+
+// Status rows read as `名称 —— 状态` on one line, so the name may never grow into the
+// status. The dialog shows no sub-lines: everything a row needs must fit that pair.
+const SYNC_RESULT_DIALOG_ROW_VERTICAL_PADDING: number = 12;
 
 @CustomDialog
 export struct SyncResultDialog {
   @StorageProp(BROWSER_THEME_STORAGE_ACCENT_KEY) private storedAccentColor: string = '#0A59F7';
   @StorageProp(BROWSER_THEME_STORAGE_DIVIDER_KEY) private storedDividerColor: string = '#E3E8EF';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY) private storedPrimaryTextColor: string = '#111318';
-  @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY) private storedSecondaryTextColor: string = '#5F6875';
   controller?: CustomDialogController;
   @Link title: string;
   @Link message: string;
 
   build() {
-    Column({ space: 16 }) {
+    Column({ space: 0 }) {
       Text(this.title.length > 0 ? this.title : '操作结果')
         .width('100%')
-        .fontSize(20)
+        .fontSize(19)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.storedPrimaryTextColor)
         .textAlign(TextAlign.Center)
-        .maxLines(1)
+        .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ bottom: 18 })
 
       Scroll() {
         Column({ space: 0 }) {
           ForEach(this.buildRows(this.message), (row: SyncResultDialogRow) => {
-            if (row.isKeyValue) {
-              this.buildKeyValueRow(row.label, row.value)
+            if (row.kind === 'status') {
+              this.buildStatusRow(row)
             } else {
-              this.buildParagraphRow(row.value)
+              this.buildParagraphRow(row)
             }
           }, (row: SyncResultDialogRow) => row.key)
         }
         .width('100%')
       }
       .width('100%')
-      .constraintSize({ maxHeight: 320 })
+      .constraintSize({ maxHeight: 340 })
       .scrollBar(BarState.Auto)
       .edgeEffect(EdgeEffect.Spring)
 
@@ -65,41 +70,49 @@ export struct SyncResultDialog {
           this.controller?.close();
         }
       })
+      .margin({ top: 20 })
     }
     .attributeModifier(CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER)
   }
 
+  /**
+   * `名称          状态`, separated by a hairline between entries. The name yields first,
+   * so the short status stays fully readable.
+   */
   @Builder
-  private buildKeyValueRow(label: string, value: string) {
-    Row({ space: 16 }) {
-      Text(label)
-        .width(86)
-        .fontSize(14)
+  private buildStatusRow(row: SyncResultDialogRow) {
+    Row({ space: 12 }) {
+      Text(row.label)
+        .layoutWeight(1)
+        .fontSize(14.5)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.storedSecondaryTextColor)
+        .lineHeight(20)
+        .fontColor(this.storedPrimaryTextColor)
         .textAlign(TextAlign.Start)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      Text(value)
-        .layoutWeight(1)
-        .fontSize(14)
+      Text(row.value)
+        .flexShrink(0)
+        .fontSize(14.5)
+        .fontWeight(FontWeight.Bold)
         .lineHeight(20)
-        .fontColor(this.storedPrimaryTextColor)
+        .fontColor(this.storedAccentColor)
         .textAlign(TextAlign.End)
-        .maxLines(4)
+        .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
-    .padding({ top: 10, bottom: 10 })
-    .alignItems(VerticalAlign.Top)
+    .alignItems(VerticalAlign.Center)
+    .padding({ top: SYNC_RESULT_DIALOG_ROW_VERTICAL_PADDING, bottom: SYNC_RESULT_DIALOG_ROW_VERTICAL_PADDING })
 
     this.buildDivider()
   }
 
+  /** A whole-line message still shows as its own entry, aligned left. */
   @Builder
-  private buildParagraphRow(value: string) {
-    Text(value)
+  private buildParagraphRow(row: SyncResultDialogRow) {
+    Text(row.value)
       .width('100%')
       .fontSize(14)
       .lineHeight(21)
@@ -107,7 +120,10 @@ export struct SyncResultDialog {
       .textAlign(TextAlign.Start)
       .maxLines(5)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
-      .padding({ top: 10, bottom: 10 })
+      .padding({
+        top: SYNC_RESULT_DIALOG_ROW_VERTICAL_PADDING,
+        bottom: SYNC_RESULT_DIALOG_ROW_VERTICAL_PADDING
+      })
 
     this.buildDivider()
   }
@@ -120,38 +136,53 @@ export struct SyncResultDialog {
       .color(this.storedDividerColor)
   }
 
+  /**
+   * Turns the coordinator's line-oriented message text into rows.
+   *
+   * Two shapes are produced upstream:
+   * - `名称：状态`, which becomes one status row.
+   * - A plain sentence, which stays a full-width paragraph.
+   *
+   * A row has no sub-line, so a producer must fold any extra sentence into its own
+   * `名称：状态` row instead of appending it under another one.
+   *
+   * The last entry carries no divider, so the list ends on the surface, not on a line.
+   */
   private buildRows(message: string): SyncResultDialogRow[] {
     const rows: SyncResultDialogRow[] = [];
     const normalized = message.trim().length > 0 ? message.replace(/\r/g, '') : '操作已完成。';
-    const lines = normalized.split('\n');
-    lines.forEach((line: string, index: number) => {
-      const trimmed = line.trim();
-      if (trimmed.length === 0 || this.shouldHideTechnicalLine(trimmed)) {
-        return;
-      }
-      const separatorIndex = this.findSeparatorIndex(trimmed);
+    const lines = normalized.split('\n').map((line: string) => line.trim()).filter((line: string) => {
+      return line.length > 0 && !this.shouldHideTechnicalLine(line);
+    });
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const separatorIndex = this.findSeparatorIndex(line);
       if (separatorIndex > 0) {
-        rows.push({
-          key: `${index}-kv-${trimmed}`,
-          label: trimmed.substring(0, separatorIndex),
-          value: trimmed.substring(separatorIndex + 1).trim(),
-          isKeyValue: true
-        });
-        return;
+        const label = line.substring(0, separatorIndex).trim();
+        const value = line.substring(separatorIndex + 1).trim();
+        if (label.length > 0 && value.length > 0) {
+          rows.push({
+            key: `${rows.length}-status-${label}`,
+            kind: 'status',
+            label: label,
+            value: value
+          });
+          continue;
+        }
       }
       rows.push({
-        key: `${index}-p-${trimmed}`,
+        key: `${rows.length}-paragraph-${line}`,
+        kind: 'paragraph',
         label: '',
-        value: trimmed,
-        isKeyValue: false
+        value: line
       });
-    });
+    }
     if (rows.length === 0) {
       rows.push({
         key: 'fallback',
+        kind: 'paragraph',
         label: '',
-        value: '操作已完成。',
-        isKeyValue: false
+        value: '操作已完成。'
       });
     }
     return rows;

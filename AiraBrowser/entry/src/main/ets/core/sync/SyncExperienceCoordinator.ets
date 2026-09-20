@@ -1063,7 +1063,7 @@ export class SyncExperienceCoordinator implements AiraCloudBookmarkV4BootstrapTr
             failure: bookmarkOutcome.failure
           });
         } else {
-          messages.push(isBackup ? '当前同步方式的书签已备份。' : '书签已完成。');
+          messages.push(isBackup ? '书签备份：已完成' : '书签同步：已完成');
         }
       }
       if (context.settings.personalizationSyncEnabled === true && runResult.personalization !== undefined) {
@@ -1075,7 +1075,7 @@ export class SyncExperienceCoordinator implements AiraCloudBookmarkV4BootstrapTr
             message: personalizationOutcome.message
           });
         } else {
-          messages.push(isBackup ? '当前同步方式的主页收藏、小说书架和常用设置已备份。' : '主页收藏、小说书架和常用设置已完成。');
+          messages.push(isBackup ? '常用设置：已备份' : '常用设置：已同步');
         }
       }
       if (!isBackup && context.experienceState.historySelected && runResult.history !== undefined) {
@@ -1086,7 +1086,7 @@ export class SyncExperienceCoordinator implements AiraCloudBookmarkV4BootstrapTr
             message: runResult.history.message
           });
         } else {
-          messages.push('历史记录已完成。');
+          messages.push('历史记录：已完成');
         }
       }
       if (issues.length > 0) {
