@@ -63,6 +63,7 @@ export interface BrowserPrivateSessionCleanupDependencies {
 
 export interface BrowserPrivateSessionCleanupShell {
   readFacts: () => BrowserPrivateSessionCleanupFacts;
+  clearSwipePreviews?: () => void;
   notifyTabPreviewChanged: () => void;
 }
 
@@ -143,6 +144,7 @@ export class BrowserPrivateSessionCleanupCoordinator {
   }
 
   async runStartupResidualCleanup(request: BrowserPrivateStartupResidualCleanupRequest): Promise<void> {
+    this.shell.clearSwipePreviews?.();
     await this.dependencies.resolveSiteDataControlService().clearPrivateSessionData(request.preserveCookiesOnClose);
     this.clearPrivateDownloads(request.profileId);
     const previewRemoved = await this.dependencies.resolveTabPreviewCoordinator()
@@ -162,6 +164,7 @@ export class BrowserPrivateSessionCleanupCoordinator {
     snapshotPaths: string[],
     preserveCookiesOnClose: boolean
   ): Promise<void> {
+    this.shell.clearSwipePreviews?.();
     await this.dependencies.resolveSiteDataControlService().clearPrivateSessionData(preserveCookiesOnClose);
     this.clearPrivateDownloads(profileId);
     const previewCleanupRemoved = await this.dependencies.resolveTabPreviewCoordinator()

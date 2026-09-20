@@ -1,3 +1,4 @@
+import { BrowserAddressBarTabSwipeEvent } from '../../../core/browser/BrowserAddressBarTabSwipePolicy';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   BrowserBottomAddressContextAction,
@@ -166,6 +167,15 @@ export struct BrowserBottomChromeRenderer {
   @Prop downloadProgressColor: ResourceColor = '';
   @Prop downloadIndicatorState: DownloadToolbarIndicatorState = createHiddenDownloadToolbarIndicatorState();
   @Prop chromeIconTone: AppChromeIconTone = 'light';
+  @Prop tabSwipeEnabled: boolean = false;
+  @Prop tabSwipeActive: boolean = false;
+  @Prop tabSwipeOffsetRatio: number = 0;
+  @Prop tabSwipeTargetAddress: string = '';
+  @Prop tabSwipeDirection: number = 0;
+  onTabSwipe: (event: BrowserAddressBarTabSwipeEvent) => void = (_event: BrowserAddressBarTabSwipeEvent) => {};
+  private tabSwipeGestureStarted: boolean = false;
+  private tabSwipeLastOffsetX: number = 0;
+  private tabSwipeLastOffsetY: number = 0;
   @Prop reliableActionsEnabled: boolean = true;
   @Prop addressContextMenuEnabled: boolean = false;
   /** Window top safe inset, used to bound the search-engine popup to the space above its anchor. */
@@ -196,6 +206,7 @@ export struct BrowserBottomChromeRenderer {
   }
 
   aboutToDisappear(): void {
+    this.cancelTabSwipe();
     this.invalidateActiveMotion();
     this.resetPressedTarget();
     this.clearFocusReadyTimer();
@@ -287,6 +298,7 @@ export struct BrowserBottomChromeRenderer {
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .textAlign(TextAlign.Center)
+                .opacity(this.tabSwipeActive ? 0 : 1)
                 .scale({
                   x: this.compactFrame.centerDisplayScale,
                   y: this.compactFrame.centerDisplayScale
@@ -302,6 +314,9 @@ export struct BrowserBottomChromeRenderer {
               bottom: this.compactFrame.centerVerticalPadding
             })
             .hitTestBehavior(HitTestMode.None)
+            if (this.tabSwipeActive) {
+              this.buildTabSwipeText(this.compactFrame.centerViewportWidth, this.compactFrame.centerDisplayScale)
+            }
             this.buildCompactTapSurface()
           }
           .width('100%')
@@ -351,8 +366,19 @@ export struct BrowserBottomChromeRenderer {
         }
         this.updatePressedTarget('compact-body', this.resolveLiveTapTarget('compact-body'), event.type);
       })
-      .onClick(() => {
-        this.handleTap('compact-body');
+      .gesture(
+        GestureGroup(
+          GestureMode.Exclusive,
+          PanGesture({ fingers: 1, direction: PanDirection.Horizontal, distance: 12 })
+            .onActionStart((event: GestureEvent) => { this.startTabSwipe(event); })
+            .onActionUpdate((event: GestureEvent) => { this.emitTabSwipe('update', event); })
+            .onActionEnd((event: GestureEvent) => { this.emitTabSwipe('end', event); })
+            .onActionCancel(() => { this.cancelTabSwipe(); }),
+          TapGesture().onAction(() => { this.handleTap('compact-body'); })
+        )
+      )
+      .onGestureJudgeBegin((info: GestureInfo, event: BaseGestureEvent) => {
+        return this.judgeTabSwipe(info, event);
       })
   }
 
@@ -804,7 +830,7 @@ export struct BrowserBottomChromeRenderer {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center)
-        .opacity(this.resolveOutgoingDisplayOpacity() * this.resolveAddressCrossfadeOpacity())
+        .opacity(this.tabSwipeActive ? 0 : this.resolveOutgoingDisplayOpacity() * this.resolveAddressCrossfadeOpacity())
         .position({ x: this.resolveOutgoingDisplayLeft(), y: this.resolveDisplayTextTop() })
         .scale({ x: this.animatedFrame.centerDisplayScale, y: this.animatedFrame.centerDisplayScale })
         .hitTestBehavior(HitTestMode.None)
@@ -822,7 +848,7 @@ export struct BrowserBottomChromeRenderer {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center)
-        .opacity(this.resolveIncomingDisplayOpacity() * this.resolveAddressCrossfadeOpacity())
+        .opacity(this.tabSwipeActive ? 0 : this.resolveIncomingDisplayOpacity() * this.resolveAddressCrossfadeOpacity())
         .position({ x: this.resolveIncomingDisplayLeft(), y: this.resolveDisplayTextTop() })
         .scale({ x: this.animatedFrame.centerDisplayScale, y: this.animatedFrame.centerDisplayScale })
         .hitTestBehavior(HitTestMode.None)
@@ -846,6 +872,9 @@ export struct BrowserBottomChromeRenderer {
         .scale({ x: this.animatedFrame.centerDisplayScale, y: this.animatedFrame.centerDisplayScale })
         .hitTestBehavior(HitTestMode.None)
 
+      if (this.tabSwipeActive) {
+        this.buildTabSwipeText(this.animatedFrame.centerViewportWidth, this.animatedFrame.centerDisplayScale)
+      }
       this.buildCenterBodyTapSurface()
 
       Stack({ alignContent: Alignment.Center }) {
@@ -886,7 +915,7 @@ export struct BrowserBottomChromeRenderer {
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
-    .opacity(this.animatedFrame.displayOpacity * this.webProtectionFeedbackCrossfadeProgress)
+    .opacity(this.tabSwipeActive ? 0 : this.animatedFrame.displayOpacity * this.webProtectionFeedbackCrossfadeProgress)
     .scale({ x: this.animatedFrame.centerDisplayScale, y: this.animatedFrame.centerDisplayScale })
     .accessibilityText(this.webProtectionFeedbackVisible ? this.webProtectionFeedbackAccessibilityLabel : '')
     .hitTestBehavior(HitTestMode.None)
@@ -925,6 +954,11 @@ export struct BrowserBottomChromeRenderer {
       .gesture(
         GestureGroup(
           GestureMode.Exclusive,
+          PanGesture({ fingers: 1, direction: PanDirection.Horizontal, distance: 12 })
+            .onActionStart((event: GestureEvent) => { this.startTabSwipe(event); })
+            .onActionUpdate((event: GestureEvent) => { this.emitTabSwipe('update', event); })
+            .onActionEnd((event: GestureEvent) => { this.emitTabSwipe('end', event); })
+            .onActionCancel(() => { this.cancelTabSwipe(); }),
           LongPressGesture({
             fingers: 1,
             repeat: false,
@@ -939,6 +973,9 @@ export struct BrowserBottomChromeRenderer {
             })
         )
       )
+      .onGestureJudgeBegin((info: GestureInfo, event: BaseGestureEvent) => {
+        return this.judgeTabSwipe(info, event);
+      })
       .bindContextMenu(this.addressContextMenuVisible, this.buildAddressContextMenu(), {
         placement: Placement.Top,
         modalMode: ModalMode.TARGET_WINDOW,
@@ -1063,6 +1100,106 @@ export struct BrowserBottomChromeRenderer {
       .onClick(() => {
         this.handleTap(targetKey);
       })
+  }
+
+  @Builder
+  private buildTabSwipeText(width: number, displayScale: number) {
+    Stack({ alignContent: Alignment.Center }) {
+      this.buildTabSwipeTextLine(this.presentation.centerContent.displayText, width, displayScale,
+        this.resolveTabSwipeTextOffset(width))
+      if (this.tabSwipeTargetAddress.length > 0) {
+        this.buildTabSwipeTextLine(this.tabSwipeTargetAddress, width, displayScale,
+          this.resolveTabSwipeTextOffset(width) - this.tabSwipeDirection * width)
+      }
+    }
+    .width(width)
+    .height('100%')
+    .clip(true)
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  @Builder
+  private buildTabSwipeTextLine(text: string, width: number, displayScale: number, offsetX: number) {
+    Text(text)
+      .width(width)
+      .height(BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT)
+      .fontSize(BROWSER_BOTTOM_CHROME_TEXT_SIZE)
+      .lineHeight(BROWSER_BOTTOM_CHROME_TEXT_LINE_HEIGHT)
+      .halfLeading(true)
+      .textVerticalAlign(TextVerticalAlign.CENTER)
+      .fontColor(this.presentation.centerContent.displayUsesSecondaryTone ?
+        this.resolveSecondaryTextForeground() : this.resolvePrimaryTextForeground())
+      .fontWeight(FontWeight.Regular)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .textAlign(TextAlign.Center)
+      .scale({ x: displayScale, y: displayScale })
+      .translate({ x: offsetX })
+      .hitTestBehavior(HitTestMode.None)
+  }
+
+  private resolveTabSwipeTextOffset(width: number): number {
+    const ratio = Number.isFinite(this.tabSwipeOffsetRatio) ?
+      Math.max(-1, Math.min(1, this.tabSwipeOffsetRatio)) : 0;
+    const offset = ratio * width;
+    return this.tabSwipeTargetAddress.length > 0 ? offset : Math.max(-24, Math.min(24, offset));
+  }
+
+  private judgeTabSwipe(info: GestureInfo, event: BaseGestureEvent): GestureJudgeResult {
+    if (info.type !== GestureControl.GestureType.PAN_GESTURE) {
+      return this.tabSwipeActive || this.tabSwipeGestureStarted ?
+        GestureJudgeResult.REJECT : GestureJudgeResult.CONTINUE;
+    }
+    if (this.tabSwipeGestureStarted) {
+      return GestureJudgeResult.CONTINUE;
+    }
+    const pan = event as PanGestureEvent;
+    return this.tabSwipeEnabled && !this.tabSwipeActive && !this.addressContextMenuVisible &&
+      !this.searchEnginePopupVisible && Math.abs(pan.offsetX) > 1.2 * Math.abs(pan.offsetY) ?
+      GestureJudgeResult.CONTINUE : GestureJudgeResult.REJECT;
+  }
+
+  private startTabSwipe(event: GestureEvent): void {
+    if (!this.tabSwipeEnabled || this.tabSwipeActive || this.addressContextMenuVisible ||
+      this.searchEnginePopupVisible || this.tabSwipeGestureStarted) {
+      return;
+    }
+    this.tabSwipeGestureStarted = true;
+    this.resetPressedTarget();
+    this.clearPressedTargetIntent();
+    this.emitTabSwipe('start', event);
+  }
+
+  private emitTabSwipe(phase: 'start' | 'update' | 'end', event: GestureEvent): void {
+    if (!this.tabSwipeGestureStarted) {
+      return;
+    }
+    this.tabSwipeLastOffsetX = Number.isFinite(event.offsetX) ? event.offsetX : 0;
+    this.tabSwipeLastOffsetY = Number.isFinite(event.offsetY) ? event.offsetY : 0;
+    if (phase === 'end') {
+      this.tabSwipeGestureStarted = false;
+    }
+    this.onTabSwipe({
+      phase,
+      offsetX: this.tabSwipeLastOffsetX,
+      offsetY: this.tabSwipeLastOffsetY,
+      velocityX: Number.isFinite(event.velocityX) ? event.velocityX : 0
+    });
+  }
+
+  private cancelTabSwipe(): void {
+    if (!this.tabSwipeGestureStarted) {
+      return;
+    }
+    this.tabSwipeGestureStarted = false;
+    this.resetPressedTarget();
+    this.clearPressedTargetIntent();
+    this.onTabSwipe({
+      phase: 'cancel',
+      offsetX: this.tabSwipeLastOffsetX,
+      offsetY: this.tabSwipeLastOffsetY,
+      velocityX: 0
+    });
   }
 
   @Builder
@@ -1340,7 +1477,7 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private isTargetEnabled(target: BrowserBottomChromeTapTarget): boolean {
-    return target.enabled && (!target.reliable || this.reliableActionsEnabled);
+    return !this.tabSwipeActive && target.enabled && (!target.reliable || this.reliableActionsEnabled);
   }
 
   private updatePressedTarget(
@@ -1438,6 +1575,10 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private handleTap(targetKey: string): void {
+    if (this.tabSwipeActive || this.tabSwipeGestureStarted) {
+      this.clearPressedTargetIntent();
+      return;
+    }
     const pressedIntent = this.pressedTargetIntentKey === targetKey ? this.pressedTargetIntent : undefined;
     this.clearPressedTargetIntent();
     if (pressedIntent !== undefined) {
@@ -1454,6 +1595,9 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private handleLongPress(targetKey: string): void {
+    if (this.tabSwipeActive || this.tabSwipeGestureStarted) {
+      return;
+    }
     this.clearPressedTargetIntent();
     const target = this.resolveLiveLongPressTarget(targetKey);
     if (this.isTargetPresent(target)) {
@@ -1475,7 +1619,7 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private isAddressContextMenuEligible(): boolean {
-    return this.addressContextMenuEnabled &&
+    return !this.tabSwipeActive && !this.tabSwipeGestureStarted && this.addressContextMenuEnabled &&
       (this.currentPresentation.scene === 'home' || this.currentPresentation.scene === 'web') &&
       (this.currentPresentation.mode === 'resting-three-block' ||
         this.currentPresentation.mode === 'center-active-tools') &&
@@ -1489,6 +1633,17 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private isPhysicalTargetInteractive(targetKey: string): boolean {
+    // Keep the recognizer's node enabled throughout drag and settle; actions are gated separately.
+    if (targetKey === 'center-body' || targetKey === 'compact-body') {
+      if (targetKey === 'center-body' && this.isCompactChromePresented()) {
+        return false;
+      }
+      return this.tabSwipeGestureStarted || this.tabSwipeActive ||
+        this.isTargetEnabled(this.resolveLiveTapTarget(targetKey));
+    }
+    if (this.tabSwipeActive || this.tabSwipeGestureStarted) {
+      return false;
+    }
     // The expanded rail stays mounted behind the collapsed capsule. Once the compact capsule is the
     // presented chrome it must not swallow touches aimed at the expanded clusters, and vice versa:
     // keying this off the restore target rather than opacity alone keeps taps alive mid-transition.
@@ -1637,6 +1792,9 @@ export struct BrowserBottomChromeRenderer {
   }
 
   private resolveCenterBodyAnimatedScale(size: number, inset: number, minimumScale: number): number {
+    if (this.tabSwipeActive || this.tabSwipeGestureStarted) {
+      return 1;
+    }
     const normalizedSize = Math.max(1, size);
     const targetScale = Math.max(
       minimumScale,

@@ -28,7 +28,11 @@ export function buildGenerationBoundHostedWebNodeCallbacks(
         callbacks.onPageVisible(eventTabId, event);
       }
     },
-    onPageBegin: callbacks.onPageBegin,
+    onPageBegin: (eventTabId: string, event: OnPageBeginEvent): void => {
+      if (eventTabId === tabId && isCurrent(tabId, generation)) {
+        callbacks.onPageBegin(eventTabId, event);
+      }
+    },
     onPageEnd: callbacks.onPageEnd,
     onNativeMediaPlayerObserved: callbacks.onNativeMediaPlayerObserved === undefined ? undefined :
       (eventTabId: string, mediaInfo: webview.MediaInfo): void => {

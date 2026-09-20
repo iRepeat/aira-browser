@@ -51,6 +51,11 @@ BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bottom-toolba
 CROSS_DEVICE_LINK_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-cross-device-link-contract.sh"
 COMMUNITY_UPDATE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-community-update-contract.sh"
 SYNC_CLOSED_LOOP_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-closed-loop.cjs"
+ADDRESS_BAR_TAB_SWIPE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-address-bar-tab-swipe.cjs"
+TAB_SWIPE_PREVIEW_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tab-swipe-preview.cjs"
+TAB_SWIPE_PREVIEW_INTEGRATION_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tab-swipe-preview-integration.cjs"
+TAB_SWIPE_COVER_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tab-swipe-cover.cjs"
+TAB_PREVIEW_IMAGE_LEASE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tab-preview-image-lease.cjs"
 TABS_STACK_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tabs-stack.cjs"
 HUAWEI_APP_IDENTITY_RESOLVER="${REPO_ROOT}/scripts/huawei-app-identity.js"
 HUAWEI_APP_IDENTITY_TEST="${REPO_ROOT}/scripts/huawei-app-identity.test.js"
@@ -371,11 +376,17 @@ if [ ! -x "${SYNC_CLOSED_LOOP_GUARD_SCRIPT}" ]; then
 fi
 node "${SYNC_CLOSED_LOOP_GUARD_SCRIPT}"
 
-for tabs_stack_guard in "${TABS_STACK_GUARD_SCRIPT}"; do
-  if [ ! -f "${tabs_stack_guard}" ]; then
-    fail "Tabs overview stack guard not found: ${tabs_stack_guard}"
+for swipe_guard in \
+  "${ADDRESS_BAR_TAB_SWIPE_GUARD_SCRIPT}" \
+  "${TAB_SWIPE_PREVIEW_GUARD_SCRIPT}" \
+  "${TAB_SWIPE_PREVIEW_INTEGRATION_GUARD_SCRIPT}" \
+  "${TAB_SWIPE_COVER_GUARD_SCRIPT}" \
+  "${TAB_PREVIEW_IMAGE_LEASE_GUARD_SCRIPT}" \
+  "${TABS_STACK_GUARD_SCRIPT}"; do
+  if [ ! -f "${swipe_guard}" ]; then
+    fail "Bottom address bar tab swipe guard not found: ${swipe_guard}"
   fi
-  node "${tabs_stack_guard}" || fail "Tabs overview stack guard failed: ${tabs_stack_guard}"
+  node "${swipe_guard}" || fail "Bottom address bar tab swipe guard failed: ${swipe_guard}"
 done
 
 if [ -x "${ICON_GUARD_SCRIPT}" ]; then

@@ -164,8 +164,10 @@ assertContract(!panel.includes('uiMaterial'),
 assertContract(panel.includes('this.buildFloatingOverlay()'),
   'The search/address panel must retain its original floating overlay path.');
 assertContract(normalizedAddressPanel.includes(
-  "floatingHeaderPanEnabled: this.resolveFloatingLayoutMode() === 'input' || this.shouldUseThreeBlockBottomChrome()"
-), 'Input and outer return-home gestures must remain enabled; center tool expansion is not a Sheet gesture.');
+  "floatingHeaderPanEnabled: !this.tabSwipeActive && (this.resolveFloatingLayoutMode() === 'input' || " +
+    'this.shouldUseThreeBlockBottomChrome())'
+), 'Input and outer return-home gestures must remain enabled outside a horizontal tab swipe; ' +
+  'center tool expansion is not a Sheet gesture.');
 assertContract(!surfaceHost.includes('expandedScrimHomeSurfaceVisible'),
   'Phone surface host must not force-mount Home for an expanded toolbar scrim.');
 assertContract(!surfaceHost.includes('webLayerOpacity: this.expandedScrimHomeSurfaceVisible'),

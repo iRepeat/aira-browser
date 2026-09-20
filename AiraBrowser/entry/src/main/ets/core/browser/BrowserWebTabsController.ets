@@ -88,6 +88,7 @@ export interface BrowserWebTabsControllerDependencies {
 }
 
 export interface BrowserWebTabsControllerHost {
+  onLoadingStopped?: (tabId: string) => void;
   recordRuntimeEvent: (type: string, message: string, tabId: string) => void;
   applyWebPageNavigationState: (tabId: string, canGoBackward: boolean, canGoForward: boolean) => void;
   applyWebNavigationHelperMessage: (message: string) => void;
@@ -249,7 +250,11 @@ export class BrowserWebTabsController {
     if (page === undefined) {
       return buildUnavailableBrowserWebNavigationCommandResult('missing_tab');
     }
-    return page.stopLoading(this.buildPageControllerHost());
+    const result = page.stopLoading(this.buildPageControllerHost());
+    if (result.status === 'native_issued') {
+      this.host.onLoadingStopped?.(tabId);
+    }
+    return result;
   }
 
   /**

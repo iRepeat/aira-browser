@@ -33,6 +33,7 @@ import {
 } from './BrowserTabPreviewMetricsService';
 import { BrowserTabPreviewDebugExportSnapshot } from '../../services/web/BrowserTabPreviewDebugExportService';
 import { BrowserProfileBoundaryService } from './BrowserProfileBoundaryService';
+import { BrowserTabPreviewImageLeaseStore } from './BrowserTabPreviewImageLeaseStore';
 import { BrowserRuntimeLifecyclePort } from '../../services/web/BrowserRuntimeLifecyclePort';
 
 const MIN_PASSIVE_PREVIEW_CAPTURE_INTERVAL_MS: number = 1100;
@@ -56,6 +57,11 @@ export interface BrowserTabPreviewState {
   capturedAt: number;
   failureReason?: string;
   captureSource?: string;
+}
+
+export interface BrowserTabPreviewLease {
+  readonly state: BrowserTabPreviewState;
+  readonly release: () => void;
 }
 
 export interface BrowserTabPreviewCaptureRequest {
@@ -159,6 +165,7 @@ export class BrowserTabPreviewCoordinator {
   private readonly surfaceHost: BrowserTabPreviewSurfaceHost;
   private captureService: BrowserTabPreviewCaptureService = new BrowserTabPreviewCaptureService();
   private cacheStore: BrowserTabPreviewCacheStore = new BrowserTabPreviewCacheStore();
+  private readonly imageLeaseStore: BrowserTabPreviewImageLeaseStore = new BrowserTabPreviewImageLeaseStore();
   private previewEntries: Record<string, BrowserTabPreviewCacheEntry | undefined> = {};
   private activeCaptureTasks: Record<string, Promise<boolean> | undefined> = {};
   private activeCaptureRunIds: Record<string, number | undefined> = {};
@@ -289,6 +296,32 @@ export class BrowserTabPreviewCoordinator {
       return undefined;
     }
     return this.buildPreviewState(entry, this.isTransitionSnapshotReady(entry));
+  }
+
+  acquireSharedSnapshot(tabId: string): BrowserTabPreviewLease | undefined {
+    const state = this.getSharedSnapshotState(tabId);
+    if (state === undefined) {
+      return undefined;
+    }
+    const pixelMap = state.sharedSnapshotPixelMap;
+    if (pixelMap !== undefined && !this.imageLeaseStore.retain(pixelMap)) {
+      return undefined;
+    }
+    // getSharedSnapshotState already returns a fresh copy of the entry, so callers cannot observe
+    // later overview captures replacing this generation's references.
+    let released = false;
+    return {
+      state: state,
+      release: (): void => {
+        if (released) {
+          return;
+        }
+        released = true;
+        if (pixelMap !== undefined) {
+          void this.imageLeaseStore.releaseLease(pixelMap);
+        }
+      }
+    };
   }
 
   private buildPreviewState(entry: BrowserTabPreviewCacheEntry, transitionReady: boolean): BrowserTabPreviewState {
@@ -589,6 +622,11 @@ export class BrowserTabPreviewCoordinator {
     }
     const now = Date.now();
     const imageSize = this.resolvePixelMapSize(pixelMap);
+    const previousPixelMap = existing?.sharedSnapshotPixelMap;
+    if (previousPixelMap !== undefined && previousPixelMap !== pixelMap) {
+      // The URI below replaces the entry, so the old in-memory image would otherwise be orphaned.
+      void this.releaseCachedPixelMap(previousPixelMap, tab.id, existing?.captureSource ?? 'shared-persist');
+    }
     this.previewEntries[tab.id] = {
       tabId: tab.id,
       sharedSnapshotImageUri: sharedUri,
@@ -1347,6 +1385,16 @@ export class BrowserTabPreviewCoordinator {
   }
 
   private async releaseCachedPixelMap(
+    pixelMap: image.PixelMap,
+    tabId: string,
+    source: string
+  ): Promise<void> {
+    await this.imageLeaseStore.requestRelease(pixelMap, (): Promise<void> => {
+      return this.releasePlatformPixelMap(pixelMap, tabId, source);
+    });
+  }
+
+  private async releasePlatformPixelMap(
     pixelMap: image.PixelMap,
     tabId: string,
     source: string

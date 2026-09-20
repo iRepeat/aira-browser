@@ -121,7 +121,10 @@ export class BrowserTabSwitchCoordinator {
     return this.dependencies.sink.resolveFacts().tabs.slice();
   }
 
-  async switchToTab(tabId: string): Promise<void> {
+  async switchToTab(tabId: string, canApply?: () => boolean): Promise<void> {
+    if (canApply !== undefined && !canApply()) {
+      return;
+    }
     this.emitPlatform('cancel_bottom_panel_backdrop_focus');
     const facts = this.dependencies.sink.resolveFacts();
     const targetTab = this.findTabById(facts.tabs, tabId);
@@ -130,6 +133,9 @@ export class BrowserTabSwitchCoordinator {
       targetTab.dataScope,
       'switch_private_tab'
     )) {
+      return;
+    }
+    if (canApply !== undefined && !canApply()) {
       return;
     }
     if (tabId === facts.activeTabId) {

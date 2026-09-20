@@ -338,6 +338,9 @@ export struct BrowserDetentBottomPanel {
       .width('100%')
       .height('100%')
       .hitTestBehavior(HitTestMode.Transparent)
+      .onGestureJudgeBegin((info: GestureInfo, event: BaseGestureEvent) => {
+        return this.judgeVerticalPanelPan(info, event, this.floatingOverlayPanEnabled);
+      })
       .gesture(
         PanGesture({
           direction: this.floatingOverlayPanEnabled ? PanDirection.Vertical : PanDirection.None,
@@ -494,6 +497,9 @@ export struct BrowserDetentBottomPanel {
     .onAreaChange((_oldArea: Area, newArea: Area) => {
       this.dragGestureWidth = this.parseAreaDimension(newArea.width);
       this.reportFloatingPanelVisualHeightFromArea(newArea, 'header');
+    })
+    .onGestureJudgeBegin((info: GestureInfo, event: BaseGestureEvent) => {
+      return this.judgeVerticalPanelPan(info, event, this.floatingHeaderPanEnabled);
     })
     .gesture(
       PanGesture({
@@ -678,6 +684,9 @@ export struct BrowserDetentBottomPanel {
     .onAreaChange((_oldArea: Area, newArea: Area) => {
       this.dragGestureWidth = this.parseAreaDimension(newArea.width);
     })
+    .onGestureJudgeBegin((info: GestureInfo, event: BaseGestureEvent) => {
+      return this.judgeVerticalPanelPan(info, event, true);
+    })
     .gesture(
       PanGesture({ direction: PanDirection.Vertical, distance: BROWSER_DETENT_PAN_START_DISTANCE })
         .onActionStart((event: GestureEvent) => {
@@ -706,6 +715,17 @@ export struct BrowserDetentBottomPanel {
       .borderRadius(BROWSER_DETENT_DRAG_HANDLE_RADIUS)
       .backgroundColor(this.resolveDragHandleColor())
       .hitTestBehavior(HitTestMode.None)
+  }
+
+  private judgeVerticalPanelPan(info: GestureInfo, event: BaseGestureEvent, enabled: boolean): GestureJudgeResult {
+    if (info.type !== GestureControl.GestureType.PAN_GESTURE) {
+      return GestureJudgeResult.CONTINUE;
+    }
+    // Judge only at recognition. Once accepted, subsequent direction changes remain vertical.
+    const pan = event as PanGestureEvent;
+    return enabled && this.motionState.detentDragEnabled &&
+      (this.isDraggingPanel || Math.abs(pan.offsetY) > 1.2 * Math.abs(pan.offsetX)) ?
+      GestureJudgeResult.CONTINUE : GestureJudgeResult.REJECT;
   }
 
   private beginPanelDrag(): void {
@@ -934,7 +954,7 @@ export struct BrowserDetentBottomPanel {
   }
 
   private endPanelDrag(offsetY: number, velocityY: number = 0): void {
-    if (this.mode !== 'overlay' || !this.motionState.detentDragEnabled) {
+    if (!this.isDraggingPanel || this.mode !== 'overlay' || !this.motionState.detentDragEnabled) {
       return;
     }
     this.flushPendingPanelDragFrame();

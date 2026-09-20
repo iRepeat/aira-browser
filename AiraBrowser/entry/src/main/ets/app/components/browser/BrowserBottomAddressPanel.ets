@@ -1,3 +1,4 @@
+import { BrowserAddressBarTabSwipeEvent } from '../../../core/browser/BrowserAddressBarTabSwipePolicy';
 import {
   BrowserBottomAddressPanelAction,
   BrowserBottomAddressPanelActionId,
@@ -302,6 +303,7 @@ export struct BrowserBottomAddressPanel {
   @StorageProp(BROWSER_THEME_STORAGE_SETTINGS_ICON_FOREGROUND_KEY)
   private storedSelectedIconForegroundColor: string = '#FFFFFF';
   @StorageProp(BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY) private storedResolvedThemeMode: string = 'light';
+  @State private panelVerticalMotionActive: boolean = false;
   @State private panelDetent: HomeSearchPanelDetent = 'low';
   @State private panelTargetDetent: HomeSearchPanelDetent = 'low';
   @State private addressInputAdapterActive: boolean = false;
@@ -434,6 +436,12 @@ export struct BrowserBottomAddressPanel {
   @Prop
   @Watch('syncToolbarSystemSheetRequest')
   toolbarSystemSheetRequestVersion: number = 0;
+  @Prop tabSwipeEnabled: boolean = false;
+  @Prop tabSwipeActive: boolean = false;
+  @Prop tabSwipeOffsetRatio: number = 0;
+  @Prop tabSwipeTargetAddress: string = '';
+  @Prop tabSwipeDirection: number = 0;
+  onTabSwipe: (event: BrowserAddressBarTabSwipeEvent) => void = (_event: BrowserAddressBarTabSwipeEvent) => {};
   @Prop activeDownloadIndicatorEnabled: boolean = true;
   onPanelDetentChange: (detent: HomeSearchPanelDetent) => void = (_detent: HomeSearchPanelDetent) => {};
   onPanelGestureFrame: (frame: BrowserBottomAddressPanelGestureFrame) => void =
@@ -565,8 +573,8 @@ export struct BrowserBottomAddressPanel {
         floatingOverlayPanEnabled: this.resolveFloatingLayoutMode() === 'input' &&
           this.isExpandedPanelDetent(this.panelDetent) &&
           !this.quickActionReorderActive,
-        floatingHeaderPanEnabled: this.resolveFloatingLayoutMode() === 'input' ||
-          this.shouldUseThreeBlockBottomChrome(),
+        floatingHeaderPanEnabled: !this.tabSwipeActive && (this.resolveFloatingLayoutMode() === 'input' ||
+          this.shouldUseThreeBlockBottomChrome()),
         floatingExpandedSurfaceCoversHeader: this.shouldRenderFloatingActionSurface(),
         floatingExpandedSurfaceCoverProgress: this.resolveToolbarSurfaceTransitionState().surfaceCoverProgress,
         floatingExpandedSurfaceChromeVisible: false,
@@ -594,6 +602,7 @@ export struct BrowserBottomAddressPanel {
         },
         onPanelGestureFrame: (frame: BrowserDetentBottomPanelGestureFrame) => {
           if (frame.phase === 'start') {
+            this.panelVerticalMotionActive = true;
             this.clearFloatingActionGestureReveal();
             this.floatingActionContentGestureRevealed = false;
             this.preserveExpandedBackdropForActiveToolbarGesture =
@@ -915,6 +924,14 @@ export struct BrowserBottomAddressPanel {
   @Builder
   private buildThreeBlockToolbarHeader() {
     BrowserBottomChromeRenderer({
+      tabSwipeEnabled: this.isTabSwipeEnabled(),
+      tabSwipeActive: this.tabSwipeActive,
+      tabSwipeOffsetRatio: this.tabSwipeOffsetRatio,
+      tabSwipeTargetAddress: this.tabSwipeTargetAddress,
+      tabSwipeDirection: this.tabSwipeDirection,
+      onTabSwipe: (event: BrowserAddressBarTabSwipeEvent) => {
+        this.onTabSwipe(event);
+      },
       presentation: this.liveBottomChromePresentation,
       materialTint: this.resolveBottomChromeMaterialTint(),
       hdsMaterialPlateEnabled: true,
@@ -953,6 +970,19 @@ export struct BrowserBottomAddressPanel {
     })
       .width('100%')
       .height(WEB_BOTTOM_ADDRESS_BAR_HEIGHT)
+  }
+
+  private isTabSwipeEnabled(): boolean {
+    // Active is an action lock, not an eligibility change for the ongoing recognizer.
+    return this.tabSwipeEnabled && this.livePanelMotionState.visible &&
+      this.panelDetent === 'low' && this.panelTargetDetent === 'low' &&
+      this.livePanelMotionState.targetDetent === 'low' && !this.panelVerticalMotionActive &&
+      !this.addressInputAdapterActive && !this.addressFocused && !this.requestedAddressFocused &&
+      (this.liveBottomChromePresentation.mode === 'resting-three-block' ||
+        this.liveBottomChromePresentation.mode === 'scroll-compact') &&
+      !this.toolbarSystemSheetVisible && !this.toolbarSystemSheetRequested && !this.quickActionReorderActive &&
+      !this.floatingActionContentEntryActive && !this.floatingActionContentExitActive &&
+      !this.floatingActionContentGestureRevealed && !this.floatingActionContentSettled;
   }
 
   @Builder
@@ -3089,6 +3119,9 @@ export struct BrowserBottomAddressPanel {
   ): void {
     const nextDetent = this.resolveAllowedPanelDetent(detent);
     const previousDetent = this.panelDetent;
+    if (nextDetent !== previousDetent) {
+      this.panelVerticalMotionActive = true;
+    }
     if (nextDetent !== 'middle') {
       this.clearFloatingActionContentEntry();
       this.floatingActionContentGestureRevealed = false;
@@ -3158,6 +3191,7 @@ export struct BrowserBottomAddressPanel {
     if (this.panelTargetDetent === detent && this.panelDetent !== detent) {
       this.applyPanelDetent(detent, false, this.shouldDeferRequestedPanelDetentNotification(detent));
     }
+    this.panelVerticalMotionActive = false;
     if (detent === 'low' && this.homeDismissAfterLowSettlePending) {
       this.homeDismissAfterLowSettlePending = false;
       this.applyAddressFocusState(false, true);
