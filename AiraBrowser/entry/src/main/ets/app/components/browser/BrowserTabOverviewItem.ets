@@ -529,7 +529,15 @@ export struct BrowserTabOverviewItem {
   }
 
   private endLocalSwipe(event: GestureEvent): void {
-    if (this.localSwipePhase === 'idle' || this.localSwipePhase === 'dismissing') {
+    if (this.localSwipePhase === 'dismissing') {
+      // The card is already on its way out, so there is no offset left to settle — but the overlay
+      // still has to hear that the touch is over. Its "a card owns the gesture" latch is what stops
+      // the deck from being panned, and swallowing the end here used to leave that latch set for
+      // good, so a swipe that was followed by any second gesture killed panning until reopen.
+      this.onSwipeCancel(this.tab.id);
+      return;
+    }
+    if (this.localSwipePhase === 'idle') {
       return;
     }
     const eventOffset = this.resolveLocalSwipeGestureOffset(event);
@@ -548,7 +556,11 @@ export struct BrowserTabOverviewItem {
   }
 
   private cancelLocalSwipe(): void {
-    if (this.localSwipePhase === 'idle' || this.localSwipePhase === 'dismissing') {
+    if (this.localSwipePhase === 'dismissing') {
+      this.onSwipeCancel(this.tab.id);
+      return;
+    }
+    if (this.localSwipePhase === 'idle') {
       return;
     }
     this.settleLocalSwipe();

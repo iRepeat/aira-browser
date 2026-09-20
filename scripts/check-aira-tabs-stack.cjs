@@ -45,27 +45,31 @@ test('the Hyperion suite executes against the actual transpiled ETS source', () 
     return exportsUnderTest;
   });
   suite.default();
-  assert.equal(cases, 14);
+  assert.equal(cases, 15);
 });
 
-// Fixed values independently evaluated by transliterating AppSwitcherOverlay.kt (commit 8298945).
 // Inputs: index, raw scroll position, count, card width. Outputs follow `fields`.
+//
+// Offsets, fades, shades and z-order are fixed values independently evaluated by transliterating
+// AppSwitcherOverlay.kt (commit 8298945). The scale column is Aira's own depth curve instead: the
+// focused card and everything in front of it are the standard size, and each level *behind* it is
+// `0.96x` smaller, floored at the third level. Those numbers come from that formula, not this policy.
 const goldens = [
-  [[2, 2, 6, 250], [0, .98, 1, 1, 0, 2]],
-  [[1, 2, 6, 250], [-55, .97, 1, 0, .25, 1]],
-  [[0, 2, 6, 250], [-70.4, .965, 1, 0, .5, 0]],
+  [[2, 2, 6, 250], [0, 1, 1, 1, 0, 2]],
+  [[1, 2, 6, 250], [-55, .96, 1, 0, .25, 1]],
+  [[0, 2, 6, 250], [-70.4, .9216, 1, 0, .5, 0]],
   [[3, 2, 6, 250], [212.5, 1, 1, 1, 0, 3]],
-  [[0, 2.5, 6, 250], [-73.21986676296929, .9635355339059327, .5, 0, .5, 0]],
-  [[2, 2.5, 6, 250], [-35.96768830317987, .974142135623731, 1, .5, .125, 2]],
-  [[3, 2.5, 6, 250], [92.4959973502132, .99, 1, 1, 0, 3]],
+  [[0, 2.5, 6, 250], [-73.21986676296929, .9029798987795907, .5, 0, .5, 0]],
+  [[2, 2.5, 6, 250], [-35.96768830317987, .9797958971132712, 1, .5, .125, 2]],
+  [[3, 2.5, 6, 250], [92.4959973502132, 1, 1, 1, 0, 3]],
   [[4, 2.5, 6, 250], [345.67537706926646, 1, 1, .5, 0, 4]],
   [[5, 2.5, 6, 250], [638.0973555526352, 1, 1, 0, 0, 5]],
-  [[0, -.5, 6, 250], [54.64285714285714, .98, 1, 1, 0, 0]],
+  [[0, -.5, 6, 250], [54.64285714285714, 1, 1, 1, 0, 0]],
   [[1, -.5, 6, 250], [293.2310267857143, 1, 1, 1, 0, 1]],
   [[2, -.5, 6, 250], [574.9481745001135, 1, 1, 0, 0, 2]],
-  [[5, 5.5, 6, 250], [-49.33035714285714, .96425, 1, 1, 0, 5]],
-  [[4, 5.5, 6, 250], [-79.66517857142858, .934202380952381, 1, 0, .25, 4]],
-  [[3, 5.5, 6, 250], [-86.84345238095237, .9236428571428571, 1, 0, .5, 3]]
+  [[5, 5.5, 6, 250], [-49.33035714285714, .9839285714285715, 1, 1, 0, 5]],
+  [[4, 5.5, 6, 250], [-79.66517857142858, .9245714285714286, 1, 0, .25, 4]],
+  [[3, 5.5, 6, 250], [-86.84345238095237, .8821028571428572, 1, 0, .5, 3]]
 ];
 test('independent goldens cover depth, parallax, fades and differential overscroll', () => {
   for (const [input, expected] of goldens) {
@@ -408,6 +412,17 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   // covered card and its successor, instead of becoming one more layer above the whole deck. The
   // holder is inside the deck's own Stack, so its `zIndex` competes with the cards' and not with the
   // cards layer as a whole.
+  // A dismissal must never be able to close the deck's touch handling. The gate the cards layer
+  // reads is observed state — as a plain field the framework could not see it clear, so the layer
+  // stayed on the `HitTestMode` it rendered while the dismissal was in flight and the deck could not
+  // be panned until the whole overview was reopened. A pan also finishes a dismissal still in flight,
+  // and every gesture path releases the overlay's "a card owns the touch" latch.
+  assert.match(overlay, /@State private pendingDeckDismissTabId: string = '';/);
+  assert.match(overlay, /private beginDeckDrag\(\): void \{\s*if \(this\.pendingDeckDismissTabId\.length > 0\) \{\s*\/\//);
+  assert.match(overlay, /if \(!this\.canInteractWithDeck\(\) \|\| this\.deckSwipeTabId\.length > 0\) \{ return; \}/);
+  const latchReleases = item.match(
+    /if \(this\.localSwipePhase === 'dismissing'\) \{[\s\S]{0,600}?this\.onSwipeCancel\(this\.tab\.id\);/g) || [];
+  assert.equal(latchReleases.length, 2, 'both gesture ends must release the deck latch while leaving');
   assert.match(horizontal, /this\.buildDeckEntryMorphSlot\(\)/);
   // A card's slot, geometry and layer order come from recorded state, never from the `ForEach` item:
   // a reused node keeps the item it was built with, so reading the index from it left every card on

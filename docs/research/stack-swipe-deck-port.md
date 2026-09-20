@@ -24,7 +24,7 @@ and `BrowserTabsOverviewStackMotion.ets`, with ArkUI wiring in
 | Upstream | Aira | Notes |
 | --- | --- | --- |
 | `cardCenterX(index, sp)` | `BrowserTabsOverviewStackLayoutPolicy.resolveCard().offsetX` | Offset from the deck centre instead of the screen centre, so the caller owns the sheet geometry. |
-| `depthScale(relPos)` | `resolveCard().scale` | Left cards decay `0.98 -> 0.96`; focused and trailing cards ramp `0.98 -> 1.0`. |
+| `depthScale(relPos)` | `resolveCard().scale` | Upstream decays the left cards `0.98 -> 0.96` and ramps the trailing ones *past* the focused card, `0.98 -> 1.0`. In Aira the focused card is `1.0`, the cards in front of it are `1.0` too, and each level *behind* it is `0.96x` smaller (see below). |
 | `overscrollSinkScale(index)` | folded into `resolveCard().scale` | Right-edge overscroll sinks the cards that trail the focus. |
 | `leftFadeAlpha`, `titleAlpha`, `titleBlurRadius`, `darkOverlayAlpha` | `opacity`, `titleOpacity`, `shadeOpacity` | `shadeOpacity` is painted as a black overlay on the card. `titleAlpha` becomes `titleOpacity`; upstream's companion `titleBlurRadius` is not ported (see below). |
 | `Modifier.zIndex(index)` | `zIndex` | Fixed draw order by tab index, so trailing cards cover leading ones. |
@@ -74,6 +74,16 @@ and `BrowserTabsOverviewStackMotion.ets`, with ArkUI wiring in
   dropping the ghost and re-indexing moves nothing. A timer owns the commit rather than the animation's
   completion callback, both because the end state is identical and because a dismissal that never
   committed would leave the deck holding a ghost and refusing every touch.
+- **Depth is size, and only the stack behind the focus is smaller.** Upstream's `depthScale` puts the
+  focused card at `0.98` and ramps the trailing cards up to `1.0`, so the biggest card in the deck was
+  the one just right of the focus and every card *grew* as it left the centre while *shrinking* on its
+  way in — the opposite of a stack, and only a 4% band, so a swipe barely read as depth at all. In
+  Aira the focused card is the standard size, so is every card in front of it, and every card behind
+  it is `0.96x` the level in front — floored at the third level, the deepest one the left fade still
+  shows. Swiping therefore grows a card into the standard size as it reaches the centre and shrinks it
+  back into the stack as it passes, and the cards in front never change size as the deck moves. Only
+  the scale changed: the left peek series, the trailing parallax, the fades and the fixed z-order are
+  upstream's.
 - **Deck identity.** Upstream derives cards from the back stack. Aira filters by tab section and by
   locally removed tabs, and keys each card by tab id plus preview identity so a late snapshot
   rebuilds the card instead of leaving the pending placeholder in place. The key deliberately omits

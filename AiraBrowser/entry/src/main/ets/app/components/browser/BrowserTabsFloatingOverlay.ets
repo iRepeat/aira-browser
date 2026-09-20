@@ -242,7 +242,16 @@ export struct BrowserTabsFloatingOverlay {
     new BrowserTabsOverviewStackLayoutPolicy();
   private deckMotion: BrowserTabsOverviewStackMotion = new BrowserTabsOverviewStackMotion();
   private deckDragActive: boolean = false;
-  private pendingDeckDismissTabId: string = '';
+  /**
+   * The tab whose dismissal is mid fill-in, if any.
+   *
+   * This has to be observed state, not a plain field: the deck's touch handling reads it (see
+   * `canInteractWithDeck`), and a plain field would leave the cards layer holding whatever
+   * `HitTestMode` it rendered last. A dismissal that clears a field the framework cannot see would
+   * therefore leave the deck unwatchable — the fill-in lands, and then nothing can be dragged again
+   * until the whole overview is closed and reopened.
+   */
+  @State private pendingDeckDismissTabId: string = '';
   private pendingDeckDismissPosition: number = -1;
   private deckDismissCommitTimer: number = 0;
   /**
@@ -2113,6 +2122,12 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   private beginDeckDrag(): void {
+    if (this.pendingDeckDismissTabId.length > 0) {
+      // The gesture reaching the deck means the fill-in has had its time. Finishing it here rather
+      // than waiting for the timer cannot leave the deck locked behind a dismissal that never
+      // committed, and the committed values are the animation's own end state either way.
+      this.commitPendingDeckDismiss();
+    }
     if (!this.canInteractWithDeck() || this.deckSwipeTabId.length > 0) { return; }
     this.deckMotion.begin();
     this.deckDragActive = true;

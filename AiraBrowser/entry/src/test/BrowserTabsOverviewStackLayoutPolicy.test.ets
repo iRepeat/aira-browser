@@ -11,9 +11,13 @@ function close(actual: number, expected: number, tolerance: number = EPSILON): v
 }
 
 /**
- * Golden values in this file are evaluated by an independent transliteration of
- * `AppSwitcherOverlay.kt` (SoxiaLiSA/StackSwipe, MIT, commit 8298945), not by this policy, so a
- * formula change cannot silently re-baseline them.
+ * Golden values in this file are evaluated independently of this policy — by transliterating
+ * `AppSwitcherOverlay.kt` (SoxiaLiSA/StackSwipe, MIT, commit 8298945) for the offsets, fades, shades
+ * and z-order, and from the documented depth formula for the scale, which Aira deliberately changed —
+ * so a formula change cannot silently re-baseline them.
+ *
+ * That depth formula: the focused card is the standard size, so is every card in front of it, and
+ * every card *behind* it is `0.96x` smaller per level, floored at the third level.
  */
 export default function browserTabsOverviewStackLayoutPolicyTest(): void {
   describe('BrowserTabsOverviewStackLayoutPolicy', () => {
@@ -22,13 +26,13 @@ export default function browserTabsOverviewStackLayoutPolicyTest(): void {
     it('places every focused and trailing card at the reference offset and scale', 0, () => {
       // index, scroll position, count, card width -> offsetX, scale, opacity, title, shade, z
       const goldens: number[][] = [
-        [2, 2, 6, 250, 0, 0.98, 1, 1, 0, 2],
-        [1, 2, 6, 250, -55, 0.97, 1, 0, 0.25, 1],
-        [0, 2, 6, 250, -70.39999999999999, 0.965, 1, 0, 0.5, 0],
+        [2, 2, 6, 250, 0, 1, 1, 1, 0, 2],
+        [1, 2, 6, 250, -55, 0.96, 1, 0, 0.25, 1],
+        [0, 2, 6, 250, -70.39999999999999, 0.9216, 1, 0, 0.5, 0],
         [3, 2, 6, 250, 212.5, 1, 1, 1, 0, 3],
-        [0, 2.5, 6, 250, -73.21986676296929, 0.9635355339059327, 0.5, 0, 0.5, 0],
-        [2, 2.5, 6, 250, -35.96768830317987, 0.974142135623731, 1, 0.5, 0.125, 2],
-        [3, 2.5, 6, 250, 92.4959973502132, 0.99, 1, 1, 0, 3],
+        [0, 2.5, 6, 250, -73.21986676296929, 0.9029798987795907, 0.5, 0, 0.5, 0],
+        [2, 2.5, 6, 250, -35.96768830317987, 0.9797958971132712, 1, 0.5, 0.125, 2],
+        [3, 2.5, 6, 250, 92.4959973502132, 1, 1, 1, 0, 3],
         [4, 2.5, 6, 250, 345.67537706926646, 1, 1, 0.5, 0, 4],
         [5, 2.5, 6, 250, 638.0973555526352, 1, 1, 0, 0, 5]
       ];
@@ -43,6 +47,31 @@ export default function browserTabsOverviewStackLayoutPolicyTest(): void {
       }
     });
 
+    /**
+     * The deck's depth cue: the focused card is the standard size, so is every card in front of it,
+     * and every card behind it steps down one level. What sits in front therefore never shrinks as the
+     * deck is swiped, and a card grows into the standard size as it is swiped into the centre. The
+     * reference ramped the trailing side *past* the focus instead (`0.98 -> 1.0`), so the biggest card
+     * sat right of the focus and every card grew as it left the centre: the opposite of a stack.
+     */
+    it('keeps the focus and the cards in front at the standard size and steps down behind it', 0, () => {
+      for (const relative of [0, 0.5, 1, 1.5, 2, 3, 4]) {
+        close(policy.resolveCard(3 + relative, 3, 10, 250).scale, 1);
+      }
+      close(policy.resolveCard(2, 3, 10, 250).scale, 0.96);
+      close(policy.resolveCard(1, 3, 10, 250).scale, 0.9216);
+      close(policy.resolveCard(0, 3, 10, 250).scale, 0.8847359999999999);
+      // Half-card steps while a card is being swiped into the centre, still monotonic.
+      close(policy.resolveCard(2.5, 3, 10, 250).scale, 0.9797958971132712);
+      let previous = 1;
+      for (let distance = 1; distance <= 6; distance += 0.5) {
+        const scale = policy.resolveCard(3 - distance, 3, 10, 250).scale;
+        expect(scale <= previous).assertTrue();
+        previous = scale;
+      }
+      close(previous, 0.8847359999999999);
+    });
+
     it('keeps the left stack on its geometric peek series', 0, () => {
       // The leading strip converges: each card exposes 0.28 of the previous one, so the offsets run
       // as `width * 0.22 * (1 - 0.28^(d-1))` with d counting cards left of focus.
@@ -51,13 +80,13 @@ export default function browserTabsOverviewStackLayoutPolicyTest(): void {
       close(policy.resolveCard(2, 5, 6, 250).offsetX, -74.712);
       close(policy.resolveCard(1, 5, 6, 250).offsetX, -75.91936);
       close(policy.resolveCard(0, 5, 6, 250).offsetX, -76.2574208);
-      close(policy.resolveCard(4, 5, 6, 250).scale, 0.97);
-      close(policy.resolveCard(3, 5, 6, 250).scale, 0.965);
-      close(policy.resolveCard(2, 5, 6, 250).scale, 0.9624999999999999);
-      // The series converges to `-width * 0.22 / 0.72` and to the 0.96 left scale floor.
+      close(policy.resolveCard(4, 5, 6, 250).scale, 0.96);
+      close(policy.resolveCard(3, 5, 6, 250).scale, 0.9216);
+      close(policy.resolveCard(2, 5, 6, 250).scale, 0.8847359999999999);
+      // The series converges to `-width * 0.22 / 0.72`, and the depth scale to its third-level floor.
       const far = policy.resolveCard(0, 25, 30, 250);
       close(far.offsetX, -76.38888888888889, 1e-6);
-      close(far.scale, 0.96, 1e-9);
+      close(far.scale, 0.8847359999999999, 1e-9);
     });
 
     it('moves trailing cards with parallax and keeps z-order fixed by index', 0, () => {
@@ -103,7 +132,7 @@ export default function browserTabsOverviewStackLayoutPolicyTest(): void {
 
     it('stretches both edges differently, so cards fan out instead of shifting together', 0, () => {
       const leftEdge: number[][] = [
-        [0, -0.5, 250, 54.64285714285714, 0.98],
+        [0, -0.5, 250, 54.64285714285714, 1],
         [1, -0.5, 250, 293.2310267857143, 1],
         [2, -0.5, 250, 574.9481745001135, 1]
       ];
@@ -112,16 +141,16 @@ export default function browserTabsOverviewStackLayoutPolicyTest(): void {
         close(policy.resolveCard(golden[0], golden[1], 6, golden[2]).scale, golden[4]);
       }
       const rightEdge: number[][] = [
-        [5, 5.5, 250, -49.33035714285714, 0.96425],
-        [4, 5.5, 250, -79.66517857142857, 0.934202380952381],
-        [3, 5.5, 250, -86.84345238095237, 0.9236428571428571]
+        [5, 5.5, 250, -49.33035714285714, 0.9839285714285715],
+        [4, 5.5, 250, -79.66517857142857, 0.9245714285714286],
+        [3, 5.5, 250, -86.84345238095237, 0.8821028571428572]
       ];
       for (const golden of rightEdge) {
         close(policy.resolveCard(golden[0], golden[1], 6, golden[2]).offsetX, golden[3]);
         close(policy.resolveCard(golden[0], golden[1], 6, golden[2]).scale, golden[4]);
       }
-      // Left overscroll keeps every card at or above its resting scale.
-      close(policy.resolveCard(0, -0.5, 6, 250).scale, 0.98);
+      // Left overscroll keeps every card at its resting scale (the sink only applies past the right).
+      close(policy.resolveCard(0, -0.5, 6, 250).scale, 1);
     });
 
     it('applies 70 percent base friction and progressive edge resistance while dragging', 0, () => {

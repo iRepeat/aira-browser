@@ -3,10 +3,11 @@
  * `appswitcher/AppSwitcherOverlay.kt` at commit `829894591cd0040b02aff7d2fa2f6bfc365f12de`.
  *
  * The reference is Compose, so only its arithmetic is reused. Every constant below keeps the
- * reference name and value; the mapping is:
+ * reference name and value — except the depth scale, which Aira deliberately turned around so the
+ * focused card is the largest one (see `FOCUSED_SCALE`):
  *
  * - `cardCenterX`  -> `resolveCard().offsetX`, measured from the deck centre, not the sheet edge
- * - `depthScale`   -> `resolveCard().scale`
+ * - `depthScale`   -> `resolveCard().scale`, Aira's symmetric decay instead of the reference ramp
  * - `overscrollSinkScale` -> folded into `resolveCard().scale`
  * - `leftFadeAlpha`, `titleAlpha`, `darkOverlayAlpha` -> the remaining metrics. Upstream's
  *   `titleBlurRadius` is deliberately not ported: Aira expresses the title transition through
@@ -62,11 +63,31 @@ const EDGE_FRICTION_DECAY: number = 0.5;
 const OVERSCROLL_DAMPING: number = 0.8;
 /** Reference: `velocityInIndex * 0.25f`. */
 const RELEASE_PROJECTION_SECONDS: number = 0.25;
-/** Reference: `depthScale` for `relPos >= 0`: 0.98 -> 1.0. */
-const FOCUSED_SCALE: number = 0.98;
-/** Reference: `depthScale` for `relPos < 0`: `minScale + (focused - minScale) * decay^-relPos`. */
-const LEFT_MIN_SCALE: number = 0.96;
-const LEFT_SCALE_DECAY: number = 0.50;
+/**
+ * The focused card is the standard size, and the cards in front of it are the same size.
+ *
+ * Upstream instead ramps the trailing cards *past* the focus (`0.98 -> 1.0`): the biggest card sat
+ * just right of the focus while the focus itself was 0.98, and every card grew as it moved away from
+ * the centre and shrank on its way in. Aira keeps the focus at the standard size and lets nothing
+ * grow past it, so the size reads as depth rather than as travel: what sits in front of the focus is
+ * full size, and what sits behind it steps down one level per card.
+ */
+const FOCUSED_SCALE: number = 1;
+/**
+ * Each level *behind* the focus is this much smaller than the level in front of it.
+ *
+ * Deliberately gentle: the cards behind are already darkened by `shadeOpacity` and mostly hidden
+ * behind the card in front, so the size only has to hint at the depth. Three levels of a larger step
+ * (0.94, say) left the deepest card a sixth smaller than the focus, which read as shrinking cards
+ * rather than as a stack.
+ */
+const DEPTH_SCALE_STEP: number = 0.96;
+/**
+ * Levels that stay visually distinct: the left fade is gone by the third card, so nothing beyond it
+ * can be seen. The floor keeps a card far down the stack from shrinking without bound.
+ */
+const DEPTH_VISIBLE_LEVELS: number = 3;
+const MIN_DEPTH_SCALE: number = Math.pow(DEPTH_SCALE_STEP, DEPTH_VISIBLE_LEVELS);
 /** Reference: `darkOverlayAlpha = (-relPos * 0.25f).coerceAtMost(0.50f)`. */
 const SHADE_PER_CARD: number = 0.25;
 const SHADE_MAX: number = 0.50;
@@ -113,7 +134,8 @@ export class BrowserTabsOverviewStackLayoutPolicy {
   }
 
   /**
-   * Reference: `cardCenterX` + `depthScale` + `overscrollSinkScale` + the four fade terms.
+   * Reference: `cardCenterX` + `depthScale` + `overscrollSinkScale` + the four fade terms, with Aira's
+   * own depth scale.
    * `cardWidth` is the reference's `cardWidthPx`; the caller subtracts half a card to get a left
    * edge, exactly like `baseX - cardWidthPx / 2f`.
    */
@@ -168,10 +190,12 @@ export class BrowserTabsOverviewStackLayoutPolicy {
     const offsetX = baseX -
       Math.sign(overscroll) * dampedOverscroll * width * RIGHT_SPACING_RATIO * overscrollWeight;
 
-    // Reference: `depthScale(relPos)`.
+    // `depthScale(relPos)`: the focus and everything in front of it are the standard size, and only
+    // the stack behind it steps down. Swiping a card into the centre grows it; swiping it past the
+    // centre shrinks it into the stack, one level per card.
     const depthScale = relPos >= 0 ?
-      Math.min(1, FOCUSED_SCALE + (1 - FOCUSED_SCALE) * relPos) :
-      LEFT_MIN_SCALE + (FOCUSED_SCALE - LEFT_MIN_SCALE) * Math.pow(LEFT_SCALE_DECAY, leftDistance);
+      FOCUSED_SCALE :
+      Math.max(MIN_DEPTH_SCALE, FOCUSED_SCALE * Math.pow(DEPTH_SCALE_STEP, leftDistance));
 
     // Reference: `overscrollSinkScale(index)`, only past the right edge.
     let sinkScale = 1;
