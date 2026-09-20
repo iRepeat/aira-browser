@@ -1066,6 +1066,11 @@ export interface BrowserToolbarLayoutSettings {
   refreshSlotLongPressActionId?: string;
   tabsSlotLongPressActionId?: string;
   leadingSlotSwipeUpActionId?: string;
+  /**
+   * What swiping up on the middle of the bottom bar does: open the toolbar panel ('tools', the
+   * default) or pull the tab overview open ('tabs').
+   */
+  centerCapsuleSwipeUpActionId?: string;
   tabsSlotSwipeUpActionId?: string;
   updatedAt: number;
 }

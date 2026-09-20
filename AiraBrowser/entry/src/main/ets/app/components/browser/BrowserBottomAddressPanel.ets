@@ -3444,6 +3444,12 @@ export struct BrowserBottomAddressPanel {
       offsetY < 0;
   }
 
+  /** Whether the middle bar's upward drag opens the tab overview instead of the toolbar panel. */
+  private isTabsOverviewPullEnabled(): boolean {
+    return sharedPreferencesRepository.getPreferences().toolbarLayout
+      .centerCapsuleSwipeUpActionId === 'tabs';
+  }
+
   /**
    * Hand an upward drag on the middle bar to the tab overview.
    *
@@ -3455,6 +3461,11 @@ export struct BrowserBottomAddressPanel {
     if (this.activeChromeGestureSource !== 'center-capsule' ||
       this.isAddressInputPresentationActive() ||
       !this.hasQuickActionSlotsAvailable()) {
+      return;
+    }
+    if (!this.isTabsOverviewPullEnabled()) {
+      // The middle bar's own choice: unless the user asked for the tab overview, an upward drag here
+      // belongs to the toolbar exactly as it always has.
       return;
     }
     if (!this.entryGesturePolicy.shouldClaim(frame.offsetY, this.tabsOverviewEntryGestureClaimed)) {

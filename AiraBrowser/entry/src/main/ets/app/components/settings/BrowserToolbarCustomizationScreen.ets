@@ -83,6 +83,12 @@ const TOOLBAR_SLOT_RADIO_GROUP_PREFIX: string = 'browser-toolbar-slot-action';
 type BrowserToolbarSlotSheetMode = 'overview' | 'picker';
 export type BrowserToolbarDesktopView = 'overview' | 'scroll_behavior';
 
+export interface BrowserToolbarCenterSwipeUpOption {
+  actionId: string;
+  title: string;
+  selected: boolean;
+}
+
 @Component
 export struct BrowserToolbarCustomizationScreen {
   private viewModel: BrowserToolbarCustomizationViewModel = new BrowserToolbarCustomizationViewModel();
@@ -125,6 +131,8 @@ export struct BrowserToolbarCustomizationScreen {
   @State private slotSheetMode: BrowserToolbarSlotSheetMode = 'overview';
   @State private slotSheetRevision: number = 0;
   @State private slotSheetVisible: boolean = false;
+  /** The middle bar's own sheet: the one part of the bar that has no slot to configure it. */
+  @State private centerSwipeUpSheetVisible: boolean = false;
   @State private desktopView: BrowserToolbarDesktopView = 'overview';
 
   aboutToAppear(): void {
@@ -150,6 +158,15 @@ export struct BrowserToolbarCustomizationScreen {
       onDisappear: () => {
         this.slotSheetVisible = false;
         this.slotSheetMode = 'overview';
+      }
+    })
+    .bindSheet($$this.centerSwipeUpSheetVisible, this.buildCenterSwipeUpSheet(), {
+      preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
+      height: SheetSize.FIT_CONTENT,
+      dragBar: !this.desktopPresentation,
+      showClose: true,
+      onDisappear: () => {
+        this.centerSwipeUpSheetVisible = false;
       }
     })
   }
@@ -638,6 +655,8 @@ export struct BrowserToolbarCustomizationScreen {
 
   private handleToolbarPreviewIntent(intent: BrowserBottomChromeTapIntent): void {
     if (!this.isToolbarSlotId(intent.slotId)) {
+      // The preview's middle capsule, which is not one of the four buttons.
+      this.centerSwipeUpSheetVisible = true;
       return;
     }
     this.selectedSlotId = intent.slotId as BrowserToolbarSlotId;
@@ -747,6 +766,55 @@ export struct BrowserToolbarCustomizationScreen {
   private parseAreaDimension(value: Length): number {
     const parsed = Number.parseFloat(`${value}`);
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  @Builder
+  private buildCenterSwipeUpSheet() {
+    Column({ space: 12 }) {
+      Text('中间区域上滑')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.storedPrimaryTextColor)
+
+      ForEach(this.buildCenterSwipeUpOptions(), (option: BrowserToolbarCenterSwipeUpOption) => {
+        Row() {
+          Text(option.title)
+            .fontSize(15)
+            .fontColor(this.storedPrimaryTextColor)
+            .layoutWeight(1)
+
+          Text(option.selected ? '\u2713' : '')
+            .fontSize(15)
+            .fontColor(this.storedAccentColor)
+        }
+        .width('100%')
+        .height(48)
+        .borderRadius(12)
+        .backgroundColor(this.storedResolvedThemeMode === 'dark' ? '#1FFFFFFF' : '#0F000000')
+        .onClick(() => {
+          this.applyCenterSwipeUpActionId(option.actionId);
+        })
+      }, (option: BrowserToolbarCenterSwipeUpOption) => option.actionId)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 24 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  private buildCenterSwipeUpOptions(): BrowserToolbarCenterSwipeUpOption[] {
+    const selected = this.settings.centerCapsuleSwipeUpActionId === 'tabs' ? 'tabs' : 'tools';
+    return [
+      { actionId: 'tools', title: '打开工具面板', selected: selected === 'tools' },
+      { actionId: 'tabs', title: '打开标签管理页', selected: selected === 'tabs' }
+    ];
+  }
+
+  /** The middle bar's choice, saved through the same path the slots use. */
+  private applyCenterSwipeUpActionId(actionId: string): void {
+    if (this.saving) {
+      return;
+    }
+    this.applySettings(this.viewModel.withCenterCapsuleSwipeUpActionId(this.settings, actionId));
   }
 
   private applySettings(settings: BrowserToolbarLayoutSettings): void {

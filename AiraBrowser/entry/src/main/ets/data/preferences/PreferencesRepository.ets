@@ -101,6 +101,7 @@ export const DEFAULT_BROWSER_TOOLBAR_LAYOUT_SETTINGS: BrowserToolbarLayoutSettin
   tabsSlotLongPressActionId: 'none',
   leadingSlotSwipeUpActionId: 'home',
   tabsSlotSwipeUpActionId: 'home',
+  centerCapsuleSwipeUpActionId: 'tools',
   updatedAt: 0
 };
 
@@ -887,6 +888,9 @@ export class PreferencesRepository {
         settings.leadingSlotSwipeUpActionId : current.leadingSlotSwipeUpActionId,
       tabsSlotSwipeUpActionId: settings.tabsSlotSwipeUpActionId !== undefined ?
         settings.tabsSlotSwipeUpActionId : current.tabsSlotSwipeUpActionId,
+      centerCapsuleSwipeUpActionId: settings.centerCapsuleSwipeUpActionId !== undefined ?
+        this.normalizeCenterCapsuleSwipeUpActionId(settings.centerCapsuleSwipeUpActionId) :
+        current.centerCapsuleSwipeUpActionId,
       updatedAt: settings.updatedAt
     };
     const normalizedToolbarLayoutSettings = this.normalizeToolbarLayoutSettings(mergedSettings);
@@ -1393,6 +1397,8 @@ export class PreferencesRepository {
         'home',
         true
       ),
+      centerCapsuleSwipeUpActionId: this.normalizeCenterCapsuleSwipeUpActionId(
+        settings?.centerCapsuleSwipeUpActionId),
       tabsSlotSwipeUpActionId: this.normalizeToolbarInteractionActionId(
         settings?.tabsSlotSwipeUpActionId,
         'home',
@@ -1408,6 +1414,13 @@ export class PreferencesRepository {
       return normalizedActionId;
     }
     return this.isToolbarInteractionActionId(normalizedActionId) ? normalizedActionId : '';
+  }
+
+  /** Only the two behaviours the middle bar has, defaulting to the one it has always had. */
+  private normalizeCenterCapsuleSwipeUpActionId(
+    value: string | undefined
+  ): string {
+    return value === 'tabs' ? 'tabs' : 'tools';
   }
 
   private normalizeToolbarInteractionActionId(

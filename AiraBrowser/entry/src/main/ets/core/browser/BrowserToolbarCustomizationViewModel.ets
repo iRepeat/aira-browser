@@ -178,6 +178,7 @@ export class BrowserToolbarCustomizationViewModel {
       tabsSlotLongPressActionId: 'none',
       leadingSlotSwipeUpActionId: 'home',
       tabsSlotSwipeUpActionId: 'home',
+      centerCapsuleSwipeUpActionId: 'tools',
       updatedAt: normalizedSettings.updatedAt
     });
   }
@@ -245,6 +246,7 @@ export class BrowserToolbarCustomizationViewModel {
       tabsSlotLongPressActionId: 'none',
       leadingSlotSwipeUpActionId: 'home',
       tabsSlotSwipeUpActionId: 'home',
+      centerCapsuleSwipeUpActionId: 'tools',
       updatedAt: Date.now()
     };
   }
@@ -269,6 +271,7 @@ export class BrowserToolbarCustomizationViewModel {
       tabsSlotLongPressActionId: this.normalizeGestureActionId(settings.tabsSlotLongPressActionId, 'none'),
       leadingSlotSwipeUpActionId: this.normalizeGestureActionId(settings.leadingSlotSwipeUpActionId, 'home'),
       tabsSlotSwipeUpActionId: this.normalizeGestureActionId(settings.tabsSlotSwipeUpActionId, 'home'),
+      centerCapsuleSwipeUpActionId: settings.centerCapsuleSwipeUpActionId === 'tabs' ? 'tabs' : 'tools',
       updatedAt: Number(settings.updatedAt) > 0 ? Math.floor(Number(settings.updatedAt)) : 0
     };
   }
@@ -504,6 +507,21 @@ export class BrowserToolbarCustomizationViewModel {
 
   private slotSupportsSwipeUp(slotId: BrowserToolbarSlotId): boolean {
     return slotId === 'leading' || slotId === 'tabs';
+  }
+
+  /**
+   * The same settings with the middle bar's swipe-up behaviour replaced.
+   *
+   * The middle of the bottom bar is not one of the four configurable buttons, so it has no slot to go
+   * through; this is the one place that writes its choice.
+   */
+  withCenterCapsuleSwipeUpActionId(
+    settings: BrowserToolbarLayoutSettings,
+    actionId: string
+  ): BrowserToolbarLayoutSettings {
+    const next = this.normalizeSettings(settings);
+    next.centerCapsuleSwipeUpActionId = actionId === 'tabs' ? 'tabs' : 'tools';
+    return next;
   }
 
   private resolveDefaultInteractionActionId(

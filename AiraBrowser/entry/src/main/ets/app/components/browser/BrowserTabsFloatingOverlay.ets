@@ -72,6 +72,11 @@ import {
   BrowserTabsFloatingEntryTargetResolvedRectResult
 } from '../../../core/browser/tabsOverview/BrowserTabsFloatingEntryTargetCoordinator';
 import {
+  BROWSER_TABS_OVERVIEW_IDENTITY_HORIZONTAL_INSET,
+  BROWSER_TABS_OVERVIEW_IDENTITY_ICON_SIZE,
+  BROWSER_TABS_OVERVIEW_IDENTITY_ICON_TEXT_GAP
+} from '../../../core/browser/BrowserTabsOverviewVisualTokens';
+import {
   BROWSER_APPEARANCE_STORAGE_TABS_OVERVIEW_CLOSE_BUTTON_ALWAYS_VISIBLE_KEY,
   BROWSER_APPEARANCE_STORAGE_TABS_OVERVIEW_LAYOUT_STYLE_KEY,
   BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY,
@@ -663,40 +668,18 @@ export struct BrowserTabsFloatingOverlay {
   @Builder
   private buildEntryGestureHeldIdentity() {
     if (this.shouldRenderEntryGestureHeldIdentity()) {
-      Row({ space: 6 }) {
-        SiteIconView({
-          iconUri: this.resolveEntryGestureHeldIdentity().iconUri,
-          iconPixelMap: this.resolveEntryGestureHeldIdentity().iconPixelMap,
-          fallbackLabel: this.resolveEntryGestureHeldIdentity().fallbackLabel,
-          fallbackAiraIconId: this.resolveEntryGestureHeldIdentity().fallbackAiraIconId,
-          fallbackIconSize: 16,
-          iconSize: 16,
-          cornerRadiusRatio: 0.22,
-          frameBorderWidth: 0,
-          contentPadding: 0,
-          fallbackFontSize: 12,
-          fallbackFontWeight: FontWeight.Medium,
-          containerBackgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
-          textColor: this.storedSecondaryTextColor,
-          fit: ImageFit.Contain,
-          preferPixelMap: this.resolveEntryGestureHeldIdentity().iconPixelMap !== undefined,
-          sourceRevision: this.resolveEntryGestureHeldIdentity().sourceRevision,
-          hitTestMode: HitTestMode.None
-        })
-
-        Text(this.resolveEntryGestureHeldIdentity().label)
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.storedPrimaryTextColor)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      // A whole card box, scaled about its own centre exactly like a deck card, with the header at its
+      // top. Scaling the header on its own moved it: a scale happens about the node's centre, so the row
+      // drifted away from the card as the card shrank.
+      Column() {
+        this.buildEntryGestureHeldIdentityHeader()
       }
-      .height(this.layoutState.identityHeaderHeight)
       .width(this.layoutState.cardWidth)
+      .height(this.resolveItemHeight())
+      .alignItems(HorizontalAlign.Start)
       .position({
-        x: this.entryGestureCardRect.left,
-        y: this.entryGestureCardRect.top -
-          (this.layoutState.identityHeaderHeight + this.layoutState.identityPreviewGap) * this.resolveEntryGestureRowScale()
+        x: this.resolveEntryGestureHeldBoxLeft(),
+        y: this.resolveEntryGestureHeldBoxTop()
       })
       .scale({
         x: this.resolveEntryGestureRowScale(),
@@ -705,6 +688,57 @@ export struct BrowserTabsFloatingOverlay {
       .hitTestBehavior(HitTestMode.None)
       .zIndex(FLOATING_TABS_SHARED_SNAPSHOT_DECORATION_Z_INDEX)
     }
+  }
+
+  @Builder
+  private buildEntryGestureHeldIdentityHeader() {
+    Row({ space: BROWSER_TABS_OVERVIEW_IDENTITY_ICON_TEXT_GAP }) {
+      SiteIconView({
+        iconUri: this.resolveEntryGestureHeldIdentity().iconUri,
+        iconPixelMap: this.resolveEntryGestureHeldIdentity().iconPixelMap,
+        fallbackLabel: this.resolveEntryGestureHeldIdentity().fallbackLabel,
+        fallbackAiraIconId: this.resolveEntryGestureHeldIdentity().fallbackAiraIconId,
+        fallbackIconSize: 16,
+        iconSize: BROWSER_TABS_OVERVIEW_IDENTITY_ICON_SIZE,
+        cornerRadiusRatio: 0.22,
+        frameBorderWidth: 0,
+        contentPadding: 0,
+        fallbackFontSize: 12,
+        fallbackFontWeight: FontWeight.Medium,
+        containerBackgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
+        textColor: this.storedSecondaryTextColor,
+        fit: ImageFit.Contain,
+        preferPixelMap: this.resolveEntryGestureHeldIdentity().iconPixelMap !== undefined,
+        sourceRevision: this.resolveEntryGestureHeldIdentity().sourceRevision,
+        hitTestMode: HitTestMode.None
+      })
+
+      Text(this.resolveEntryGestureHeldIdentity().label)
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.storedPrimaryTextColor)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .height(this.layoutState.identityHeaderHeight)
+    .width(this.layoutState.cardWidth)
+    .margin({ left: BROWSER_TABS_OVERVIEW_IDENTITY_HORIZONTAL_INSET })
+    .alignItems(VerticalAlign.Center)
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  /** The header box of a card of the pull: the preview's own rectangle drives where it sits. */
+  private resolveEntryGestureHeldBoxLeft(): number {
+    const scale = this.resolveEntryGestureRowScale();
+    return this.entryGestureCardRect.left -
+      this.layoutState.cardWidth * (1 - scale) / 2;
+  }
+
+  private resolveEntryGestureHeldBoxTop(): number {
+    const scale = this.resolveEntryGestureRowScale();
+    const header = this.layoutState.identityHeaderHeight + this.layoutState.identityPreviewGap;
+    const visibleItemTop = this.entryGestureCardRect.top - header * scale;
+    return visibleItemTop - this.resolveItemHeight() * (1 - scale) / 2;
   }
 
   private resolveEntryGestureRowScale(): number {
@@ -897,8 +931,11 @@ export struct BrowserTabsFloatingOverlay {
       offsetX: flatOffsetX + (deck.offsetX - flatOffsetX) * settle,
       offsetY: flatOffsetY * (1 - settle),
       scale: flatScale + (deck.scale - flatScale) * settle,
-      opacity: 1,
-      titleOpacity: 1,
+      // Flat cards all stand on their own, so every one of them shows a title; the deck only shows the
+      // ones near the focus. Blending instead of switching is what stops the whole row lighting its
+      // titles up and then dropping them the frame the deck takes over.
+      opacity: 1 + (deck.opacity - 1) * settle,
+      titleOpacity: 1 + (deck.titleOpacity - 1) * settle,
       // Flat cards are not stacked, so nothing casts the deck's depth shading either.
       shadeOpacity: deck.shadeOpacity * settle,
       zIndex: deck.zIndex
