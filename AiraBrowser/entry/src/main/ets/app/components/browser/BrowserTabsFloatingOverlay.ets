@@ -1,3 +1,4 @@
+import { FrameCallback } from '@kit.ArkUI';
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import { BrowserTabPreviewState } from '../../../core/browser/BrowserTabPreviewCoordinator';
 import {
@@ -7,7 +8,6 @@ import {
   BrowserTabsOverlayViewModel
 } from '../../../core/browser/BrowserTabsOverlayViewModel';
 import {
-  BrowserTabsOverviewHorizontalCardFrame,
   BrowserTabsOverviewLayoutState,
   BrowserTabsOverviewLayoutViewModel,
   isSameTabsOverviewLayoutState
@@ -48,6 +48,11 @@ import {
 import {
   BrowserTabsOverviewSwipeDismissPolicy
 } from '../../../core/browser/tabsOverview/BrowserTabsOverviewSwipeDismissPolicy';
+import { BrowserTabsOverviewStackMotion } from '../../../core/browser/tabsOverview/BrowserTabsOverviewStackMotion';
+import {
+  BrowserTabsOverviewStackCardMetrics,
+  BrowserTabsOverviewStackLayoutPolicy
+} from '../../../core/browser/tabsOverview/BrowserTabsOverviewStackLayoutPolicy';
 import {
   BrowserTabsOverviewSelectionDisplacement,
   BrowserTabsOverviewSelectionDisplacementCoordinator
@@ -87,6 +92,20 @@ const FLOATING_TABS_SHARED_SNAPSHOT_DECORATION_Z_INDEX: number = 25;
 const FLOATING_TABS_BOTTOM_CHROME_Z_INDEX: number = 31;
 const FLOATING_TABS_CLEAR_BUTTON_Z_INDEX: number = 32;
 const FLOATING_TABS_DEVICE_BUTTON_Z_INDEX: number = 32;
+const HORIZONTAL_DECK_DRAG_START_DISTANCE: number = 6;
+
+class BrowserTabsStackFrameCallback extends FrameCallback {
+  private readonly task: (timeInNano: number) => void;
+
+  constructor(task: (timeInNano: number) => void) {
+    super();
+    this.task = task;
+  }
+
+  onFrame(timeInNano: number): void {
+    this.task(timeInNano);
+  }
+}
 
 interface BrowserTabsFloatingItem {
   id: string;
@@ -112,6 +131,7 @@ export struct BrowserTabsFloatingOverlay {
 
   @Watch('handleTabsChanged')
   @Prop tabs: BrowserTabState[] = [];
+  @Watch('refreshDeckPresentation')
   @Prop previewStates: BrowserTabPreviewState[] = [];
   @Prop activeTabId: string = '';
   @Prop activeSection: BrowserTabsOverviewSection = 'tabs';
@@ -121,6 +141,7 @@ export struct BrowserTabsFloatingOverlay {
   @Prop entryDisplacementTabId: string = '';
   @Watch('syncEntryDisplacementFromProps')
   @Prop entryDisplacementSettlingEnabled: boolean = false;
+  @Watch('handleDeckInteractionChanged')
   @Prop interactionEnabled: boolean = true;
   @Prop sideEntryAnimationEnabled: boolean = true;
   @Prop viewportLeft: number = 0;
@@ -133,7 +154,9 @@ export struct BrowserTabsFloatingOverlay {
   @Prop backgroundSurfaceOpacity: number = -1;
   @Prop layerOpacity: number = 1;
   @Prop homeExitProgress: number = 0;
+  @Watch('handleDeckInteractionChanged')
   @Prop exiting: boolean = false;
+  @Watch('refreshDeckPresentation')
   @Prop blurPrivateTabPreviews: boolean = true;
   @Prop panelPageBackgroundColor: ResourceColor | undefined = undefined;
   @Prop panelSecondaryTextColor: ResourceColor | undefined = undefined;
@@ -164,8 +187,18 @@ export struct BrowserTabsFloatingOverlay {
   @State private lateMountEntryAnimationEnabled: boolean = false;
   @State private entryDisplacementProgress: number = 1;
   @State private closeAllExitActive: boolean = false;
+  @Watch('refreshDeckPresentation')
   @State private siteIconStates: SiteIconListRenderState[] = [];
   @State private chromeMounted: boolean = false;
+  /**
+   * Continuous deck position, in card units: 2 means the third card is focused, 2.4 means 40% of
+   * the way to the fourth.
+   *
+   * Every card's place in the deck is derived from it, so it has to stay continuous. Snapping it
+   * to whole cards would make the whole deck jump each time the finger crossed a midpoint.
+   */
+  @State private horizontalDeckPosition: number = 0;
+  @State private deckItems: BrowserTabsFloatingItem[] = [];
 
   private scroller: Scroller = new Scroller();
   private bottomScrollTimer: number = 0;
@@ -194,6 +227,28 @@ export struct BrowserTabsFloatingOverlay {
   private sectionPolicy: BrowserTabsOverviewSectionPolicy = new BrowserTabsOverviewSectionPolicy();
   private swipeDismissPolicy: BrowserTabsOverviewSwipeDismissPolicy =
     new BrowserTabsOverviewSwipeDismissPolicy();
+  private stackLayoutPolicy: BrowserTabsOverviewStackLayoutPolicy =
+    new BrowserTabsOverviewStackLayoutPolicy();
+  private deckMotion: BrowserTabsOverviewStackMotion = new BrowserTabsOverviewStackMotion();
+  private deckDragActive: boolean = false;
+  private deckSwipeTabId: string = '';
+  /**
+   * Whether the deck has been placed on a card for the current entry.
+   *
+   * `layoutStyle` only resolves to `horizontal_cards` after the first `onAreaChange`, which can run
+   * after `initializeForOpen`. Without this latch the deck would be left at card zero whenever the
+   * window measured late.
+   */
+  private deckPositionSeeded: boolean = false;
+  private deckMetricsCacheKey: string = '';
+  private deckMetricsCache: BrowserTabsOverviewStackCardMetrics[] = [];
+  /**
+   * Identity of the current item list, refreshed only when the list is rebuilt.
+   *
+   * The memo below caches metrics by card index, so the key has to change when a card leaves or
+   * shifts: two decks of the same length can hold different tabs at the same index.
+   */
+  private deckItemsSignature: string = '';
   private selectionDisplacementCoordinator: BrowserTabsOverviewSelectionDisplacementCoordinator =
     new BrowserTabsOverviewSelectionDisplacementCoordinator();
   private entryTargetCoordinator: BrowserTabsFloatingEntryTargetCoordinator =
@@ -260,6 +315,8 @@ export struct BrowserTabsFloatingOverlay {
    * remount and therefore never re-enters aboutToAppear.
    */
   private initializeForOpen(): void {
+    this.stopDeckMotion();
+    this.deckPositionSeeded = false;
     this.selectedSection = this.activeSection;
     this.entryReturnTabId = this.activeTabId.trim();
     // A close-all leaves this latched true. It used to be cleared by the remount;
@@ -276,6 +333,7 @@ export struct BrowserTabsFloatingOverlay {
     this.resetEntryTargetPreparation();
     this.beginEntryTargetPreparationIfNeeded();
     this.removalState = this.shadowViewModel.buildInitialLocalRemovalState();
+    this.ensureDeckPositionForCurrentSection();
     this.syncEntryDisplacementFromProps();
     this.prepareBottomEntryAnimation();
     // Resolve identity icons before the grid is first built. The grid is keyed by tab
@@ -285,6 +343,7 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   aboutToDisappear(): void {
+    this.stopDeckMotion();
     this.clearBottomScrollTimer();
     this.clearEntryAnimationTimer();
     this.clearLateMountEntryAnimationTimer();
@@ -384,6 +443,14 @@ export struct BrowserTabsFloatingOverlay {
     .width(this.resolveRootWidth())
     .height(this.resolveRootHeight())
     .opacity(this.resolveLayerOpacity())
+    .onVisibleAreaChange([0], (visible: boolean) => {
+      if (visible) {
+        // Becoming visible again must not expose a deck frozen between two cards.
+        this.settleDeckToNearestCard();
+      } else {
+        this.stopDeckMotion();
+      }
+    })
     .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
     .onAreaChange((_oldArea: Area, _newArea: Area) => {
       this.syncLayoutState();
@@ -495,48 +562,55 @@ export struct BrowserTabsFloatingOverlay {
     .zIndex(FLOATING_TABS_CARDS_Z_INDEX)
   }
 
+  // Each tab has one render node. Fixed index order matches StackSwipe, so a trailing card
+  // covers a leading one throughout the drag; no layer swaps at rounded-index boundaries.
   @Builder
   private buildHorizontalCardsLayer() {
-    List({
-      space: this.layoutState.gridGap,
-      scroller: this.scroller
-    }) {
-      ForEach(this.resolveVisibleItems(), (item: BrowserTabsFloatingItem) => {
-        ListItem() {
-          Stack({ alignContent: Alignment.Center }) {
-            this.buildCard(item)
-          }
-          .width('100%')
-          .height('100%')
-          .padding({
-            top: this.resolveHorizontalContentPadding().top,
-            bottom: this.resolveHorizontalContentPadding().bottom
-          })
-          .clip(false)
-        }
-        .width(this.resolveCardWidth(item))
-        .height(this.resolveRootHeight())
-        .clip(false)
+    Stack({ alignContent: Alignment.Center }) {
+      ForEach(this.resolveDeckItems(), (item: BrowserTabsFloatingItem) => {
+        this.buildDeckCard(item)
       }, (item: BrowserTabsFloatingItem) => this.resolveCardIdentityKey(item))
     }
     .width('100%')
     .height('100%')
-    .listDirection(Axis.Horizontal)
-    .alignListItem(ListItemAlign.Center)
-    .scrollSnapAlign(ScrollSnapAlign.CENTER)
-    .contentStartOffset(this.resolveHorizontalEdgeInset(true))
-    .contentEndOffset(this.resolveHorizontalEdgeInset(false))
-    .cachedCount(8)
     .padding({
-      left: FLOATING_TABS_HORIZONTAL_PADDING,
-      right: FLOATING_TABS_HORIZONTAL_PADDING
+      top: this.resolveHorizontalContentPadding().top,
+      bottom: this.resolveHorizontalContentPadding().bottom
     })
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-    .clip(false)
-    .hitTestBehavior((this.interactionEnabled && !this.closeAllExitActive) ?
-      HitTestMode.Transparent : HitTestMode.None)
+    .clip(true)
+    .hitTestBehavior(this.canInteractWithDeck() ? HitTestMode.Transparent : HitTestMode.None)
     .zIndex(FLOATING_TABS_CARDS_Z_INDEX)
+    .gesture(
+      PanGesture({ direction: PanDirection.Horizontal,
+        distance: HORIZONTAL_DECK_DRAG_START_DISTANCE })
+        .onActionStart(() => {
+          this.beginDeckDrag();
+        })
+        .onActionUpdate((event: GestureEvent) => {
+          this.updateDeckDrag(event.offsetX);
+        })
+        .onActionEnd((event: GestureEvent) => {
+          this.endDeckDrag(event.velocityX);
+        })
+        .onActionCancel(() => {
+          this.cancelDeckDrag();
+        }),
+      GestureMask.Normal
+    )
+  }
+
+  @Builder
+  private buildDeckCard(item: BrowserTabsFloatingItem) {
+    Stack({ alignContent: Alignment.Center }) {
+      this.buildCard(item)
+    }
+    .width(this.layoutState.cardWidth)
+    .height(this.resolveItemHeight())
+    .translate({ x: this.resolveDeckMetrics(item).offsetX })
+    .scale({ x: this.resolveDeckMetrics(item).scale, y: this.resolveDeckMetrics(item).scale })
+    .opacity(this.resolveDeckMetrics(item).opacity)
+    .zIndex(item.index)
+    .hitTestBehavior(this.resolveDeckMetrics(item).opacity > 0 ? HitTestMode.Default : HitTestMode.None)
   }
 
   @Builder
@@ -562,23 +636,27 @@ export struct BrowserTabsFloatingOverlay {
       presentation: item.presentation,
       snapshotImageUri: item.presentation.preview.sharedSnapshotImageUri,
       snapshotPixelMap: item.presentation.preview.sharedSnapshotPixelMap,
-      snapshotAspectFitEnabled: this.layoutState.layoutStyle === 'horizontal_cards',
-      previewHeight: this.resolveCardHeight(item),
-      cardWidth: this.resolveCardWidth(item),
+      snapshotAspectFitEnabled: this.isHorizontalCardsLayout(),
+      snapshotCoverEnabled: this.isHorizontalCardsLayout(),
+      deckShadeOpacity: this.isHorizontalCardsLayout() ? this.resolveDeckMetrics(item).shadeOpacity : 0,
+      identityBlurRadius: this.isHorizontalCardsLayout() ? this.resolveDeckMetrics(item).titleBlurRadius : 0,
+      previewHeight: this.layoutState.previewHeight,
+      cardWidth: this.layoutState.cardWidth,
       identityHeaderHeight: this.layoutState.identityHeaderHeight,
       identityPreviewGap: this.layoutState.identityPreviewGap,
       tabTranslateX: this.resolveCardTranslateX(item),
       tabTranslateY: this.resolveCardTranslateY(item),
       tabScale: this.resolveCardScale(item),
       tabOpacity: this.resolveCardOpacity(item),
-      identityOpacity: this.resolveIdentityMotion(item).opacity,
+      identityOpacity: this.resolveIdentityMotion(item).opacity *
+        (this.isHorizontalCardsLayout() ? this.resolveDeckMetrics(item).titleOpacity : 1),
       identityTranslateY: this.resolveIdentityMotion(item).translateY,
       previewCardOpacity: 1,
       snapshotImageOpacity: 1,
       decorationOpacity: 1,
       coveredByMorph: this.isMorphCoveredTab(item.tab.id),
       tabEnabled: this.interactionEnabled && !this.exiting && !this.closeAllExitActive &&
-        !this.isSelectionDisplacementActive() &&
+        !this.isSelectionDisplacementActive() && !this.isEntryDisplacementActive() &&
         !this.isMorphCoveredTab(item.tab.id),
       trackPreviewRectChanges: true,
       motionDurationMs: this.resolveCardMotionDurationMs(),
@@ -589,7 +667,7 @@ export struct BrowserTabsFloatingOverlay {
       entryMountDurationMs: this.animationViewModel.getFloatingCardEntryDurationMs(),
       entryMountCurve: this.animationViewModel.getFloatingCardEntryCurve(),
       entryMountDelayMs: this.resolveCardMotionDelayMs(item.index),
-      swipeDismissThreshold: this.resolveSwipeDismissThreshold(item),
+      swipeDismissThreshold: this.resolveSwipeDismissThreshold(),
       swipeFlyoutOffset: this.resolveRootWidth(),
       swipeDismissMode: this.layoutState.layoutStyle === 'horizontal_cards' ? 'upward' : 'horizontal',
       closeButtonEnabled: true,
@@ -597,21 +675,32 @@ export struct BrowserTabsFloatingOverlay {
       onCloseTab: (tabId: string) => {
         this.closeTabFromOverlay(tabId);
       },
+      onSwipeStart: (tabId: string) => {
+        if (this.isHorizontalCardsLayout()) {
+          // The card's vertical gesture claimed the touch, so the deck's horizontal one is over.
+          this.abortDeckMotion();
+          this.deckSwipeTabId = tabId;
+        }
+      },
+      onSwipeCancel: (_tabId: string) => {
+        this.deckSwipeTabId = '';
+      },
       onSwipeEnd: (tabId: string, _offsetX: number, _direction: number) => {
+        this.deckSwipeTabId = '';
         this.closeTabFromOverlay(tabId);
       },
       onSwipeThresholdReached: (_tabId: string) => {
         this.performSwipeThresholdFeedback();
       },
       onSelect: (tabId: string, rect?: BrowserTabOverviewCardSelectRect) => {
-        this.onSelectTab(tabId, rect);
+        this.selectOverviewTab(tabId, rect);
       },
       onPreviewRectChange: (tabId: string, left: number, top: number, width: number, height: number) => {
         this.handlePreviewRectChange(tabId, left, top, width, height);
       }
     })
-    .width(this.resolveCardWidth(item))
-    .height(this.resolveItemHeight(item))
+    .width(this.resolveCardWidth())
+    .height(this.resolveItemHeight())
   }
 
   private startEntryAnimation(): void {
@@ -689,20 +778,25 @@ export struct BrowserTabsFloatingOverlay {
       targetTabId,
       this.entryTargetCoordinator.resolveCurrentRectGeneration(this.entryTargetPreparationState)
     );
-    this.scroller.scrollToIndex(targetIndex, false, ScrollAlign.CENTER);
+    if (this.isHorizontalCardsLayout()) {
+      this.seedDeckPosition(targetIndex);
+    } else {
+      this.scroller.scrollToIndex(targetIndex, false, ScrollAlign.CENTER);
+    }
     this.scheduleEntryTargetReady(targetTabId, 0, this.entryTargetPreparationState.version);
   }
 
   private scrollToBottomForEntry(): void {
-    if (this.layoutState.layoutStyle === 'horizontal_cards') {
-      const activeTabIndex = this.resolveDisplacementTargetIndex(this.activeTabId);
-      if (activeTabIndex >= 0) {
-        this.scroller.scrollToIndex(activeTabIndex, false, ScrollAlign.CENTER);
-        return;
-      }
-    }
     const lastItemIndex = this.resolveVisibleItems().length - 1;
     if (lastItemIndex < 0) {
+      return;
+    }
+    if (this.isHorizontalCardsLayout()) {
+      // The deck has no scroll position to restore, so opening on a tab means placing the deck on
+      // that tab. When the active tab is not in the selected section there is nothing to centre
+      // on, and the last card is the honest default.
+      const activeTabIndex = this.resolveDisplacementTargetIndex(this.activeTabId);
+      this.seedDeckPosition(activeTabIndex >= 0 ? activeTabIndex : lastItemIndex);
       return;
     }
     this.scroller.scrollToIndex(lastItemIndex, false, ScrollAlign.END);
@@ -784,6 +878,8 @@ export struct BrowserTabsFloatingOverlay {
       this.onSwitchSectionHome(section);
       return;
     }
+    this.stopDeckMotion();
+    this.deckPositionSeeded = false;
     this.selectedSection = section;
     this.onActiveSectionChange(section);
     this.syncSiteIcons();
@@ -791,13 +887,15 @@ export struct BrowserTabsFloatingOverlay {
     this.clearLateMountEntryAnimationTimer();
     this.entryProgress = 1;
     this.removalState = this.shadowViewModel.buildInitialLocalRemovalState();
+    this.refreshDeckPresentation();
+    this.positionCardsForCurrentSection();
     this.prepareSectionSwitchPosition();
   }
 
   private returnToEntryTab(): void {
     const state = this.buildBottomChromeState();
     if (state.returnKind === 'tab' && state.returnTabId.length > 0) {
-      this.onSelectTab(state.returnTabId);
+      this.selectOverviewTab(state.returnTabId);
       return;
     }
     this.onDismiss();
@@ -815,6 +913,13 @@ export struct BrowserTabsFloatingOverlay {
   private closeTabFromOverlay(tabId: string): void {
     if (!this.interactionEnabled || this.exiting || this.closeAllExitActive ||
       tabId.trim().length <= 0 || this.isLocallyRemovedTab(tabId)) {
+      return;
+    }
+    if (this.isHorizontalCardsLayout()) {
+      this.stopDeckMotion();
+      this.removalState = this.shadowViewModel.markLocalRemoval(this.removalState, tabId);
+      this.refreshDeckPresentation();
+      this.onCloseTab(tabId);
       return;
     }
     animateTo({
@@ -835,6 +940,7 @@ export struct BrowserTabsFloatingOverlay {
     if (requestVersion <= 0 || requestVersion === this.handledCloseAllRequestVersion) {
       return;
     }
+    this.stopDeckMotion();
     this.handledCloseAllRequestVersion = requestVersion;
     const tabIds = this.resolveSelectedSectionVisibleTabIds();
     if (tabIds.length <= 0) {
@@ -868,6 +974,11 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   private isSelectedSectionEmpty(): boolean {
+    // The deck already holds its item list; rebuilding every presentation here would run on every
+    // animation frame, because `horizontalDeckPosition` is a `@State` the deck writes each frame.
+    if (this.isHorizontalCardsLayout()) {
+      return this.deckItems.length <= 0;
+    }
     return this.resolveVisibleItems().length <= 0;
   }
 
@@ -941,6 +1052,7 @@ export struct BrowserTabsFloatingOverlay {
 
   private handleTabsChanged(): void {
     this.syncLocalRemovalStateFromTabs();
+    this.refreshDeckPresentation();
     this.syncSiteIcons();
   }
 
@@ -977,12 +1089,16 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   private handlePreviewRectChange(tabId: string, left: number, top: number, width: number, height: number): void {
-    const rect: BrowserTabsOverlayRect = {
-      left: left,
-      top: top,
-      width: width,
-      height: height
-    };
+    // `onAreaChange` reports layout bounds, which ignore the deck's per-card translate and scale;
+    // every deck card would report the same centred rectangle. The same geometry that paints the
+    // card supplies the rect instead, so the entry morph and the remembered rect stay honest.
+    let rect: BrowserTabsOverlayRect;
+    const deckRect = this.isHorizontalCardsLayout() ? this.resolveDeckPreviewRect(tabId) : undefined;
+    if (deckRect !== undefined) {
+      rect = deckRect;
+    } else {
+      rect = { left: left, top: top, width: width, height: height };
+    }
     const recordResult: BrowserTabsFloatingEntryTargetRecordedRectResult =
       this.entryTargetCoordinator.recordPreviewRect(this.entryTargetPreparationState, tabId, rect);
     this.entryTargetPreparationState = recordResult.state;
@@ -1072,10 +1188,9 @@ export struct BrowserTabsFloatingOverlay {
       if (visibleTabIds.indexOf(targetTabId) < 0) {
         return undefined;
       }
-      const targetItem = this.resolveVisibleItem(targetTabId);
-      const targetWidth = targetItem === undefined ? this.layoutState.cardWidth : this.resolveCardWidth(targetItem);
-      const targetHeight = targetItem === undefined ? this.layoutState.previewHeight : this.resolveCardHeight(targetItem);
-      const targetItemHeight = targetItem === undefined ? this.layoutState.itemHeight : this.resolveItemHeight(targetItem);
+      const targetWidth = this.layoutState.cardWidth;
+      const targetHeight = this.layoutState.previewHeight;
+      const targetItemHeight = this.layoutState.itemHeight;
       const contentPadding = this.resolveHorizontalContentPadding();
       const topPadding = contentPadding.top;
       const bottomPadding = contentPadding.bottom;
@@ -1138,21 +1253,51 @@ export struct BrowserTabsFloatingOverlay {
       return;
     }
     this.layoutState = nextState;
+    if (nextState.layoutStyle === 'horizontal_cards') {
+      // The deck needs its own item list and a starting card as soon as the style is known.
+      this.ensureDeckPositionForCurrentSection();
+    } else {
+      this.deckPositionSeeded = false;
+    }
+  }
+
+  /**
+   * Build the deck's item list and, once per entry, place it on the tab the overlay opened for.
+   * Called from both `initializeForOpen` and `syncLayoutState`, because either can be the first to
+   * observe the horizontal style.
+   */
+  private ensureDeckPositionForCurrentSection(): void {
+    if (!this.isHorizontalCardsLayout()) {
+      return;
+    }
+    this.refreshDeckPresentation();
+    if (this.deckPositionSeeded || this.deckItems.length <= 0) {
+      return;
+    }
+    const targetId = this.shouldPrepareEntryTarget() ? this.resolveEntryTargetTabId() : this.activeTabId;
+    const target = this.deckItems.findIndex((item: BrowserTabsFloatingItem): boolean => item.id === targetId);
+    this.seedDeckPosition(target >= 0 ? target : Math.max(0, this.deckItems.length - 1));
   }
 
   private handleStoredTabsOverviewLayoutStyleChanged(): void {
     const previousStyle = this.layoutState.layoutStyle;
+    this.deckPositionSeeded = false;
     this.syncLayoutState();
     if (previousStyle === this.layoutState.layoutStyle) {
       return;
     }
+    this.stopDeckMotion();
+    this.refreshDeckPresentation();
+    this.positionCardsForCurrentSection();
     this.entryTargetPreparationState =
       this.entryTargetCoordinator.clearPreviewRectCache(this.entryTargetPreparationState);
     this.clearBottomScrollTimer();
     this.bottomScrollTimer = setTimeout(() => {
       this.bottomScrollTimer = 0;
       if (!this.exiting) {
-        this.scrollToBottomForEntry();
+        // Re-enters the same entry-target-aware path instead of forcing the deck onto the active
+        // tab, which would drop an in-flight entry target.
+        this.positionCardsForCurrentSection();
       }
     }, FLOATING_TABS_BOTTOM_POSITION_DELAY_MS);
   }
@@ -1482,8 +1627,8 @@ export struct BrowserTabsFloatingOverlay {
       selectedTabId: this.selectionDisplacementTabId,
       selectedIndex: this.resolveSelectionDisplacementIndex(),
       columnCount: this.resolveDisplacementColumnCount(),
-      cardWidth: this.resolveCardWidth(item),
-      itemHeight: this.resolveItemHeight(item),
+      cardWidth: this.layoutState.cardWidth,
+      itemHeight: this.resolveItemHeight(),
       gridGap: this.layoutState.gridGap
     });
   }
@@ -1499,15 +1644,15 @@ export struct BrowserTabsFloatingOverlay {
       selectedTabId: this.entryDisplacementTabId,
       selectedIndex: this.resolveEntryDisplacementIndex(),
       columnCount: this.resolveDisplacementColumnCount(),
-      cardWidth: this.resolveCardWidth(item),
-      itemHeight: this.resolveItemHeight(item),
+      cardWidth: this.layoutState.cardWidth,
+      itemHeight: this.resolveItemHeight(),
       gridGap: this.layoutState.gridGap
     });
   }
 
   private resolveDisplacementColumnCount(): number {
     if (this.layoutState.layoutStyle === 'horizontal_cards') {
-      return Math.max(1, this.resolveVisibleItems().length);
+      return Math.max(1, this.deckItems.length);
     }
     return Math.max(1, this.layoutState.columnCount);
   }
@@ -1543,41 +1688,21 @@ export struct BrowserTabsFloatingOverlay {
     return ids;
   }
 
-  private resolveVisibleItem(tabId: string): BrowserTabsFloatingItem | undefined {
-    const targetTabId = tabId.trim();
-    for (const item of this.resolveVisibleItems()) {
-      if (item.tab.id === targetTabId) {
-        return item;
-      }
-    }
-    return undefined;
+  /**
+   * Deck cards share one width and one height.
+   *
+   * The flat strip sized every card to its own screenshot so a whole page stayed visible at the
+   * largest size that fit it. A deck cannot do that: a card of a different width sits a different
+   * distance from the focused card and overlaps its neighbours by a different amount, so the whole
+   * deck geometry stops matching. Every deck screenshot therefore fills the one shared card with
+   * `ImageFit.Cover`; the grid and the flat strip keep their own sizing.
+   */
+  private resolveCardWidth(): number {
+    return this.layoutState.cardWidth;
   }
 
-  private resolveCardWidth(item: BrowserTabsFloatingItem): number {
-    if (this.layoutState.layoutStyle !== 'horizontal_cards') {
-      return this.layoutState.cardWidth;
-    }
-    return this.resolveHorizontalCardFrame(item).width;
-  }
-
-  private resolveCardHeight(item: BrowserTabsFloatingItem): number {
-    if (this.layoutState.layoutStyle !== 'horizontal_cards') {
-      return this.layoutState.previewHeight;
-    }
-    return this.resolveHorizontalCardFrame(item).height;
-  }
-
-  private resolveHorizontalCardFrame(item: BrowserTabsFloatingItem): BrowserTabsOverviewHorizontalCardFrame {
-    return this.layoutViewModel.resolveHorizontalCardFrame({
-      maxWidth: this.layoutState.cardWidth,
-      maxHeight: this.layoutState.previewHeight,
-      snapshotWidth: item.presentation.preview.sharedSnapshotImageWidth,
-      snapshotHeight: item.presentation.preview.sharedSnapshotImageHeight
-    });
-  }
-
-  private resolveItemHeight(item: BrowserTabsFloatingItem): number {
-    return this.resolveCardHeight(item) + this.layoutState.identityHeaderHeight +
+  private resolveItemHeight(): number {
+    return this.layoutState.previewHeight + this.layoutState.identityHeaderHeight +
       this.layoutState.identityPreviewGap;
   }
 
@@ -1587,20 +1712,194 @@ export struct BrowserTabsFloatingOverlay {
    * the card keeps the effort the same on every window size instead of a fixed distance that is a
    * fifth of a desktop card and two thirds of a phone one.
    */
-  private resolveSwipeDismissThreshold(item: BrowserTabsFloatingItem): number {
-    const extent = this.layoutState.layoutStyle === 'horizontal_cards' ?
-      this.resolveItemHeight(item) : this.resolveCardWidth(item);
+  private resolveSwipeDismissThreshold(): number {
+    const extent = this.isHorizontalCardsLayout() ?
+      this.resolveItemHeight() : this.resolveCardWidth();
     return this.swipeDismissPolicy.resolveThresholdVp(extent);
   }
 
-  private resolveHorizontalEdgeInset(first: boolean): number {
-    const items = this.resolveVisibleItems();
-    if (items.length <= 0) {
-      return this.layoutState.horizontalContentInset;
+  private isHorizontalCardsLayout(): boolean {
+    return this.layoutState.layoutStyle === 'horizontal_cards';
+  }
+
+  private resolveDeckItems(): BrowserTabsFloatingItem[] {
+    const range = this.stackLayoutPolicy.resolveVisibleRange(this.horizontalDeckPosition,
+      this.deckItems.length, this.resolveRootWidth(), this.layoutState.cardWidth);
+    return this.deckItems.slice(range.first, range.last + 1);
+  }
+
+  private resolveDeckMetrics(item: BrowserTabsFloatingItem): BrowserTabsOverviewStackCardMetrics {
+    // `build()` reads the metrics several times per card per display frame. They are pure in the
+    // deck scalar, the item order and the card width, so one memo table serves the whole frame.
+    const key = `${this.horizontalDeckPosition}|${this.layoutState.cardWidth}|${this.deckItemsSignature}`;
+    if (key !== this.deckMetricsCacheKey) {
+      this.deckMetricsCacheKey = key;
+      this.deckMetricsCache = [];
     }
-    const edgeItem = first ? items[0] : items[items.length - 1];
-    const usableWidth = Math.max(1, this.resolveRootWidth() - FLOATING_TABS_HORIZONTAL_PADDING * 2);
-    return Math.max(0, (usableWidth - this.resolveCardWidth(edgeItem)) / 2);
+    const cached = this.deckMetricsCache[item.index];
+    if (cached !== undefined) {
+      return cached;
+    }
+    const metrics = this.stackLayoutPolicy.resolveCard(item.index, this.horizontalDeckPosition,
+      this.deckItems.length, this.layoutState.cardWidth);
+    this.deckMetricsCache[item.index] = metrics;
+    return metrics;
+  }
+
+  // Presentation construction is driven by data changes, never by an animation frame. The item
+  // list is rebuilt only when the tab list itself changes; the per-frame cost is the metrics, and
+  // `build()` reads `deckItems` instead of rebuilding presentations.
+  private refreshDeckPresentation(): void {
+    if (!this.isHorizontalCardsLayout()) { return; }
+    const next = this.resolveVisibleItems();
+    const previousIds = this.deckItems.map((item: BrowserTabsFloatingItem): string => item.id);
+    const nextIds = next.map((item: BrowserTabsFloatingItem): string => item.id);
+    const listChanged = previousIds.join('|') !== nextIds.join('|');
+    if (listChanged) {
+      const position = this.stackLayoutPolicy.reconcilePosition(
+        this.horizontalDeckPosition, previousIds, nextIds);
+      // A snapshot or icon update can land mid-drag; adopting the position keeps the finger
+      // attached instead of cancelling the gesture. Overscroll is preserved on purpose.
+      this.horizontalDeckPosition = this.deckMotion.setPosition(position);
+      if (!this.deckMotion.isDragging()) {
+        this.deckDragActive = false;
+      }
+      // A card that vanished mid-swipe never reports its own cancel, so the latch is cleared here.
+      if (this.deckSwipeTabId.length > 0 && nextIds.indexOf(this.deckSwipeTabId) < 0) {
+        this.deckSwipeTabId = '';
+      }
+    }
+    this.deckItems = next;
+    this.deckItemsSignature = nextIds.join('|');
+    // A non-gesture state change must not leave the deck between two cards with no frame left.
+    if (listChanged && !this.deckMotion.isDragging()) {
+      this.settleDeckToNearestCard();
+    }
+  }
+
+  private canInteractWithDeck(): boolean {
+    return this.interactionEnabled && !this.exiting && !this.closeAllExitActive &&
+      !this.isSelectionDisplacementActive() && !this.isEntryDisplacementActive();
+  }
+
+  /** Cancel the gesture and any settle, and leave the position where it is. */
+  private stopDeckMotion(): void {
+    this.deckMotion.stop();
+    this.deckDragActive = false;
+    this.deckSwipeTabId = '';
+  }
+
+  /**
+   * End the interaction and put the deck back on a card.
+   *
+   * Anything that interrupts a gesture or a settle without the finger handing over (the layer
+   * hides, a card claims the touch, a tab closes) has to come through here. Stopping alone would
+   * leave the deck parked between two cards, and the gesture's own `onActionEnd` no longer owns the
+   * motion to finish it.
+   */
+  private abortDeckMotion(): void {
+    this.stopDeckMotion();
+    this.settleDeckToNearestCard();
+  }
+
+  private settleDeckToNearestCard(): void {
+    if (!this.isHorizontalCardsLayout() || this.deckItems.length <= 0) {
+      return;
+    }
+    if (this.exiting || this.closeAllExitActive) {
+      // The deck is on its way out; a floor-level position no longer shows, and a reopen reseeds.
+      return;
+    }
+    this.deckMotion.settleToNearest(this.deckItems.length,
+      (callback: (time: number) => void): void => { this.scheduleDeckFrame(callback); },
+      (position: number): void => { this.horizontalDeckPosition = position; });
+  }
+
+  private handleDeckInteractionChanged(): void {
+    if (!this.canInteractWithDeck()) {
+      this.abortDeckMotion();
+    }
+  }
+
+  private beginDeckDrag(): void {
+    if (!this.canInteractWithDeck() || this.deckSwipeTabId.length > 0) { return; }
+    this.deckMotion.begin();
+    this.deckDragActive = true;
+  }
+
+  private updateDeckDrag(offsetX: number): void {
+    if (!this.deckDragActive || !this.canInteractWithDeck()) { return; }
+    this.horizontalDeckPosition = this.deckMotion.drag(offsetX, this.layoutState.cardWidth, this.deckItems.length);
+  }
+
+  private scheduleDeckFrame(callback: (time: number) => void): void {
+    this.getUIContext().postFrameCallback(new BrowserTabsStackFrameCallback(callback));
+  }
+
+  private endDeckDrag(velocityX: number): void {
+    if (!this.deckDragActive) { return; }
+    this.deckDragActive = false;
+    this.deckMotion.release(velocityX, this.layoutState.cardWidth, this.deckItems.length,
+      (callback: (time: number) => void): void => { this.scheduleDeckFrame(callback); },
+      (position: number): void => { this.horizontalDeckPosition = position; });
+  }
+
+  private cancelDeckDrag(): void {
+    if (!this.deckDragActive) { return; }
+    this.deckDragActive = false;
+    this.deckMotion.cancel(this.deckItems.length,
+      (callback: (time: number) => void): void => { this.scheduleDeckFrame(callback); },
+      (position: number): void => { this.horizontalDeckPosition = position; });
+  }
+
+  private seedDeckPosition(index: number): void {
+    if (!this.isHorizontalCardsLayout()) { return; }
+    this.stopDeckMotion();
+    this.horizontalDeckPosition = this.deckMotion.seed(index, this.deckItems.length);
+    this.deckPositionSeeded = true;
+  }
+
+  private selectOverviewTab(tabId: string, rect?: BrowserTabOverviewCardSelectRect): void {
+    if (this.isHorizontalCardsLayout()) {
+      if (this.deckDragActive) { return; }
+      this.stopDeckMotion();
+      const deckRect = this.resolveDeckPreviewRect(tabId);
+      this.onSelectTab(tabId, deckRect === undefined ? rect : this.toSelectRect(deckRect));
+      return;
+    }
+    this.onSelectTab(tabId, rect);
+  }
+
+  /**
+   * `BrowserTabsOverlayRect` and `BrowserTabOverviewCardSelectRect` describe the same rectangle but
+   * are independent types, and ArkTS rejects structural compatibility between them.
+   */
+  private toSelectRect(rect: BrowserTabsOverlayRect): BrowserTabOverviewCardSelectRect {
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height
+    };
+  }
+
+  // onAreaChange reports layout bounds, not the wrapper's live scale/translation. The same
+  // geometry that paints the preview supplies the morph rectangle, including the scaled header.
+  private resolveDeckPreviewRect(tabId: string): BrowserTabsOverlayRect | undefined {
+    const item = this.deckItems.find((candidate: BrowserTabsFloatingItem): boolean => candidate.id === tabId);
+    if (item === undefined) { return undefined; }
+    const metrics = this.resolveDeckMetrics(item);
+    const padding = this.resolveHorizontalContentPadding();
+    const centerY = this.resolveRootTop() + padding.top +
+      (this.resolveRootHeight() - padding.top - padding.bottom) / 2;
+    const header = this.layoutState.identityHeaderHeight + this.layoutState.identityPreviewGap;
+    return {
+      left: this.resolveRootLeft() + this.resolveRootWidth() / 2 + metrics.offsetX -
+        this.layoutState.cardWidth * metrics.scale / 2,
+      top: centerY + (header - this.resolveItemHeight() / 2) * metrics.scale,
+      width: this.layoutState.cardWidth * metrics.scale,
+      height: this.layoutState.previewHeight * metrics.scale
+    };
   }
 
   private buildBlankSlotKeys(): string[] {

@@ -16,18 +16,6 @@ export interface BrowserTabsOverviewLayoutInput {
   layoutStyle?: BrowserTabsOverviewLayoutStyle | string;
 }
 
-export interface BrowserTabsOverviewHorizontalCardFrameInput {
-  maxWidth: number;
-  maxHeight: number;
-  snapshotWidth: number;
-  snapshotHeight: number;
-}
-
-export interface BrowserTabsOverviewHorizontalCardFrame {
-  width: number;
-  height: number;
-}
-
 export interface BrowserTabsOverviewLayoutState {
   layoutStyle: BrowserTabsOverviewLayoutStyle;
   columnCount: number;
@@ -38,7 +26,6 @@ export interface BrowserTabsOverviewLayoutState {
   identityHeaderHeight: number;
   identityPreviewGap: number;
   itemHeight: number;
-  horizontalContentInset: number;
 }
 
 export function isSameTabsOverviewLayoutState(
@@ -53,8 +40,7 @@ export function isSameTabsOverviewLayoutState(
     current.previewHeight === next.previewHeight &&
     current.identityHeaderHeight === next.identityHeaderHeight &&
     current.identityPreviewGap === next.identityPreviewGap &&
-    current.itemHeight === next.itemHeight &&
-    current.horizontalContentInset === next.horizontalContentInset;
+    current.itemHeight === next.itemHeight;
 }
 
 interface BrowserTabsOverviewLayoutBaseState {
@@ -64,7 +50,6 @@ interface BrowserTabsOverviewLayoutBaseState {
   gridGap: number;
   cardWidth: number;
   previewHeight: number;
-  horizontalContentInset: number;
 }
 
 const TAB_OVERVIEW_LAYOUT_MIN_CARD_WIDTH: number = 132;
@@ -77,11 +62,26 @@ const TAB_OVERVIEW_LAYOUT_PREVIEW_HEIGHT_MULTIPLIER: number = 1.08;
 const TAB_OVERVIEW_LAYOUT_GRID_GAP: number = 16;
 const TAB_OVERVIEW_LAYOUT_TOP_PADDING: number = 16;
 const TAB_OVERVIEW_LAYOUT_TOP_SAFE_GAP: number = 10;
-const TAB_OVERVIEW_HORIZONTAL_CARDS_GAP: number = 18;
-const TAB_OVERVIEW_HORIZONTAL_CARDS_PHONE_WIDTH_RATIO: number = 0.82;
+/**
+ * Zero gap for the stacked deck.
+ *
+ * Every card is placed by its own offset inside a `Stack`, so there is no stride left for a gap to
+ * sit in. The value only reaches the selection-displacement camera now, where a card travels its
+ * own width and nothing more.
+ */
+const TAB_OVERVIEW_HORIZONTAL_CARDS_GAP: number = 0;
+/**
+ * Focused card width, over the usable width, for the stacked deck on a portrait window.
+ *
+ * Smaller than the flat strip's old 0.82 because a deck spends width on the leading strip and on
+ * the trailing neighbour instead of on the focused card alone. Kept at 0.70 so the nearest leading
+ * strip, which peeks `cardWidth * 0.22` past the focused card's edge, stays on the sheet on the
+ * narrowest phones.
+ */
+const TAB_OVERVIEW_HORIZONTAL_CARDS_PHONE_WIDTH_RATIO: number = 0.70;
 const TAB_OVERVIEW_HORIZONTAL_CARDS_LANDSCAPE_WIDTH_RATIO: number = 0.56;
 const TAB_OVERVIEW_HORIZONTAL_CARDS_MAX_WIDTH: number = 520;
-const TAB_OVERVIEW_HORIZONTAL_CARDS_MIN_WIDTH: number = 220;
+const TAB_OVERVIEW_HORIZONTAL_CARDS_MIN_WIDTH: number = 200;
 const TAB_OVERVIEW_HORIZONTAL_CARDS_VIEWPORT_HEIGHT_RATIO: number = 0.66;
 const TAB_OVERVIEW_HORIZONTAL_CARDS_MIN_HEIGHT: number = 180;
 
@@ -105,8 +105,7 @@ export class BrowserTabsOverviewLayoutViewModel {
       columnsTemplate: this.buildColumnsTemplate(columnCount),
       gridGap: TAB_OVERVIEW_LAYOUT_GRID_GAP,
       cardWidth: cardWidth,
-      previewHeight: previewHeight,
-      horizontalContentInset: 0
+      previewHeight: previewHeight
     });
   }
 
@@ -121,8 +120,7 @@ export class BrowserTabsOverviewLayoutViewModel {
       columnsTemplate: '1fr',
       gridGap: TAB_OVERVIEW_HORIZONTAL_CARDS_GAP,
       cardWidth: cardWidth,
-      previewHeight: this.resolveHorizontalPreviewHeight(input),
-      horizontalContentInset: Math.max(0, (usableWidth - cardWidth) / 2)
+      previewHeight: this.resolveHorizontalPreviewHeight(input)
     });
   }
 
@@ -137,27 +135,12 @@ export class BrowserTabsOverviewLayoutViewModel {
       identityHeaderHeight: BROWSER_TABS_OVERVIEW_IDENTITY_HEADER_HEIGHT,
       identityPreviewGap: BROWSER_TABS_OVERVIEW_IDENTITY_PREVIEW_GAP,
       itemHeight: base.previewHeight + BROWSER_TABS_OVERVIEW_IDENTITY_HEADER_HEIGHT +
-        BROWSER_TABS_OVERVIEW_IDENTITY_PREVIEW_GAP,
-      horizontalContentInset: base.horizontalContentInset
+        BROWSER_TABS_OVERVIEW_IDENTITY_PREVIEW_GAP
     };
   }
 
   resolveTopPadding(topSafeInsetVp: number): number {
     return Math.max(TAB_OVERVIEW_LAYOUT_TOP_PADDING, topSafeInsetVp + TAB_OVERVIEW_LAYOUT_TOP_SAFE_GAP);
-  }
-
-  resolveHorizontalCardFrame(
-    input: BrowserTabsOverviewHorizontalCardFrameInput
-  ): BrowserTabsOverviewHorizontalCardFrame {
-    const maxWidth = Math.max(1, input.maxWidth);
-    const maxHeight = Math.max(1, input.maxHeight);
-    const snapshotWidth = Math.max(1, input.snapshotWidth);
-    const snapshotHeight = Math.max(1, input.snapshotHeight);
-    const scale = Math.min(maxWidth / snapshotWidth, maxHeight / snapshotHeight);
-    return {
-      width: Math.max(1, snapshotWidth * scale),
-      height: Math.max(1, snapshotHeight * scale)
-    };
   }
 
   private resolveColumnCount(facts: AppWindowResponsiveFacts): number {

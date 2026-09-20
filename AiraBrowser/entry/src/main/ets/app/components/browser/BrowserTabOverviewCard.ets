@@ -54,6 +54,8 @@ export struct BrowserTabOverviewCard {
   @Watch('syncRenderableSnapshotFromProps')
   @Prop snapshotPixelMap: image.PixelMap | undefined = undefined;
   @Prop snapshotAspectFitEnabled: boolean = false;
+  @Prop snapshotCoverEnabled: boolean = false;
+  @Prop deckShadeOpacity: number = 0;
   @Prop previewHeight: number = 1;
   @Prop cardWidth: number = 132;
   @Prop previewCardOpacity: number = 1;
@@ -92,6 +94,9 @@ export struct BrowserTabOverviewCard {
     this.snapshotImageUri = params.snapshotImageUri as string;
     this.snapshotPixelMap = params.snapshotPixelMap as image.PixelMap | undefined;
     this.snapshotAspectFitEnabled = (params.snapshotAspectFitEnabled as boolean) === true;
+    this.snapshotCoverEnabled = (params.snapshotCoverEnabled as boolean) === true;
+    this.deckShadeOpacity = Number.isFinite(params.deckShadeOpacity as number) ?
+      (params.deckShadeOpacity as number) : 0;
     this.previewHeight = params.previewHeight as number;
     this.cardWidth = params.cardWidth as number;
     this.previewCardOpacity = params.previewCardOpacity as number;
@@ -136,18 +141,34 @@ export struct BrowserTabOverviewCard {
 
   @Builder
   private buildTabCardSurface() {
-    Column({ space: 0 }) {
+    // A `Stack`, not a `Column`: the deck's dark shade has to sit on top of the preview while the
+    // card keeps a single child surface. The flat strip and the grid never pass a shade.
+    Stack({ alignContent: Alignment.TopStart }) {
       this.buildPreviewCard()
+
+      if (this.deckShadeOpacity > 0) {
+        this.buildDeckShadeOverlay()
+      }
     }
     .width('100%')
     .height('100%')
-    .alignItems(HorizontalAlign.Start)
     .backgroundColor(this.getPreviewBackgroundColor())
     .border({ width: TAB_OVERVIEW_CARD_BORDER_WIDTH, color: this.storedOutlineColor })
     .borderRadius(BROWSER_TABS_OVERVIEW_CARD_CORNER_RADIUS)
     .clip(true)
     .opacity(this.resolveEffectivePreviewCardOpacity())
     .zIndex(1)
+  }
+
+  @Builder
+  private buildDeckShadeOverlay() {
+    Stack()
+      .width('100%')
+      .height(this.previewHeight)
+      .borderRadius(BROWSER_TABS_OVERVIEW_CARD_CORNER_RADIUS)
+      .backgroundColor(Color.Black)
+      .opacity(this.deckShadeOpacity)
+      .hitTestBehavior(HitTestMode.None)
   }
 
   @Builder
@@ -345,7 +366,7 @@ export struct BrowserTabOverviewCard {
       Image(this.resolveRenderableSnapshotImageUri())
         .width(this.resolveSnapshotImageRenderWidth())
         .height(this.resolveSnapshotImageRenderHeight())
-        .objectFit(this.snapshotAspectFitEnabled ? ImageFit.Contain : ImageFit.Fill)
+        .objectFit(this.resolveSnapshotImageFit())
         .syncLoad(true)
         .interpolation(ImageInterpolation.Medium)
         .opacity(this.resolveEffectiveSnapshotImageOpacity())
@@ -355,7 +376,7 @@ export struct BrowserTabOverviewCard {
       Image(this.resolveRenderableSnapshotPixelMap() as image.PixelMap)
         .width(this.resolveSnapshotImageRenderWidth())
         .height(this.resolveSnapshotImageRenderHeight())
-        .objectFit(this.snapshotAspectFitEnabled ? ImageFit.Contain : ImageFit.Fill)
+        .objectFit(this.resolveSnapshotImageFit())
         .syncLoad(true)
         .interpolation(ImageInterpolation.Medium)
         .opacity(this.resolveEffectiveSnapshotImageOpacity())
@@ -364,29 +385,44 @@ export struct BrowserTabOverviewCard {
     }
   }
 
+  /**
+   * The deck fills its card with the screenshot (`Cover`) because every deck card has one shared
+   * size, while the grid keeps the screenshot's own aspect ratio inside the card.
+   */
+  private resolveSnapshotImageFit(): ImageFit {
+    if (this.snapshotCoverEnabled) {
+      return ImageFit.Cover;
+    }
+    return this.snapshotAspectFitEnabled ? ImageFit.Contain : ImageFit.Fill;
+  }
+
+  private resolveSnapshotFillsCard(): boolean {
+    return this.snapshotAspectFitEnabled || this.snapshotCoverEnabled;
+  }
+
   private resolveSnapshotImageRenderWidth(): number {
-    if (this.snapshotAspectFitEnabled) {
+    if (this.resolveSnapshotFillsCard()) {
       return Math.max(1, this.cardWidth);
     }
     return Math.max(1, this.resolveSnapshotPreviewImageRect().width);
   }
 
   private resolveSnapshotImageRenderHeight(): number {
-    if (this.snapshotAspectFitEnabled) {
+    if (this.resolveSnapshotFillsCard()) {
       return Math.max(1, this.previewHeight);
     }
     return Math.max(1, this.resolveSnapshotPreviewImageRect().height);
   }
 
   private resolveSnapshotImageLeft(): number {
-    if (this.snapshotAspectFitEnabled) {
+    if (this.resolveSnapshotFillsCard()) {
       return 0;
     }
     return this.resolveSnapshotPreviewImageRect().left;
   }
 
   private resolveSnapshotImageTop(): number {
-    if (this.snapshotAspectFitEnabled) {
+    if (this.resolveSnapshotFillsCard()) {
       return 0;
     }
     return this.resolveSnapshotPreviewImageRect().top;

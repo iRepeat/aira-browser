@@ -51,6 +51,7 @@ BOTTOM_TOOLBAR_GUIDE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bottom-toolba
 CROSS_DEVICE_LINK_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-cross-device-link-contract.sh"
 COMMUNITY_UPDATE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-community-update-contract.sh"
 SYNC_CLOSED_LOOP_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-sync-closed-loop.cjs"
+TABS_STACK_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tabs-stack.cjs"
 HUAWEI_APP_IDENTITY_RESOLVER="${REPO_ROOT}/scripts/huawei-app-identity.js"
 HUAWEI_APP_IDENTITY_TEST="${REPO_ROOT}/scripts/huawei-app-identity.test.js"
 PRODUCTION_BUNDLE_NAME="com.aira.browser"
@@ -369,6 +370,13 @@ if [ ! -x "${SYNC_CLOSED_LOOP_GUARD_SCRIPT}" ]; then
   fail "Sync closed-loop guard not executable: ${SYNC_CLOSED_LOOP_GUARD_SCRIPT}"
 fi
 node "${SYNC_CLOSED_LOOP_GUARD_SCRIPT}"
+
+for tabs_stack_guard in "${TABS_STACK_GUARD_SCRIPT}"; do
+  if [ ! -f "${tabs_stack_guard}" ]; then
+    fail "Tabs overview stack guard not found: ${tabs_stack_guard}"
+  fi
+  node "${tabs_stack_guard}" || fail "Tabs overview stack guard failed: ${tabs_stack_guard}"
+done
 
 if [ -x "${ICON_GUARD_SCRIPT}" ]; then
   NODE_BIN="${NODE_BIN}" "${ICON_GUARD_SCRIPT}"

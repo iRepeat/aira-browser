@@ -11,6 +11,11 @@ components retain their own licenses and notices.
   `AiraBrowser/entry/src/main/cpp/third_party/mbedtls/LICENSE`.
 - **Mozilla Readability 0.6.0** is distributed under Apache-2.0. Source provenance and license are under
   `third_party/mozilla-readability/`.
+- **StackSwipe** deck geometry and physics are ported under MIT from
+  https://github.com/SoxiaLiSA/StackSwipe (pinned commit `829894591cd0040b02aff7d2fa2f6bfc365f12de`).
+  Provenance, the ported formula mapping, and the MIT license text are at
+  `docs/research/stack-swipe-deck-port.md`. The upstream repository declares MIT in its README and
+  does not ship a separate license file.
 - **adblock-rust 0.13.2** is distributed under MPL-2.0. Its pinned source, transitive dependency inventory, redirect
   resource notice, and packaged license texts are described in
   `AiraBrowser/entry/src/main/cpp/rust/aira_adblock_core/NOTICE.md`.

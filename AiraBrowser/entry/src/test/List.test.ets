@@ -53,6 +53,7 @@ import startupWelcomeIntroTest from './StartupWelcomeIntro.test';
 import browserWebTopSafeAreaColorTest from './BrowserWebTopSafeAreaColor.test';
 import browserSearchEnginePopupLayoutViewModelTest from './BrowserSearchEnginePopupLayoutViewModel.test';
 import browserTabsOverviewSwipeDismissPolicyTest from './BrowserTabsOverviewSwipeDismissPolicy.test';
+import browserTabsOverviewStackLayoutPolicyTest from './BrowserTabsOverviewStackLayoutPolicy.test';
 import bottomToolbarGuideCoordinatorTest from './BottomToolbarGuideCoordinator.test';
 import crossDeviceLinkViewModelTest from './CrossDeviceLinkViewModel.test';
 import communityUpdateCheckCoordinatorTest from './CommunityUpdateCheckCoordinator.test';
@@ -111,6 +112,7 @@ export default function tests(): void {
   browserWebTopSafeAreaColorTest();
   browserSearchEnginePopupLayoutViewModelTest();
   browserTabsOverviewSwipeDismissPolicyTest();
+  browserTabsOverviewStackLayoutPolicyTest();
   bottomToolbarGuideCoordinatorTest();
   crossDeviceLinkViewModelTest();
   communityUpdateCheckCoordinatorTest();
