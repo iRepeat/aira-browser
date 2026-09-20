@@ -26,6 +26,9 @@ const exportsUnderTest = load(
 const policy = new exportsUnderTest.BrowserTabsOverviewStackLayoutPolicy();
 const close = (actual, expected, tolerance = 1e-9) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
+// Every card reports the same shape; only `offsetY` is not a golden column, because the resting
+// deck is a single baseline (it is asserted to stay 0 below).
+const metricFields = ['offsetX', 'offsetY', 'scale', 'opacity', 'titleOpacity', 'shadeOpacity', 'zIndex'];
 const fields = ['offsetX', 'scale', 'opacity', 'titleOpacity', 'shadeOpacity', 'zIndex'];
 
 test('the Hyperion suite executes against the actual transpiled ETS source', () => {
@@ -74,7 +77,8 @@ const goldens = [
 test('independent goldens cover depth, parallax, fades and differential overscroll', () => {
   for (const [input, expected] of goldens) {
     const actual = policy.resolveCard(...input);
-    assert.deepEqual(Object.keys(actual).sort(), [...fields].sort());
+    assert.deepEqual(Object.keys(actual).sort(), [...metricFields].sort());
+    assert.equal(actual.offsetY, 0);
     fields.forEach((field, i) => close(actual[field], expected[i]));
   }
 });
@@ -91,7 +95,8 @@ test('title tent, shade and left fade have exact boundaries', () => {
   // The title fades through opacity alone: the deck must not expose a blur channel at all.
   for (let relative = -3; relative <= 3; relative += 0.25) {
     const metrics = policy.resolveCard(4, 4 - relative, 10, 250);
-    assert.deepEqual(Object.keys(metrics).sort(), [...fields].sort());
+    assert.deepEqual(Object.keys(metrics).sort(), [...metricFields].sort());
+    assert.equal(metrics.offsetY, 0);
     assert.ok(metrics.titleOpacity >= 0 && metrics.titleOpacity <= 1);
   }
 });
@@ -364,6 +369,70 @@ test('the stacked deck is the default style and leads the appearance settings', 
   assert.match(layoutViewModel, /return style === 'grid' \? 'grid' : 'horizontal_cards';/);
 });
 
+test('the bottom-bar pull drives the entry, and the finger keeps the layer while it is down', () => {
+  const read = relative => fs.readFileSync(path.resolve(__dirname, '..', relative), 'utf8');
+  const gestureExports = load(
+    'AiraBrowser/entry/src/main/ets/core/browser/tabsOverview/BrowserTabsOverviewEntryGesturePolicy.ets',
+    name => { throw new Error(`Pure policy must not import ${name}`); });
+  const gesture = new gestureExports.BrowserTabsOverviewEntryGesturePolicy();
+  // Claimed on a small upward travel, and only on the way up; a claimed drag stays claimed so a pull
+  // back down never hands the gesture to the toolbar half way through.
+  assert.equal(gesture.shouldClaim(4, false), false);
+  assert.equal(gesture.shouldClaim(-8, false), true);
+  assert.equal(gesture.shouldClaim(40, true), true);
+  // One easing curve over the whole pull: it starts at the page, ends at the smallest the pull allows,
+  // and every further vp of travel changes the card less than the one before it.
+  const reach = 800 * gestureExports.BROWSER_TABS_OVERVIEW_ENTRY_GESTURE_REACH_RATIO;
+  const minRatio = gestureExports.BROWSER_TABS_OVERVIEW_ENTRY_GESTURE_MIN_CARD_RATIO;
+  const at = offsetY => gesture.resolveLayout({
+    offsetX: 0, offsetY: offsetY, viewportWidth: 390, viewportHeight: 800
+  });
+  assert.equal(at(0).progress, 0);
+  assert.equal(at(200).progress, 0, 'a pull downwards cannot grow the page past itself');
+  close(at(-reach).progress, 1);
+  close(at(-reach * 0.5).progress, 1 - Math.pow(0.5, 1.8));
+  // The steps only get smaller: the shrink decelerates for the whole drag, which is the opposite of
+  // shrinking fastest at the start and then creeping.
+  let previousStep = Infinity;
+  let previousProgress = 0;
+  for (let step = 1; step <= 10; step += 1) {
+    const change = at(-reach * step / 10).progress - previousProgress;
+    assert.ok(change <= previousStep + 1e-9,
+      `step ${step} changed by ${change}, more than the ${previousStep} before it`);
+    previousStep = change;
+    previousProgress += change;
+  }
+  // The card is `lerp(page, smallest, progress)` and nothing else, so a decelerating progress is a
+  // decelerating shrink. `minRatio` is what the caller scales the deck's card by for the small end.
+  assert.ok(minRatio > 0 && minRatio < 1);
+  assert.ok(at(-800).progress <= 1);
+  // Sideways travel only nudges the row, and it stops well before a card could leave the sheet.
+  const pan = offsetX => gesture.resolveLayout({
+    offsetX: offsetX, offsetY: 0, viewportWidth: 390, viewportHeight: 800
+  });
+  close(pan(100).panX, 34);
+  close(pan(10000).panX, 390 * 0.36);
+  close(pan(-10000).panX, -390 * 0.36);
+  for (const value of [NaN, Infinity, -Infinity]) {
+    const fallback = gesture.resolveLayout({
+      offsetX: value, offsetY: value, viewportWidth: value, viewportHeight: value
+    });
+    assert.ok(Number.isFinite(fallback.progress));
+    assert.ok(Number.isFinite(fallback.panX) && Number.isFinite(fallback.panY));
+  }
+  // The panel claims the drag while the finger is down and hands the whole gesture over once,
+  // which is what keeps the toolbar sheet from opening on its end.
+  const panel = read('AiraBrowser/entry/src/main/ets/app/components/browser/BrowserBottomAddressPanel.ets');
+  assert.match(panel, /onTabsOverviewEntryGesture: \(/);
+  assert.match(panel, /this\.entryGesturePolicy\.shouldClaim\(frame\.offsetY, this\.tabsOverviewEntryGestureClaimed\)/);
+  assert.match(panel, /if \(this\.tabsOverviewEntryGestureClaimed\) \{\s*this\.tabsOverviewEntryGestureClaimed = false;\s*this\.onTabsOverviewEntryGesture\('end', 0, offsetY\);\s*return 'low';/);
+  assert.match(panel, /!this\.tabsOverviewEntryGestureClaimed &&\s*!this\.isAddressInputPresentationActive\(\)/);
+  const page = read('AiraBrowser/entry/src/main/ets/app/pages/BrowserShellPage.ets');
+  assert.match(page, /private handleTabsOverviewEntryGesture\(/);
+  assert.match(page, /if \(phase === 'start'\) \{\s*this\.tabsOverviewEntryGestureOffsetX = offsetX;\s*this\.tabsOverviewEntryGestureOffsetY = offsetY;\s*this\.tabsOverviewEntryGestureActive = true;\s*void this\.openTabsOverview\(\);/);
+  assert.match(page, /entryGestureActive: this\.tabsOverviewEntryGestureActive,/);
+});
+
 test('the overlay deck wires the policy, per-frame motion and the reference visuals', () => {
   const overlay = fs.readFileSync(path.resolve(__dirname,
     '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsFloatingOverlay.ets'), 'utf8');
@@ -435,15 +504,24 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   assert.match(overlay, /private recordDeckSlots\(items: BrowserTabsFloatingItem\[\]\): void/);
   assert.match(overlay, /this\.recordDeckSlots\(next\);/);
   // The metrics memo follows the recorded slots, not the list order.
-  assert.match(overlay, /const slot = this\.resolveDeckIndex\(item\);\s*const key = `\$\{this\.horizontalDeckPosition\}\|\$\{this\.layoutState\.cardWidth\}\|` \+\s*`\$\{this\.deckItemsSignature\}\|\$\{this\.deckSlotSignature\}`;/);
+  assert.match(overlay, /const slot = this\.resolveDeckIndex\(item\);[\s\S]{0,400}?const key = `\$\{this\.horizontalDeckPosition\}\|\$\{this\.layoutState\.cardWidth\}\|` \+\s*`\$\{this\.deckItemsSignature\}\|\$\{this\.deckSlotSignature\}`;/);
   assert.match(overlay, /this\.stackLayoutPolicy\.resolveCard\(slot, this\.horizontalDeckPosition,/);
   // Clip stays on except during a vertical dismiss flight. Toggling it at the morph handover
   // re-rasterises every card in the same frame the current card is revealed.
   assert.match(horizontal, /\.clip\(this\.deckSwipeTabId\.length <= 0\)/);
   assert.match(horizontal, /Stack\(\) \{\s*if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(true\)/);
-  assert.match(overlay, /private shouldMountSharedSnapshotInDeck\(\): boolean \{\s*return this\.entrySharedSnapshotMounted &&\s*this\.entrySharedSnapshotState\.direction === 'enter' &&/);
+  assert.match(overlay, /private shouldMountSharedSnapshotInDeck\(\): boolean \{[\s\S]{0,400}?return this\.entrySharedSnapshotMounted &&\s*this\.entrySharedSnapshotState\.direction === 'enter' &&/);
   assert.match(overlay, /return slot < 0 \? 0 : slot \* 2 \+ 1;/);
-  assert.match(overlay, /if \(this\.entrySharedSnapshotMounted && !this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(\)/);
+  assert.match(overlay, /if \(this\.shouldRenderEntryGestureOverlay\(\)\) \{[\s\S]{0,120}?this\.buildEntryGestureSnapshot\(\)\s*\} else if \(this\.entrySharedSnapshotMounted && !this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(\)/);
+  // The pull-open entry paints the scene's snapshot from the cards layer instead, from its own copy,
+  // so the scene's overlay must stand down while the finger owns the layer.
+  assert.match(overlay, /private shouldApplyEntryGestureLayout\(\): boolean \{\s*return this\.entryGestureActive \|\| this\.entryGestureSettling;/);
+  // The deck's slot must not paint the scene's copy of the same snapshot under the pull's card.
+  assert.match(overlay, /if \(this\.shouldApplyEntryGestureLayout\(\)\) \{\s*return false;\s*\}\s*return this\.entrySharedSnapshotMounted/);
+  // The held card is a card, so it keeps the icon and title its neighbours have.
+  assert.match(overlay, /private buildEntryGestureHeldIdentity\(\)/);
+  assert.match(overlay, /private resolveEntryGestureHeldIdentity\(\): BrowserTabOverviewIdentityPresentation/);
+  assert.match(overlay, /@Prop entryGestureActive: boolean = false;/);
   // In-deck morph must not reuse the overlay-root 20/25 z-index; the slot wrapper owns stacking.
   assert.match(overlay, /snapshotLayerZIndex: inDeck \? 0 : FLOATING_TABS_SHARED_SNAPSHOT_Z_INDEX/);
   assert.match(overlay, /this\.buildSharedSnapshotOverlay\(true\)/);

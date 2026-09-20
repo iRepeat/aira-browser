@@ -23,6 +23,14 @@
 export interface BrowserTabsOverviewStackCardMetrics {
   /** Horizontal offset from the deck centre, in vp. */
   offsetX: number;
+  /**
+   * Vertical offset from where the deck centres a card, in vp.
+   *
+   * Always 0 for the resting deck: every card shares one baseline. It exists for the layouts that
+   * place a card against something else — a pull showing the row beside the held card has to line the
+   * neighbours up with it.
+   */
+  offsetY: number;
   scale: number;
   opacity: number;
   titleOpacity: number;
@@ -150,6 +158,7 @@ export class BrowserTabsOverviewStackLayoutPolicy {
       // of silently painting card 0 in its slot.
       return {
         offsetX: 0,
+        offsetY: 0,
         scale: 0,
         opacity: 0,
         titleOpacity: 0,
@@ -217,6 +226,7 @@ export class BrowserTabsOverviewStackLayoutPolicy {
 
     return {
       offsetX: offsetX,
+      offsetY: 0,
       scale: depthScale * sinkScale,
       opacity: cardCount <= 0 ? 0 : opacity,
       titleOpacity: titleOpacity,

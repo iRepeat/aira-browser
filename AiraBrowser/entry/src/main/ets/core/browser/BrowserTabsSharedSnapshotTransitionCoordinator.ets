@@ -39,6 +39,14 @@ export interface BrowserTabsSharedSnapshotTransitionState {
   sourceImageTopInset: number;
   previewCornerRadius: number;
   imageBlurRadius: number;
+  /**
+   * Whether the overlay grows its corner radius with the morph.
+   *
+   * A page-to-card morph should start square and round off as it settles, which is the default. A
+   * morph the finger is driving is already a card from the first frame, so it keeps its radius.
+   * Omitted means the default, so every existing state stays square-to-round.
+   */
+  cornerRadiusFollowsProgress?: boolean;
 }
 
 export interface BrowserTabsSharedSnapshotTransitionInput {
@@ -54,6 +62,7 @@ export interface BrowserTabsSharedSnapshotTransitionInput {
   sourceImageTopInset?: number;
   previewCornerRadius: number;
   imageBlurRadius?: number;
+  cornerRadiusFollowsProgress?: boolean;
 }
 
 export interface BrowserTabsSharedSnapshotWindowInput {
@@ -482,6 +491,7 @@ export class BrowserTabsSharedSnapshotTransitionCoordinator {
       targetPreviewHeight: this.resolveTargetPreviewHeight(state),
       sourceImageTopInset: state.sourceImageTopInset,
       previewCornerRadius: state.previewCornerRadius,
+      cornerRadiusFollowsProgress: state.cornerRadiusFollowsProgress,
       useFullWebSnapshot: state.useFullWebSnapshot,
       imageWidth: state.imageWidth,
       imageHeight: state.imageHeight

@@ -56,6 +56,8 @@ export interface BrowserDetentBottomPanelGestureFrame {
   phase: 'start' | 'update';
   panelHeight: number;
   offsetY: number;
+  /** Sideways finger travel, so a consumer can follow the drag on both axes. */
+  offsetX: number;
   startX: number;
   panelWidth: number;
 }
@@ -158,6 +160,8 @@ export struct BrowserDetentBottomPanel {
   private dragLastUpdateAtMs: number = 0;
   private dragReleaseVelocityY: number = 0;
   private pendingPanelDragOffsetY: number | undefined = undefined;
+  private pendingPanelDragOffsetX: number = 0;
+  private dragStartTouchX: number = -1;
   private panelDragFrameCallbackScheduled: boolean = false;
   private panelDragFrameRunId: number = 0;
   private deferredFloatingCollapseAfterContentExit: boolean = false;
@@ -684,6 +688,9 @@ export struct BrowserDetentBottomPanel {
     .onAreaChange((_oldArea: Area, newArea: Area) => {
       this.dragGestureWidth = this.parseAreaDimension(newArea.width);
     })
+    .onTouch((event: TouchEvent) => {
+      this.trackPanelDragTouchX(event);
+    })
     .onGestureJudgeBegin((info: GestureInfo, event: BaseGestureEvent) => {
       return this.judgeVerticalPanelPan(info, event, true);
     })
@@ -738,15 +745,40 @@ export struct BrowserDetentBottomPanel {
     this.deferredPanelDetentChange = undefined;
     this.invalidatePendingPanelDragFrame();
     this.isDraggingPanel = true;
+    this.pendingPanelDragOffsetX = 0;
+    this.dragStartTouchX = -1;
     this.dragStartPanelHeight = this.getPanelHeight();
     this.resetPanelDragVelocityTracking();
     this.onPanelGestureFrame({
       phase: 'start',
       panelHeight: this.dragStartPanelHeight,
       offsetY: 0,
+      offsetX: 0,
       startX: this.dragStartLocalX,
       panelWidth: this.dragGestureWidth
     });
+  }
+
+  /**
+   * Track the finger's sideways travel from the raw touch.
+   *
+   * The panel's drag is a vertical `PanGesture`, and once it is recognised ArkUI locks the offset to
+   * that axis: `event.offsetX` reads 0 for the rest of the drag. A consumer that wants to follow the
+   * finger on both axes still can, from the touch stream, which is not axis-locked.
+   */
+  private trackPanelDragTouchX(event: TouchEvent): void {
+    if (!this.isDraggingPanel || event.touches.length <= 0) {
+      return;
+    }
+    const touchX = Number(event.touches[0].x);
+    if (!Number.isFinite(touchX)) {
+      return;
+    }
+    if (this.dragStartTouchX < 0) {
+      this.dragStartTouchX = touchX;
+      return;
+    }
+    this.pendingPanelDragOffsetX = touchX - this.dragStartTouchX;
   }
 
   private updatePanelDrag(event: GestureEvent): void {
@@ -797,6 +829,7 @@ export struct BrowserDetentBottomPanel {
       phase: 'update',
       panelHeight: this.currentPanelHeight,
       offsetY: offsetY,
+      offsetX: this.pendingPanelDragOffsetX,
       startX: this.dragStartLocalX,
       panelWidth: this.dragGestureWidth
     });

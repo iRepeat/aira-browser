@@ -91,6 +91,8 @@ export interface BrowserTabsSharedSnapshotInput {
   useFullWebSnapshot: boolean;
   imageWidth: number;
   imageHeight: number;
+  /** Omitted, or true, grows the radius with the morph; false keeps the final radius throughout. */
+  cornerRadiusFollowsProgress?: boolean;
 }
 
 export interface BrowserTabsSharedSnapshotVisualState {
@@ -234,12 +236,17 @@ export class BrowserTabsOverlayViewModel {
       frame,
       this.interpolateRect(startImageRect, endImageRect, progress)
     );
+    // A finger-driven morph is a card from its first frame, so it holds the radius it will settle
+    // with. Anything else keeps the square-to-round growth that makes a page read as a page.
+    const cornerRadius = input.cornerRadiusFollowsProgress === false ?
+      input.previewCornerRadius :
+      (input.direction === 'exit'
+        ? this.lerp(input.previewCornerRadius, 0, progress)
+        : this.lerp(0, input.previewCornerRadius, progress));
     return {
       frame: frame,
       imageFrame: imageFrame,
-      cornerRadius: input.direction === 'exit'
-        ? this.lerp(input.previewCornerRadius, 0, progress)
-        : this.lerp(0, input.previewCornerRadius, progress)
+      cornerRadius: cornerRadius
     };
   }
 

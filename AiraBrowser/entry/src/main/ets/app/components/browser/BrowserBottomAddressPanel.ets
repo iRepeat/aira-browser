@@ -1,5 +1,8 @@
 import { BrowserAddressBarTabSwipeEvent } from '../../../core/browser/BrowserAddressBarTabSwipePolicy';
 import {
+  BrowserTabsOverviewEntryGesturePolicy
+} from '../../../core/browser/tabsOverview/BrowserTabsOverviewEntryGesturePolicy';
+import {
   BrowserBottomAddressPanelAction,
   BrowserBottomAddressPanelActionId,
   BrowserBottomAddressPanelBuildInput,
@@ -324,6 +327,13 @@ export struct BrowserBottomAddressPanel {
   @State private toolbarSystemSheetDetentSelection: Length = 0;
   @State private floatingActionContentSettled: boolean = false;
   @State private floatingActionContentGestureRevealed: boolean = false;
+  /**
+   * Set while an upward drag on the middle bar belongs to the tab overview.
+   *
+   * The toolbar sheet is opened on the gesture's *end*, so claiming the drag on the way up is what
+   * keeps it from opening at all — and the same gesture then keeps driving the overview's entry.
+   */
+  @State private tabsOverviewEntryGestureClaimed: boolean = false;
   @State private floatingActionContentEntryActive: boolean = false;
   @State private floatingActionContentExitActive: boolean = false;
   @State private downloadIndicatorState: DownloadToolbarIndicatorState =
@@ -358,6 +368,8 @@ export struct BrowserBottomAddressPanel {
   private panelDetentNotificationTimer: number = -1;
   private pendingPanelDetentNotification: HomeSearchPanelDetent | undefined = undefined;
   private homeDismissAfterLowSettlePending: boolean = false;
+  private entryGesturePolicy: BrowserTabsOverviewEntryGesturePolicy =
+    new BrowserTabsOverviewEntryGesturePolicy();
   private activeChromeGestureSource: BrowserBottomChromeGestureSource = 'none';
   private activeChromeGestureMiddlePanelHeight: number = 0;
   private pendingToolbarSystemSheetAction: BrowserBottomAddressPanelAction | undefined = undefined;
@@ -436,6 +448,16 @@ export struct BrowserBottomAddressPanel {
   @Prop
   @Watch('syncToolbarSystemSheetRequest')
   toolbarSystemSheetRequestVersion: number = 0;
+  /**
+   * A drag on the middle of the bottom bar that the tab overview takes over instead of the toolbar.
+   *
+   * `phase` is 'start' the moment the drag is claimed — the finger is still down, and it stays down
+   * for the whole gesture — 'update' for every frame after that, and 'end' when it lifts.
+   */
+  onTabsOverviewEntryGesture: (
+    phase: 'start' | 'update' | 'end',
+    offsetX: number,
+    offsetY: number) => void = (_phase: 'start' | 'update' | 'end', _offsetX: number, _offsetY: number) => {};
   @Prop tabSwipeEnabled: boolean = false;
   @Prop tabSwipeActive: boolean = false;
   @Prop tabSwipeOffsetRatio: number = 0;
@@ -602,6 +624,7 @@ export struct BrowserBottomAddressPanel {
         },
         onPanelGestureFrame: (frame: BrowserDetentBottomPanelGestureFrame) => {
           if (frame.phase === 'start') {
+            this.tabsOverviewEntryGestureClaimed = false;
             this.panelVerticalMotionActive = true;
             this.clearFloatingActionGestureReveal();
             this.floatingActionContentGestureRevealed = false;
@@ -618,7 +641,10 @@ export struct BrowserBottomAddressPanel {
             this.floatingActionSurfacePrepared = this.activeChromeGestureSource === 'center-capsule' &&
               this.shouldRenderFloatingActionSurface();
           }
-          if (frame.phase === 'update' &&
+          if (frame.phase === 'update') {
+            this.handleTabsOverviewEntryGestureFrame(frame);
+          }
+          if (frame.phase === 'update' && !this.tabsOverviewEntryGestureClaimed &&
             this.isExpandedPanelDetent(this.panelDetent) &&
             this.toolbarExpansionStage === 'preview' &&
             frame.offsetY > 0 &&
@@ -626,7 +652,8 @@ export struct BrowserBottomAddressPanel {
             this.beginFloatingActionContentExit();
           }
           this.panelDragHeight = frame.panelHeight;
-          if (!this.preserveExpandedBackdropForActiveToolbarGesture &&
+          if (!this.tabsOverviewEntryGestureClaimed &&
+            !this.preserveExpandedBackdropForActiveToolbarGesture &&
             !this.suppressBackdropForActiveToolbarSheetGesture &&
             !this.floatingActionContentExitActive) {
             this.onPanelGestureFrame({
@@ -637,7 +664,7 @@ export struct BrowserBottomAddressPanel {
               middlePanelHeight: this.activeChromeGestureMiddlePanelHeight
             });
           }
-          if (frame.phase === 'update') {
+          if (frame.phase === 'update' && !this.tabsOverviewEntryGestureClaimed) {
             this.scheduleFloatingActionContentRevealAtBackdropThreshold(frame.offsetY);
           }
         },
@@ -678,6 +705,11 @@ export struct BrowserBottomAddressPanel {
           }
           const source = this.activeChromeGestureSource;
           this.activeChromeGestureSource = 'none';
+          if (this.tabsOverviewEntryGestureClaimed) {
+            this.tabsOverviewEntryGestureClaimed = false;
+            this.onTabsOverviewEntryGesture('end', 0, offsetY);
+            return 'low';
+          }
           if (this.shouldOpenToolbarSystemSheetFromGesture(targetDetent, offsetY, source)) {
             this.openToolbarSystemSheet();
             return 'low';
@@ -3406,9 +3438,38 @@ export struct BrowserBottomAddressPanel {
     void targetDetent;
     return source === 'center-capsule' &&
       this.hasQuickActionSlotsAvailable() &&
+      !this.tabsOverviewEntryGestureClaimed &&
       !this.isAddressInputPresentationActive() &&
       Number.isFinite(offsetY) &&
       offsetY < 0;
+  }
+
+  /**
+   * Hand an upward drag on the middle bar to the tab overview.
+   *
+   * The overview is requested the instant the drag is claimed, while the finger is still down, so the
+   * page's snapshot is captured and the overview's entry starts under the finger. Every later frame is
+   * forwarded: the finger keeps driving the entry until it lifts.
+   */
+  private handleTabsOverviewEntryGestureFrame(frame: BrowserDetentBottomPanelGestureFrame): void {
+    if (this.activeChromeGestureSource !== 'center-capsule' ||
+      this.isAddressInputPresentationActive() ||
+      !this.hasQuickActionSlotsAvailable()) {
+      return;
+    }
+    if (!this.entryGesturePolicy.shouldClaim(frame.offsetY, this.tabsOverviewEntryGestureClaimed)) {
+      return;
+    }
+    if (!this.tabsOverviewEntryGestureClaimed) {
+      this.tabsOverviewEntryGestureClaimed = true;
+      // Nothing of the toolbar's own reveal may run under the overview's entry.
+      this.floatingActionSurfacePrepared = false;
+      this.floatingActionContentGestureRevealed = false;
+      this.suppressBackdropForActiveToolbarSheetGesture = true;
+      this.onTabsOverviewEntryGesture('start', frame.offsetX, frame.offsetY);
+      return;
+    }
+    this.onTabsOverviewEntryGesture('update', frame.offsetX, frame.offsetY);
   }
 
   private shouldSuppressBackdropForToolbarSystemSheetGesture(

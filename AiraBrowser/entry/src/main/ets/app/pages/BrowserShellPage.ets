@@ -5683,6 +5683,15 @@ struct BrowserShellPage {
     this.tabsOverviewSessionCoordinator.getPresentationState();
   @State tabsSharedSnapshotState: BrowserTabsSharedSnapshotTransitionState =
     this.tabsOverviewPresentationState.sharedSnapshotState;
+  /**
+   * A drag on the middle of the bottom bar that is pulling the tab overview open.
+   *
+   * The overview is entered while the finger is still down, and the finger keeps driving the entry:
+   * these offsets are the finger's travel since the drag was claimed, republished for the overlay.
+   */
+  @State tabsOverviewEntryGestureActive: boolean = false;
+  @State tabsOverviewEntryGestureOffsetX: number = 0;
+  @State tabsOverviewEntryGestureOffsetY: number = 0;
   @State @Watch('handleTabsOverviewSnapshotPipelineStateChanged')
   tabsOverviewSnapshotPipelineState: BrowserTabsOverviewSnapshotPipelineState =
     this.tabsOverviewSnapshotPipelineCoordinator.buildIdleState();
@@ -7185,6 +7194,9 @@ struct BrowserShellPage {
       tabSwipeTargetAddress: this.addressBarTabSwipeState.targetAddress,
       tabSwipeDirection: this.addressBarTabSwipeState.direction,
       onTabSwipe: (event) => this.browserAddressBarTabSwipeCoordinator.handle(event),
+      onTabsOverviewEntryGesture: (phase, offsetX, offsetY) => {
+        this.handleTabsOverviewEntryGesture(phase, offsetX, offsetY);
+      },
       presentationChannel: renderContext.presentationChannel,
       privateMode: this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate(),
       appProxyActive: this.appProxyQuickSheetState.toolbarActive,
@@ -7953,6 +7965,9 @@ struct BrowserShellPage {
       ),
       entrySharedSnapshotState: this.tabsSharedSnapshotState,
       entrySharedSnapshotBackgroundColor: this.getWebViewportTopSafeAreaBackgroundColor(),
+      entryGestureActive: this.tabsOverviewEntryGestureActive,
+      entryGestureOffsetX: this.tabsOverviewEntryGestureOffsetX,
+      entryGestureOffsetY: this.tabsOverviewEntryGestureOffsetY,
       onDismiss: () => {
         this.dispatchTabsOverviewSession({ type: 'dismiss_to_home' });
       },
@@ -9383,6 +9398,32 @@ struct BrowserShellPage {
 
   private dispatchTabsOverviewSession(action: BrowserTabsOverviewSessionAction): void {
     this.tabsOverviewSessionCoordinator.handle(action);
+  }
+
+  /**
+   * The tab overview is pulled open by an upward drag on the middle of the bottom bar.
+   *
+   * 'start' arrives while the finger is still down: the overview is requested there and then, so the
+   * page is captured and the entry begins under the finger. Every later frame is republished so the
+   * overview's entry follows the finger, and 'end' hands it back to the normal settling path.
+   */
+  private handleTabsOverviewEntryGesture(
+    phase: 'start' | 'update' | 'end',
+    offsetX: number,
+    offsetY: number
+  ): void {
+    if (phase === 'start') {
+      this.tabsOverviewEntryGestureOffsetX = offsetX;
+      this.tabsOverviewEntryGestureOffsetY = offsetY;
+      this.tabsOverviewEntryGestureActive = true;
+      void this.openTabsOverview();
+      return;
+    }
+    this.tabsOverviewEntryGestureOffsetX = offsetX;
+    this.tabsOverviewEntryGestureOffsetY = offsetY;
+    if (phase === 'end') {
+      this.tabsOverviewEntryGestureActive = false;
+    }
   }
 
   private async openTabsOverview(activeSection: BrowserTabsOverviewSessionSection = 'tabs'): Promise<void> {
