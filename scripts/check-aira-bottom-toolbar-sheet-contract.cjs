@@ -15,6 +15,10 @@ const neutralThemePath = path.join(repoRoot,
   'AiraBrowser/entry/src/main/ets/core/theme/BrowserBottomPanelNeutralTheme.ets');
 const surfaceHostPath = path.join(repoRoot, 'AiraBrowser/entry/src/main/ets/app/components/browser/BrowserShellPrimarySurfaceHost.ets');
 const shellPagePath = path.join(repoRoot, 'AiraBrowser/entry/src/main/ets/app/pages/BrowserShellPage.ets');
+const storageAdapterPath = path.join(repoRoot,
+  'AiraBrowser/entry/src/main/ets/data/preferences/ArkPreferencesStorageAdapter.ets');
+const toolbarModelsPath = path.join(repoRoot,
+  'AiraBrowser/entry/src/main/ets/common/models/BrowserModels.ets');
 
 const panel = fs.readFileSync(panelPath, 'utf8');
 const addressPanel = fs.readFileSync(addressPanelPath, 'utf8');
@@ -26,6 +30,8 @@ const neutralTheme = fs.readFileSync(neutralThemePath, 'utf8');
 const normalizedNeutralTheme = neutralTheme.replace(/\s+/g, ' ');
 const surfaceHost = fs.readFileSync(surfaceHostPath, 'utf8');
 const shellPage = fs.readFileSync(shellPagePath, 'utf8');
+const storageAdapter = fs.readFileSync(storageAdapterPath, 'utf8');
+const toolbarModels = fs.readFileSync(toolbarModelsPath, 'utf8');
 const toolbarSheetBindingStart = addressPanel.indexOf(
   '.bindSheet($$this.toolbarSystemSheetVisible, this.buildToolbarSystemSheet(),'
 );
@@ -174,5 +180,28 @@ assertContract(!surfaceHost.includes('webLayerOpacity: this.expandedScrimHomeSur
   'Expanded toolbar must not hide the active Web layer.');
 assertContract(!shellPage.includes('expandedScrimHomeSurfaceVisible:'),
   'Browser Shell must not pass the removed Home-forcing scrim prop.');
+
+// Every field of the toolbar settings must survive a cold start.
+//
+// `writeToolbarLayoutSettings` stores the whole object with `JSON.stringify`, but the read side goes
+// through a hand-written `parseToolbarLayoutSettings`. A field added to the model and the writer but
+// not to that parse is written, then silently dropped on the next launch and replaced by its default.
+// The middle bar's swipe-up choice was exactly that: it looked saved for the session and reverted to
+// 打开工具面板 after a cold start.
+const toolbarSettingsStart = toolbarModels.indexOf('export interface BrowserToolbarLayoutSettings');
+const toolbarSettingsBody = toolbarModels.slice(toolbarSettingsStart);
+const toolbarModelFields = (toolbarSettingsBody.slice(0, toolbarSettingsBody.indexOf('\n}'))
+  .match(/^\s{2}(\w+)\??:/gm) || []).map(field => field.trim().replace(/\??:$/, ''));
+assertContract(toolbarModelFields.length > 0,
+  'The toolbar layout settings model must declare its fields.');
+const parseBody = storageAdapter.slice(
+  storageAdapter.indexOf('private parseToolbarLayoutSettings('),
+  storageAdapter.indexOf('private parseSitePermissionDefaultSettings('));
+assertContract(parseBody.length > 0, 'The toolbar layout parse must exist in the storage adapter.');
+const unparsedFields = toolbarModelFields.filter(field => !parseBody.includes(`${field}:`));
+assertContract(unparsedFields.length === 0,
+  `Every toolbar layout setting must be restored by parseToolbarLayoutSettings; missing: ${unparsedFields.join(', ')}`);
+assertContract(storageAdapter.includes('centerCapsuleSwipeUpActionId: String(parsed.centerCapsuleSwipeUpActionId ??'),
+  'The middle bar swipe-up choice must be parsed back, not left to default.');
 
 console.log('Bottom toolbar system Sheet contract passed.');
