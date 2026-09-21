@@ -1,14 +1,23 @@
 {
   "latestAppGalleryRelease": {
     "versionName": "3.3.1",
-    "versionCode": 1000445,
+    "versionCode": 1000448,
     "releasedAt": "2026-09-21",
     "source": "formal-package-generated",
-    "notes": "Formal AppGallery package whose tab overview is now a stacked deck by default: cards scale with depth, the deck stays pannable after a close, a stacked tab closes with a real fill-in and a thrown fly-out, and the morph no longer pops a layer. The overview opens by dragging up on the bottom bar or swiping up on the middle bar, the bottom address bar swipes between tabs, and toolbar customization picks what the middle bar's swipe-up opens (tools panel or tab manager). The sync result dialog lists name/status rows and a SegmentedTabs title repaints when it changes. Built from committed HEAD 11a5981 plus the middle-bar swipe-up target selection carried in the same working tree, signed with the Aira release certificate and the AppGallery release Profile for com.aira.browser, with crash symbols archived. Repository guardrails and the release-signed APP build passed. This records a locally generated formal package and does not claim AppGallery review approval or on-shelf publication.",
-    "artifact": "AiraBrowser/build/outputs/default/Aira-official-v3.3.1-1000445-release-signed.app",
-    "sha256": "22ab25e617626bde3c8ddcb9e6c6a94c40b19e5889c7bfb28481d146e27b8514"
+    "notes": "Formal AppGallery package whose 外观 → 标签页样式 offers 卡片平铺 / 横向大卡片 / 堆叠式 with 卡片平铺 back as the default, and whose restored large-card strip no longer remounts its focused card when the entry hands over. The middle bar's swipe-up opens the tab overview through one decision, so a flick can no longer flash the toolbar panel and tear it down. A download no longer rewinds the document the tab is showing, a same-document navigation carries its restorable state, the Quick Search row survives a corrected in-page search, a route-delivered URL opens once instead of on every resume, 彩色图标 and 平板彩色图标 join the appearance icon list, and the 工具栏自定义 preview is a flat renderer that opens the page without the first-layout stutter. Built from committed HEAD 3730dd3, signed with the Aira release certificate and the AppGallery release Profile for com.aira.browser, with crash symbols archived. Repository guardrails and the release-signed APP build passed, and the outer APP signature plus the packed release Profile were verified independently. This records a locally generated formal package and does not claim AppGallery review approval or on-shelf publication.",
+    "artifact": "AiraBrowser/build/outputs/default/Aira-official-v3.3.1-1000448-release-signed.app",
+    "sha256": "53d658cb5984c39edbaf9ec966ef27193f278b44c8782b483adf533575e44a84"
   },
   "history": [
+    {
+      "versionName": "3.3.1",
+      "versionCode": 1000448,
+      "releasedAt": "2026-09-21",
+      "source": "formal-package-generated",
+      "notes": "Formal AppGallery package whose 外观 → 标签页样式 offers 卡片平铺 / 横向大卡片 / 堆叠式 with 卡片平铺 back as the default, and whose restored large-card strip no longer remounts its focused card when the entry hands over. The middle bar's swipe-up opens the tab overview through one decision, so a flick can no longer flash the toolbar panel and tear it down. A download no longer rewinds the document the tab is showing, a same-document navigation carries its restorable state, the Quick Search row survives a corrected in-page search, a route-delivered URL opens once instead of on every resume, 彩色图标 and 平板彩色图标 join the appearance icon list, and the 工具栏自定义 preview is a flat renderer that opens the page without the first-layout stutter. Built from committed HEAD 3730dd3, signed with the Aira release certificate and the AppGallery release Profile for com.aira.browser, with crash symbols archived. Repository guardrails and the release-signed APP build passed, and the outer APP signature plus the packed release Profile were verified independently. This records a locally generated formal package and does not claim AppGallery review approval or on-shelf publication.",
+      "artifact": "AiraBrowser/build/outputs/default/Aira-official-v3.3.1-1000448-release-signed.app",
+      "sha256": "53d658cb5984c39edbaf9ec966ef27193f278b44c8782b483adf533575e44a84"
+    },
     {
       "versionName": "3.3.1",
       "versionCode": 1000445,
