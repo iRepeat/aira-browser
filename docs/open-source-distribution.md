@@ -70,6 +70,30 @@ restores the source tree on exit.
 `AIRA_DISTRIBUTION` is independent from `AIRA_BUILD_VARIANT=default|release`. The same commit should be used for both
 distributions; only the capability owner, package identity, private configuration, and signing inputs differ.
 
+## Community Release
+
+A Community release is an unsigned HAP attached to a GitHub release. Its body carries the install instructions, the
+artifact record, and the changelog — and the changelog part is the **current version's section only**. Pasting the whole
+`community-changelog.md` into the body buries the new release under every version that shipped before it, which is a
+reading problem on the release page; the in-app update notice only ever reads the first section, so the mistake survives
+review of the app itself.
+
+Build the HAP, then generate, publish and check the notes:
+
+```bash
+AIRA_DISTRIBUTION=community AIRA_ALLOW_UNSIGNED_BUILD=1 SKIP_INSTALL=1 ./scripts/build-aira-browser.sh
+scripts/build-community-release-notes.sh                # writes .tmp/community-release/RELEASE_NOTES_<ver>_<code>.md
+scripts/build-community-release-notes.sh --publish      # creates tag v<ver>, uploads the HAP, then checks the body
+scripts/build-community-release-notes.sh --verify v3.3.1  # re-checks an already published release
+```
+
+`build-community-release-notes.sh` extracts the newest `## <versionName> (<versionCode>)` section and stops at the next
+`## ` heading, so a generated body can only carry one version. It fails closed when the built HAP, `AppScope/app.json5`,
+and the changelog disagree on the version or the bundle name, when the newest changelog section is not the app version,
+when that section has no bullets, and when the release tag already exists. `--publish` runs `--verify` after the upload,
+and `--verify` rejects a body whose `更新日志` section holds more than one version heading, disagrees with the release
+title, or carries no asset.
+
 ## Privacy And Service Boundaries
 
 - Huawei Account authentication is an Official Aira identity and is not a Personal Server login.
