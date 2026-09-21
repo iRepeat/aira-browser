@@ -1,3 +1,4 @@
+import { BrowserToolbarPreview } from './BrowserToolbarPreview';
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import { showCenteredAlertDialog } from '../common/CenteredDialogSurface';
 import {
@@ -64,7 +65,6 @@ import {
   SettingsDesktopOptionRow
 } from './SettingsDesktopRows';
 import { SettingsDesktopWorkspaceHeader } from './SettingsDesktopWorkspaceHeader';
-import { BrowserBottomChromeRenderer } from '../browser/BrowserBottomChromeRenderer';
 import {
   BrowserToolbarCustomizationBoundary,
   BrowserToolbarCustomizationCoordinator
@@ -79,7 +79,8 @@ import {
 import { CenteredDialogSurface } from '../common/CenteredDialogSurface';
 
 const TOOLBAR_NEUTRAL_PRESSED_BACKGROUND: string = '#14000000';
-const TOOLBAR_PREVIEW_DEFAULT_WIDTH: number = 358;
+const TOOLBAR_PREVIEW_HEIGHT: number = 52;
+const TOOLBAR_PREVIEW_SECTION_HEIGHT: number = 12 + TOOLBAR_PREVIEW_HEIGHT + 12;
 const TOOLBAR_SLOT_RADIO_GROUP_PREFIX: string = 'browser-toolbar-slot-action';
 const TOOLBAR_CENTER_CAPSULE_RADIO_GROUP: string = 'browser-toolbar-center-capsule-swipe-up';
 type BrowserToolbarSlotSheetMode = 'overview' | 'picker';
@@ -123,7 +124,15 @@ export struct BrowserToolbarCustomizationScreen {
   @State private state: BrowserToolbarCustomizationState =
     this.viewModel.buildState(sharedPreferencesRepository.getPreferences().toolbarLayout);
   @State private saving: boolean = false;
-  @State private toolbarPreviewWidth: number = TOOLBAR_PREVIEW_DEFAULT_WIDTH;
+  /**
+   * The width the toolbar preview is laid out at, or 0 before the first measure.
+   *
+   * Zero means "not measured yet" rather than "use the default": the preview is built inside a
+   * `SettingsGroupCard` that knows its own width, so it can resolve the frame on its first layout pass
+   * instead of building at a guessed width and re-laying out every button once the measurement lands.
+   * That second pass was the toolbar preview visibly narrowing as the page settled.
+   */
+  @State private toolbarPreviewWidth: number = 0;
   @State private selectedSlotId: BrowserToolbarSlotId = 'leading';
   @State private selectedInteractionKind: BrowserToolbarInteractionKind = 'tap';
   @State private slotSheetMode: BrowserToolbarSlotSheetMode = 'overview';
@@ -138,6 +147,30 @@ export struct BrowserToolbarCustomizationScreen {
   @State private sheetQuestion: BrowserToolbarSheetQuestion = 'slot';
   @State private sheetVisible: boolean = false;
   @State private desktopView: BrowserToolbarDesktopView = 'overview';
+  /**
+   * Resolved once instead of per render.
+   *
+   * `buildStateForBehavior` allocates a fresh options array and a fresh footer string every call, and
+   * the scroll-behaviour pane called it three times per option on every render — once for the `ForEach`
+   * source and twice more inside the loop and the divider condition.
+   */
+  private scrollBehaviorOptions: BrowserToolbarScrollBehaviorOptionState[] =
+    this.scrollBehaviorViewModel.buildStateForBehavior(
+      sharedPreferencesRepository.getPreferences().appearance.bottomToolbarScrollBehavior).options;
+  private scrollBehaviorFooterText: string =
+    this.scrollBehaviorViewModel.buildStateForBehavior(
+      sharedPreferencesRepository.getPreferences().appearance.bottomToolbarScrollBehavior).footerText;
+  /**
+   * The preview's presentation, kept until its width or the slot actions change.
+   *
+   * `buildPresentation` assembles a large object — the frame, the compact frame and ten tap targets —
+   * and the preview asks for it on every render, including the render the first width measurement
+   * triggers. Both inputs are cheap to compare: the width is a number and `state` is reassigned
+   * wholesale whenever the settings change, so a reference check is a correct invalidation.
+   */
+  private previewPresentationCache: BrowserBottomChromePresentation | undefined = undefined;
+  private previewPresentationWidth: number = 0;
+  private previewPresentationState: BrowserToolbarCustomizationState | undefined = undefined;
 
   aboutToAppear(): void {
     this.desktopView = this.initialDesktopView;
@@ -243,7 +276,7 @@ export struct BrowserToolbarCustomizationScreen {
         secondaryTextColor: this.storedSecondaryTextColor
       }) {
         SettingsDesktopGroup({ surfaceColor: this.storedSurfaceBackgroundColor }) {
-          ForEach(this.scrollBehaviorViewModel.buildStateForBehavior(this.scrollBehavior).options, (
+          ForEach(this.scrollBehaviorOptions, (
             option: BrowserToolbarScrollBehaviorOptionState,
             index: number
           ) => {
@@ -261,13 +294,13 @@ export struct BrowserToolbarCustomizationScreen {
                 this.updateScrollBehavior(option.behavior);
               }
             })
-            if (index < this.scrollBehaviorViewModel.buildStateForBehavior(this.scrollBehavior).options.length - 1) {
+            if (index < this.scrollBehaviorOptions.length - 1) {
               SettingsDesktopDivider({ dividerColor: this.storedDividerColor })
             }
           }, (option: BrowserToolbarScrollBehaviorOptionState) => `toolbar-scroll-workspace-${option.behavior}`)
         }
         SettingsFooterText({
-          text: this.scrollBehaviorViewModel.buildStateForBehavior(this.scrollBehavior).footerText,
+          text: this.scrollBehaviorFooterText,
           secondaryTextColor: this.storedSecondaryTextColor
         })
       }
@@ -327,30 +360,28 @@ export struct BrowserToolbarCustomizationScreen {
         desktopPresentation: this.desktopPresentation
       }) {
         Column() {
-          BrowserBottomChromeRenderer({
-            presentation: this.buildToolbarPreviewPresentation(),
-            materialTint: resolveBrowserBottomChromeMaterialTintForMode(this.storedResolvedThemeMode),
-            materialShadowColor: resolveBrowserBottomFloatingMaterialShadowColor(this.storedResolvedThemeMode),
-            edgeHighlightColor: resolveBrowserBottomChromeEdgeHighlightColor(this.storedResolvedThemeMode),
-            primaryIconColor: resolveBrowserBottomNeutralPrimaryColor(this.storedResolvedThemeMode),
-            disabledIconColor: resolveBrowserBottomNeutralSecondaryColor(this.storedResolvedThemeMode),
-            primaryTextColor: resolveBrowserBottomNeutralPrimaryColor(this.storedResolvedThemeMode),
-            secondaryTextColor: resolveBrowserBottomNeutralSecondaryColor(this.storedResolvedThemeMode),
-            adaptiveForeground: true,
-            pressedBackgroundColor: resolveBrowserBottomNeutralPressedColor(this.storedResolvedThemeMode),
-            chromeIconTone: AppIconResources.chromeToneForResolvedThemeMode(this.storedResolvedThemeMode),
-            onIntent: (intent: BrowserBottomChromeTapIntent): void => {
-              this.handleToolbarPreviewIntent(intent);
-            }
-          })
-            .width('100%')
-            .height(52)
+          if (this.toolbarPreviewWidth > 1) {
+            BrowserToolbarPreview({
+              presentation: this.buildToolbarPreviewPresentation(),
+              surfaceColor: this.storedSurfaceBackgroundColor,
+              iconColor: resolveBrowserBottomNeutralPrimaryColor(this.storedResolvedThemeMode),
+              textColor: resolveBrowserBottomNeutralPrimaryColor(this.storedResolvedThemeMode),
+              viewportColor: resolveBrowserBottomNeutralPressedColor(this.storedResolvedThemeMode),
+              edgeHighlightColor: this.resolvePreviewEdgeHighlightColor(),
+              onIntent: (intent: BrowserBottomChromeTapIntent): void => {
+                this.handleToolbarPreviewIntent(intent);
+              }
+            })
+              .width('100%')
+              .height(TOOLBAR_PREVIEW_HEIGHT)
+          }
         }
         .width('100%')
+        .height(TOOLBAR_PREVIEW_SECTION_HEIGHT)
         .padding({ top: 12, bottom: 12 })
         .onAreaChange((_oldArea: Area, newArea: Area) => {
           const width = this.parseAreaDimension(newArea.width);
-          if (width > 1) {
+          if (width > 1 && Math.abs(width - this.toolbarPreviewWidth) > 1) {
             this.toolbarPreviewWidth = width;
           }
         })
@@ -681,7 +712,13 @@ export struct BrowserToolbarCustomizationScreen {
   }
 
   private buildToolbarPreviewPresentation(): BrowserBottomChromePresentation {
-    return this.chromePresentationViewModel.buildPresentation({
+    const width = Math.max(1, this.toolbarPreviewWidth);
+    const cached = this.previewPresentationCache;
+    if (cached !== undefined && this.previewPresentationWidth === width &&
+      this.previewPresentationState === this.state) {
+      return cached;
+    }
+    const presentation = this.chromePresentationViewModel.buildPresentation({
       scene: 'web',
       addressFocused: false,
       addressEditable: true,
@@ -689,7 +726,7 @@ export struct BrowserToolbarCustomizationScreen {
       scrollPresentation: 'resting',
       returnHomeDrag: false,
       returnHomeProgress: 0,
-      panelWidth: Math.max(1, this.toolbarPreviewWidth),
+      panelWidth: width,
       panelExpansionEnabled: true,
       addressInput: 'https://aira.cool',
       addressDisplayText: 'aira.cool',
@@ -700,6 +737,10 @@ export struct BrowserToolbarCustomizationScreen {
       leadingHeaderActions: [],
       trailingHeaderActions: []
     });
+    this.previewPresentationCache = presentation;
+    this.previewPresentationWidth = width;
+    this.previewPresentationState = this.state;
+    return presentation;
   }
 
   private handleToolbarPreviewIntent(intent: BrowserBottomChromeTapIntent): void {
@@ -803,6 +844,16 @@ export struct BrowserToolbarCustomizationScreen {
 
   private resolvePageBackgroundColor(): ResourceColor {
     return this.normalizeColor(this.storedPageBackgroundColor, DEFAULT_THEME_PALETTE.light.pageBackground);
+  }
+
+  /**
+   * The preview's rim, over the same tokens the live bar's material edge highlight uses.
+   *
+   * The settings page can resolve the theme mode, so it hands the preview the colour and the preview
+   * stays a plain renderer with no theme lookup of its own.
+   */
+  private resolvePreviewEdgeHighlightColor(): ResourceColor {
+    return resolveBrowserBottomChromeEdgeHighlightColor(this.storedResolvedThemeMode);
   }
 
   private resolvePressedBackgroundColor(): ResourceColor {

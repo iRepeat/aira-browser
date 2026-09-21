@@ -8,20 +8,7 @@ import {
 import { BrowserBottomPanelActionCatalog } from './BrowserBottomPanelActionCatalog';
 import { AiraRenderableIconId } from '../resources/GeneratedAiraIconCatalog';
 
-export interface BrowserToolbarCustomizationActionState {
-  id: BrowserBottomAddressPanelActionId;
-  title: string;
-  subtitle: string;
-  airaIconId: AiraRenderableIconId;
-  isPrimary: boolean;
-  canAddToPrimary: boolean;
-  canRemoveFromPrimary: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
-}
-
 export interface BrowserToolbarCustomizationState {
-  primaryActions: BrowserToolbarCustomizationActionState[];
   slotActions: BrowserToolbarSlotActionState[];
   canReset: boolean;
 }
@@ -93,17 +80,17 @@ const BROWSER_TOOLBAR_CENTER_CAPSULE_SWIPE_UP_OPTIONS: BrowserToolbarCenterCapsu
 ];
 
 export class BrowserToolbarCustomizationViewModel {
+  /**
+   * The one state the customization screens read.
+   *
+   * `primaryActions` used to be projected here and read by nobody, and the settings were normalised
+   * once per projection — which for a slot list meant three normalisations per build, each copying the
+   * whole toolbar layout. Nothing else consumes it, so it is gone and the settings are normalised once.
+   */
   buildState(settings: BrowserToolbarLayoutSettings): BrowserToolbarCustomizationState {
     const normalizedSettings = this.normalizeSettings(settings);
     return {
-      primaryActions: normalizedSettings.primaryActionIds.map((
-        actionId: string,
-        index: number
-      ): BrowserToolbarCustomizationActionState => {
-        return this.buildActionState(actionId as BrowserBottomAddressPanelActionId, true, index,
-          normalizedSettings.primaryActionIds.length);
-      }),
-      slotActions: this.buildSlotActions(normalizedSettings),
+      slotActions: this.buildSlotActionsForNormalized(normalizedSettings),
       canReset: !this.areListsEqual(
         normalizedSettings.primaryActionIds,
         DEFAULT_BROWSER_TOOLBAR_LAYOUT_SETTINGS.primaryActionIds
@@ -115,7 +102,12 @@ export class BrowserToolbarCustomizationViewModel {
   }
 
   buildSlotActions(settings: BrowserToolbarLayoutSettings): BrowserToolbarSlotActionState[] {
-    const normalizedSettings = this.normalizeSettings(settings);
+    return this.buildSlotActionsForNormalized(this.normalizeSettings(settings));
+  }
+
+  private buildSlotActionsForNormalized(
+    normalizedSettings: BrowserToolbarLayoutSettings
+  ): BrowserToolbarSlotActionState[] {
     return [
       this.buildSlotActionState('leading', normalizedSettings),
       this.buildSlotActionState('menu', normalizedSettings),
@@ -296,25 +288,6 @@ export class BrowserToolbarCustomizationViewModel {
 
   getCatalogActionIds(): BrowserBottomAddressPanelActionId[] {
     return BrowserBottomPanelActionCatalog.customizableActionIds();
-  }
-
-  private buildActionState(
-    actionId: BrowserBottomAddressPanelActionId,
-    isPrimary: boolean,
-    index: number,
-    count: number
-  ): BrowserToolbarCustomizationActionState {
-    return {
-      id: actionId,
-      title: BrowserBottomPanelActionCatalog.title(actionId),
-      subtitle: BrowserBottomPanelActionCatalog.subtitle(actionId),
-      airaIconId: BrowserBottomPanelActionCatalog.iconId(actionId),
-      isPrimary,
-      canAddToPrimary: !isPrimary,
-      canRemoveFromPrimary: isPrimary,
-      canMoveUp: index > 0,
-      canMoveDown: index < count - 1
-    };
   }
 
   private buildSlotActionState(
