@@ -66,6 +66,14 @@ export interface BrowserToolbarSlotActionState {
   swipeUp?: BrowserToolbarSlotInteractionState;
 }
 
+export type BrowserToolbarCenterCapsuleSwipeUpActionId = 'tools' | 'tabs';
+
+export interface BrowserToolbarCenterCapsuleSwipeUpOptionState {
+  actionId: BrowserToolbarCenterCapsuleSwipeUpActionId;
+  title: string;
+  isSelected: boolean;
+}
+
 const TOOLBAR_CORE_ACTION_IDS: BrowserToolbarCoreActionId[] = [
   'webBack',
   'webForward',
@@ -73,6 +81,15 @@ const TOOLBAR_CORE_ACTION_IDS: BrowserToolbarCoreActionId[] = [
   'webReload',
   'openTabs',
   'newTab'
+];
+
+/**
+ * The middle bar's swipe-up opens one of two surfaces. Unlike the four configurable buttons it has
+ * no slot and no action catalog of its own, so its two choices are declared here and nowhere else.
+ */
+const BROWSER_TOOLBAR_CENTER_CAPSULE_SWIPE_UP_OPTIONS: BrowserToolbarCenterCapsuleSwipeUpOptionState[] = [
+  { actionId: 'tools', title: '打开工具面板', isSelected: false },
+  { actionId: 'tabs', title: '打开标签管理页', isSelected: false }
 ];
 
 export class BrowserToolbarCustomizationViewModel {
@@ -271,7 +288,8 @@ export class BrowserToolbarCustomizationViewModel {
       tabsSlotLongPressActionId: this.normalizeGestureActionId(settings.tabsSlotLongPressActionId, 'none'),
       leadingSlotSwipeUpActionId: this.normalizeGestureActionId(settings.leadingSlotSwipeUpActionId, 'home'),
       tabsSlotSwipeUpActionId: this.normalizeGestureActionId(settings.tabsSlotSwipeUpActionId, 'home'),
-      centerCapsuleSwipeUpActionId: settings.centerCapsuleSwipeUpActionId === 'tabs' ? 'tabs' : 'tools',
+      centerCapsuleSwipeUpActionId: this.normalizeCenterCapsuleSwipeUpActionId(
+        settings.centerCapsuleSwipeUpActionId),
       updatedAt: Number(settings.updatedAt) > 0 ? Math.floor(Number(settings.updatedAt)) : 0
     };
   }
@@ -510,6 +528,24 @@ export class BrowserToolbarCustomizationViewModel {
   }
 
   /**
+   * The middle bar's two swipe-up choices with the current one marked, in presentation order.
+   */
+  buildCenterCapsuleSwipeUpOptions(
+    settings: BrowserToolbarLayoutSettings
+  ): BrowserToolbarCenterCapsuleSwipeUpOptionState[] {
+    const selected = this.normalizeCenterCapsuleSwipeUpActionId(settings.centerCapsuleSwipeUpActionId);
+    return BROWSER_TOOLBAR_CENTER_CAPSULE_SWIPE_UP_OPTIONS.map((
+      option: BrowserToolbarCenterCapsuleSwipeUpOptionState
+    ): BrowserToolbarCenterCapsuleSwipeUpOptionState => {
+      return {
+        actionId: option.actionId,
+        title: option.title,
+        isSelected: option.actionId === selected
+      };
+    });
+  }
+
+  /**
    * The same settings with the middle bar's swipe-up behaviour replaced.
    *
    * The middle of the bottom bar is not one of the four configurable buttons, so it has no slot to go
@@ -520,8 +556,14 @@ export class BrowserToolbarCustomizationViewModel {
     actionId: string
   ): BrowserToolbarLayoutSettings {
     const next = this.normalizeSettings(settings);
-    next.centerCapsuleSwipeUpActionId = actionId === 'tabs' ? 'tabs' : 'tools';
+    next.centerCapsuleSwipeUpActionId = this.normalizeCenterCapsuleSwipeUpActionId(actionId);
     return next;
+  }
+
+  private normalizeCenterCapsuleSwipeUpActionId(
+    actionId: string | undefined
+  ): BrowserToolbarCenterCapsuleSwipeUpActionId {
+    return actionId === 'tabs' ? 'tabs' : 'tools';
   }
 
   private resolveDefaultInteractionActionId(

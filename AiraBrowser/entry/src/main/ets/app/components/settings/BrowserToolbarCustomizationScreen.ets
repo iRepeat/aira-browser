@@ -9,6 +9,7 @@ import {
   BrowserToolbarScrollBehaviorSettingsViewModel
 } from '../../../core/settings/BrowserToolbarScrollBehaviorSettingsViewModel';
 import {
+  BrowserToolbarCenterCapsuleSwipeUpOptionState,
   BrowserToolbarCustomizationState,
   BrowserToolbarCustomizationViewModel,
   BrowserToolbarInteractionActionId,
@@ -80,14 +81,11 @@ import { CenteredDialogSurface } from '../common/CenteredDialogSurface';
 const TOOLBAR_NEUTRAL_PRESSED_BACKGROUND: string = '#14000000';
 const TOOLBAR_PREVIEW_DEFAULT_WIDTH: number = 358;
 const TOOLBAR_SLOT_RADIO_GROUP_PREFIX: string = 'browser-toolbar-slot-action';
+const TOOLBAR_CENTER_CAPSULE_RADIO_GROUP: string = 'browser-toolbar-center-capsule-swipe-up';
 type BrowserToolbarSlotSheetMode = 'overview' | 'picker';
+/** Which question the toolbar's single Sheet is asking. */
+type BrowserToolbarSheetQuestion = 'slot' | 'center_capsule';
 export type BrowserToolbarDesktopView = 'overview' | 'scroll_behavior';
-
-export interface BrowserToolbarCenterSwipeUpOption {
-  actionId: string;
-  title: string;
-  selected: boolean;
-}
 
 @Component
 export struct BrowserToolbarCustomizationScreen {
@@ -130,9 +128,15 @@ export struct BrowserToolbarCustomizationScreen {
   @State private selectedInteractionKind: BrowserToolbarInteractionKind = 'tap';
   @State private slotSheetMode: BrowserToolbarSlotSheetMode = 'overview';
   @State private slotSheetRevision: number = 0;
-  @State private slotSheetVisible: boolean = false;
-  /** The middle bar's own sheet: the one part of the bar that has no slot to configure it. */
-  @State private centerSwipeUpSheetVisible: boolean = false;
+  /**
+   * One Sheet, two questions.
+   *
+   * A node can only host one sheet, and this screen needs a sheet for the four configurable buttons
+   * and one for the middle bar, which has no slot of its own. Binding two sheets to this page left
+   * only one of them reachable, so the question is state and the sheet itself is single.
+   */
+  @State private sheetQuestion: BrowserToolbarSheetQuestion = 'slot';
+  @State private sheetVisible: boolean = false;
   @State private desktopView: BrowserToolbarDesktopView = 'overview';
 
   aboutToAppear(): void {
@@ -150,23 +154,15 @@ export struct BrowserToolbarCustomizationScreen {
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.slotSheetVisible, this.buildSlotSelectionSheet(), {
+    .bindSheet($$this.sheetVisible, this.buildActiveSheet(), {
       preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
       height: SheetSize.LARGE,
       dragBar: !this.desktopPresentation,
       showClose: true,
       onDisappear: () => {
-        this.slotSheetVisible = false;
+        this.sheetVisible = false;
+        this.sheetQuestion = 'slot';
         this.slotSheetMode = 'overview';
-      }
-    })
-    .bindSheet($$this.centerSwipeUpSheetVisible, this.buildCenterSwipeUpSheet(), {
-      preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
-      height: SheetSize.FIT_CONTENT,
-      dragBar: !this.desktopPresentation,
-      showClose: true,
-      onDisappear: () => {
-        this.centerSwipeUpSheetVisible = false;
       }
     })
   }
@@ -367,25 +363,78 @@ export struct BrowserToolbarCustomizationScreen {
   }
 
   @Builder
-  private buildSlotSelectionSheet() {
+  private buildActiveSheet() {
     if (this.desktopPresentation) {
       CenteredDialogSurface({ fillHeight: true }) {
-        this.buildSlotSelectionSheetContent()
+        this.buildActiveSheetContent()
       }
     } else {
-      this.buildSlotSelectionSheetContent()
+      this.buildActiveSheetContent()
     }
   }
 
   @Builder
-  private buildSlotSelectionSheetContent() {
-    ForEach([this.resolveSlotSheetRenderKey()], (_renderKey: string) => {
-      if (this.slotSheetMode === 'picker') {
+  private buildActiveSheetContent() {
+    ForEach([this.resolveSheetRenderKey()], (_renderKey: string) => {
+      if (this.sheetQuestion === 'center_capsule') {
+        this.buildCenterCapsuleSwipeUpSheetContent()
+      } else if (this.slotSheetMode === 'picker') {
         this.buildInteractionActionPicker()
       } else {
         this.buildSlotInteractionOverview()
       }
     }, (renderKey: string) => renderKey)
+  }
+
+  /**
+   * The middle bar's own question, in the same shape as the slot overview above it: a title and
+   * native single-choice rows inside the group card every other sheet uses.
+   */
+  @Builder
+  private buildCenterCapsuleSwipeUpSheetContent() {
+    Column({ space: 16 }) {
+      Text('中间区域上滑')
+        .width('100%')
+        .fontSize(this.desktopPresentation ? 18 : 21)
+        .fontWeight(this.desktopPresentation ? FontWeight.Medium : FontWeight.Bold)
+        .fontColor(this.storedPrimaryTextColor)
+
+      this.buildCenterCapsuleSwipeUpOptionGroup(
+        this.viewModel.buildCenterCapsuleSwipeUpOptions(this.settings))
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, top: 18, bottom: 24 })
+    .backgroundColor(this.desktopPresentation ? Color.Transparent : this.resolvePageBackgroundColor())
+  }
+
+  @Builder
+  private buildCenterCapsuleSwipeUpOptionGroup(options: BrowserToolbarCenterCapsuleSwipeUpOptionState[]) {
+    SettingsGroupCard({
+      surfaceColor: this.storedSurfaceBackgroundColor,
+      desktopPresentation: this.desktopPresentation
+    }) {
+      ForEach(options, (option: BrowserToolbarCenterCapsuleSwipeUpOptionState, index: number) => {
+        SettingsOptionRow({
+          title: option.title,
+          desktopPresentation: this.desktopPresentation,
+          rowPosition: this.resolveSheetRowPosition(index, options.length),
+          isSelected: option.isSelected,
+          isEnabled: !this.saving,
+          radioGroup: TOOLBAR_CENTER_CAPSULE_RADIO_GROUP,
+          radioValue: option.actionId,
+          primaryTextColor: this.storedPrimaryTextColor,
+          secondaryTextColor: this.storedSecondaryTextColor,
+          selectedIndicatorColor: this.storedAccentColor,
+          onAction: (): void => {
+            this.applyCenterCapsuleSwipeUpActionId(option.actionId);
+          }
+        })
+        if (index < options.length - 1) {
+          SettingsGroupDivider({ dividerColor: this.storedDividerColor })
+        }
+      }, (option: BrowserToolbarCenterCapsuleSwipeUpOptionState) => option.actionId)
+    }
   }
 
   @Builder
@@ -535,7 +584,7 @@ export struct BrowserToolbarCustomizationScreen {
             desktopPresentation: this.desktopPresentation,
             helperText: action.subtitle,
             leadingAiraIconId: action.airaIconId,
-            rowPosition: this.resolveSlotSheetRowPosition(index, actions.length),
+            rowPosition: this.resolveSheetRowPosition(index, actions.length),
             isSelected: this.isInteractionActionSelected(action.id),
             isEnabled: !this.saving,
             radioGroup: `${TOOLBAR_SLOT_RADIO_GROUP_PREFIX}-${this.selectedSlotId}-${this.selectedInteractionKind}`,
@@ -656,12 +705,14 @@ export struct BrowserToolbarCustomizationScreen {
   private handleToolbarPreviewIntent(intent: BrowserBottomChromeTapIntent): void {
     if (!this.isToolbarSlotId(intent.slotId)) {
       // The preview's middle capsule, which is not one of the four buttons.
-      this.centerSwipeUpSheetVisible = true;
+      this.sheetQuestion = 'center_capsule';
+      this.sheetVisible = true;
       return;
     }
     this.selectedSlotId = intent.slotId as BrowserToolbarSlotId;
+    this.sheetQuestion = 'slot';
     this.slotSheetMode = 'overview';
-    this.slotSheetVisible = true;
+    this.sheetVisible = true;
   }
 
   private isToolbarSlotId(slotId: string): boolean {
@@ -720,7 +771,7 @@ export struct BrowserToolbarCustomizationScreen {
     ).filter((action: BrowserToolbarInteractionActionState): boolean => action.dispatchKind === dispatchKind);
   }
 
-  private resolveSlotSheetRowPosition(index: number, count: number): SettingsRowPosition {
+  private resolveSheetRowPosition(index: number, count: number): SettingsRowPosition {
     if (count <= 1) {
       return 'single';
     }
@@ -745,8 +796,9 @@ export struct BrowserToolbarCustomizationScreen {
     this.slotSheetRevision += 1;
   }
 
-  private resolveSlotSheetRenderKey(): string {
-    return `${this.slotSheetMode}|${this.selectedSlotId}|${this.selectedInteractionKind}|${this.slotSheetRevision}`;
+  private resolveSheetRenderKey(): string {
+    return `${this.sheetQuestion}|${this.slotSheetMode}|${this.selectedSlotId}|` +
+      `${this.selectedInteractionKind}|${this.slotSheetRevision}`;
   }
 
   private resolvePageBackgroundColor(): ResourceColor {
@@ -768,49 +820,8 @@ export struct BrowserToolbarCustomizationScreen {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  @Builder
-  private buildCenterSwipeUpSheet() {
-    Column({ space: 12 }) {
-      Text('中间区域上滑')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.storedPrimaryTextColor)
-
-      ForEach(this.buildCenterSwipeUpOptions(), (option: BrowserToolbarCenterSwipeUpOption) => {
-        Row() {
-          Text(option.title)
-            .fontSize(15)
-            .fontColor(this.storedPrimaryTextColor)
-            .layoutWeight(1)
-
-          Text(option.selected ? '\u2713' : '')
-            .fontSize(15)
-            .fontColor(this.storedAccentColor)
-        }
-        .width('100%')
-        .height(48)
-        .borderRadius(12)
-        .backgroundColor(this.storedResolvedThemeMode === 'dark' ? '#1FFFFFFF' : '#0F000000')
-        .onClick(() => {
-          this.applyCenterSwipeUpActionId(option.actionId);
-        })
-      }, (option: BrowserToolbarCenterSwipeUpOption) => option.actionId)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, bottom: 24 })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  private buildCenterSwipeUpOptions(): BrowserToolbarCenterSwipeUpOption[] {
-    const selected = this.settings.centerCapsuleSwipeUpActionId === 'tabs' ? 'tabs' : 'tools';
-    return [
-      { actionId: 'tools', title: '打开工具面板', selected: selected === 'tools' },
-      { actionId: 'tabs', title: '打开标签管理页', selected: selected === 'tabs' }
-    ];
-  }
-
   /** The middle bar's choice, saved through the same path the slots use. */
-  private applyCenterSwipeUpActionId(actionId: string): void {
+  private applyCenterCapsuleSwipeUpActionId(actionId: string): void {
     if (this.saving) {
       return;
     }
