@@ -1,6 +1,7 @@
 import { BrowserTabRuntimePatch, BrowserTabState } from '../../core/tabs/TabManager';
 import { WebRecoveryManager } from '../../core/web/WebRecoveryManager';
 import { normalizeNavigationTarget } from '../../core/browser/AddressDisplayFormatter';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 
 export interface BrowserRestorableNavigationRecoveryRequest {
   tabId: string;
@@ -28,6 +29,14 @@ export interface BrowserTransientRestoreRetryRequest {
 export class BrowserRuntimeNavigationRecoveryService {
   restoreWebViewToRestorableUrl(request: BrowserRestorableNavigationRecoveryRequest): void {
     const normalizedFallbackUrl = normalizeNavigationTarget(request.fallbackUrl);
+    AiraNavForensicsProbe.logDownloadRewind(
+      'RuntimeNavigationRecovery',
+      request.tabId,
+      request.skippedUrl,
+      request.fallbackUrl,
+      '',
+      request.reason
+    );
     if (normalizedFallbackUrl.length <= 0 ||
       normalizeNavigationTarget(request.skippedUrl) === normalizedFallbackUrl) {
       return;

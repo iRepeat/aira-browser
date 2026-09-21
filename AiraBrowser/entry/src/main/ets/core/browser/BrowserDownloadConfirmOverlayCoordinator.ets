@@ -44,6 +44,8 @@ export class BrowserDownloadConfirmOverlayCoordinator {
   private pendingPrompt?: PendingDownloadPromptState = undefined;
   private pendingPromptTabId: string = '';
   private activeLeaseId: string = '';
+  /** Prompt guids whose one allowed navigation rewind has already been applied. */
+  private rewoundPromptGuids: Record<string, boolean | undefined> = {};
   private decisionWaiter?: BrowserDownloadConfirmDecisionWaiter = undefined;
 
   constructor(
@@ -94,7 +96,14 @@ export class BrowserDownloadConfirmOverlayCoordinator {
     }
     if (!inlineDocumentResolution.shouldPreserveStableDocument) {
       this.navigationStateCoordinator.markDownloadUrlHandled(prompt.url);
-      this.navigationStateCoordinator.resetPromptNavigationState(prompt.url);
+      // A pending download can be re-presented after a shell foreground resume (the overlay is reset and
+      // rebuilt from the download service). Rewinding the tab for the same download more than once drags a
+      // page the user is already reading back to an older URL, so the rewind belongs to the first
+      // presentation of that guid only.
+      if (this.rewoundPromptGuids[prompt.guid] !== true) {
+        this.rewoundPromptGuids[prompt.guid] = true;
+        this.navigationStateCoordinator.resetPromptNavigationState(prompt.url);
+      }
     }
     this.activeLeaseId = presentation.lease.id;
     if (!inlineDocumentResolution.shouldPreserveStableDocument) {
@@ -214,6 +223,7 @@ export class BrowserDownloadConfirmOverlayCoordinator {
     const host = this.host;
     const prompt = this.pendingPrompt ?? this.downloadService.getPendingDownloadPrompt();
     const effectiveGuid = prompt?.guid ?? guid;
+    this.forgetRewoundPrompt(effectiveGuid);
     this.completeDecisionWaiter(effectiveGuid);
     const beginFacts = host.resolveFacts();
     if (prompt !== undefined) {
@@ -230,6 +240,7 @@ export class BrowserDownloadConfirmOverlayCoordinator {
     const host = this.host;
     const prompt = this.pendingPrompt ?? this.downloadService.getPendingDownloadPrompt();
     const effectiveGuid = prompt?.guid ?? guid;
+    this.forgetRewoundPrompt(effectiveGuid);
     this.completeDecisionWaiter(effectiveGuid);
     const facts = host.resolveFacts();
     if (prompt !== undefined) {
@@ -240,6 +251,14 @@ export class BrowserDownloadConfirmOverlayCoordinator {
     if (!canceled) {
       host.showToast('当前下载暂时不能取消。');
     }
+  }
+
+  private forgetRewoundPrompt(guid: string): void {
+    const normalizedGuid = guid.trim();
+    if (normalizedGuid.length <= 0) {
+      return;
+    }
+    this.rewoundPromptGuids[normalizedGuid] = undefined;
   }
 
   private publishPendingPrompt(prompt?: PendingDownloadPromptState): void {

@@ -127,6 +127,7 @@ import { BrowserQuickSearchSwitchingCoordinator } from '../search/BrowserQuickSe
 import { webview } from '@kit.ArkWeb';
 import { BrowserUrlThreatProtectionCoordinator } from './BrowserUrlThreatProtectionCoordinator';
 import { sharedBrowserContinuationCoordinator } from './BrowserContinuationCoordinator';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 
 const BROWSER_HOME_SUBMIT_DIAGNOSTIC_DOMAIN: number = 0x0000;
 const BROWSER_HOME_SUBMIT_DIAGNOSTIC_TAG: string = 'HomeSearchDiag';
@@ -714,6 +715,7 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
     this.dependencies.backgroundSessionSyncCoordinator.clearRuntimePageBehavior(tabId, 'page_begin');
     this.handlePullRefreshPageBegin(tabId);
     const visibleEventUrl = this.dependencies.visibleUrlService.resolveVisibleUrl(event.url);
+    AiraNavForensicsProbe.logPageEvent(tabId, 'page_begin', visibleEventUrl);
     const errorDocumentUrl = this.errorDocumentLoadCoordinator.resolveLoadFailureTargetUrl(tabId);
     if (this.dependencies.loadFailureSurfaceCoordinator.shouldIgnoreRepeatedMainFrameError(tabId, errorDocumentUrl)) {
       this.dependencies.offlineFastFailureCoordinator.cancelForTab(tabId);
@@ -814,6 +816,7 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
 
   private handlePageEndTransaction(tabId: string, event: OnPageEndEvent): void {
     const visibleEventUrl = this.dependencies.visibleUrlService.resolveVisibleUrl(event.url);
+    AiraNavForensicsProbe.logPageEvent(tabId, 'page_end', visibleEventUrl);
     this.dependencies.offlineFastFailureCoordinator.cancelForTab(tabId);
     if (this.dependencies.loadFailureSurfaceCoordinator.isWebDocumentLoading(tabId)) {
       this.errorDocumentLoadCoordinator.markCommitted(
@@ -1048,6 +1051,7 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
       tabId,
       committedUrl,
       details.isMainFrame,
+      details.isSameDocument === true,
       shouldHandleActiveTab,
       commit,
       this.followupHost
@@ -1337,13 +1341,8 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
       .shouldSkipTabStatePersistence(tabId, url, 'history_api_url_change')) {
       return;
     }
-    this.applyTabPatch(tabId, {
-      url: url,
-      pendingUrl: url,
-      isHome: false,
-      runtimeState: 'active'
-    }, false);
     this.dependencies.runtimeLifecyclePort.patchRuntimeNavigationState(tabId, url);
+    this.applySameDocumentCommittedPatch(tabId, url, tab.title);
     this.dependencies.commitCoordinator.recordNavigationMetadata(
       this.dependencies.tabManager,
       tabId,
@@ -1353,11 +1352,6 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
     );
     this.dependencies.runtimeLifecyclePort.rememberProvisionalNavigation(tabId, url);
     if (this.shouldHandleActiveWebTab(tabId)) {
-      this.publishActiveDocumentState({
-        currentUrl: url,
-        pendingWebUrl: url,
-        addressInput: this.resolveCommittedAddressDisplayText(url)
-      });
       this.dependencies.navigationStateSyncCoordinator.syncSoon();
     }
     this.featureEffectsCoordinator.applyHistoryUrlRuntimeEffects(
@@ -1518,8 +1512,8 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
       rememberProvisionalTabNavigation: (tabId: string, url: string): void => {
         this.dependencies.runtimeLifecyclePort.rememberProvisionalNavigation(tabId, url);
       },
-      applyNavigationCommittedPatch: (tabId: string, url: string): void => {
-        this.applyNavigationCommittedPatch(tabId, url);
+      applyNavigationCommittedPatch: (tabId: string, url: string, isSameDocument: boolean): void => {
+        this.applyNavigationCommittedPatch(tabId, url, isSameDocument);
       },
       updateActiveCommittedUrl: (url: string): void => {
         this.updateActiveCommittedUrl(url);
@@ -1540,7 +1534,7 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
     };
   }
 
-  private applyNavigationCommittedPatch(tabId: string, url: string): void {
+  private applyNavigationCommittedPatch(tabId: string, url: string, isSameDocument: boolean = false): void {
     if (this.dependencies.downloadNavigationStateCoordinator.shouldSkipTabStatePersistence(
       tabId,
       url,
@@ -1557,6 +1551,10 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
       tabId,
       committedUrl
     );
+    if (isSameDocument) {
+      this.applySameDocumentCommittedPatch(tabId, committedUrl, nextTitle);
+      return;
+    }
     this.applyTabPatch(tabId, {
       title: nextTitle,
       url: committedUrl,
@@ -1573,6 +1571,45 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
       pendingWebUrl: committedUrl,
       addressInput: this.resolveCommittedAddressDisplayText(committedUrl),
       currentTitle: nextTitle
+    });
+  }
+
+  /**
+   * A same-document navigation (History API, fragment, SPA route) commits a new entry without loading a
+   * document. The tab is now on this URL, so the restorable state has to follow it: only a full document
+   * load advances it otherwise, which would leave a client-side route restorable only as far as the last
+   * real document (for a site entered from its own home page, that is exactly the site's first page).
+   *
+   * The persisted WebState still describes the document that was current before this route change, so it is
+   * dropped instead of being replayed as if it were this page; the next snapshot persist writes the
+   * session that matches the new route.
+   */
+  private applySameDocumentCommittedPatch(tabId: string, committedUrl: string, title: string): void {
+    const sessionPatch = this.dependencies.sessionStateStore.buildLoadSuccessPatch(committedUrl, title);
+    const hasTitle = title.trim().length > 0;
+    this.applyTabPatch(tabId, {
+      title: hasTitle ? sessionPatch.lastGoodTitle : undefined,
+      url: committedUrl,
+      pendingUrl: committedUrl,
+      isHome: false,
+      runtimeState: 'active',
+      lastError: '',
+      lastLoadedAt: sessionPatch.lastLoadedAt,
+      lastGoodUrl: sessionPatch.lastGoodUrl,
+      lastGoodTitle: sessionPatch.lastGoodTitle,
+      lastRestorableUrl: sessionPatch.lastRestorableUrl,
+      lastRestorableTitle: sessionPatch.lastRestorableTitle,
+      webStatePath: '',
+      webStateUpdatedAt: 0
+    }, false);
+    if (!this.shouldHandleActiveWebTab(tabId)) {
+      return;
+    }
+    this.publishActiveDocumentState({
+      currentUrl: committedUrl,
+      pendingWebUrl: committedUrl,
+      addressInput: this.resolveCommittedAddressDisplayText(committedUrl),
+      currentTitle: hasTitle ? sessionPatch.lastGoodTitle : undefined
     });
   }
 

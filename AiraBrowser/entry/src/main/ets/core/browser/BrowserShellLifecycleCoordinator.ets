@@ -73,6 +73,7 @@ import { ElementInspectionSessionCoordinator } from './ElementInspectionSessionC
 import { BrowserTransientSurfaceId } from './BrowserTransientSurfaceCoordinator';
 import { HomeSearchPanelDetent } from './HomeSearchPanelDetentViewModel';
 import { BrowserRootBottomPanelSessionCoordinator } from './BrowserRootBottomPanelSessionCoordinator';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 
 export interface BrowserShellLifecycleFacts {
   tabs: BrowserTabState[];
@@ -269,6 +270,7 @@ export class BrowserShellLifecycleCoordinator {
   }
 
   handleDisappear(): void {
+    AiraNavForensicsProbe.markBackground('shell-disappear', this.shell.readFacts().currentWindowId);
     this.shell.captureLifecycleExitPreview();
     this.shell.setBrowserShellVisible(false);
     this.shell.setStartupHomeSurfacePending(false);
@@ -313,6 +315,7 @@ export class BrowserShellLifecycleCoordinator {
   }
 
   handlePageShow(): void {
+    AiraNavForensicsProbe.markForeground('shell-page-show', this.shell.readFacts().currentWindowId);
     this.shell.setBrowserShellVisible(true);
     this.dependencies.readerModeCoordinator.resetSpeechAfterLifecycleResume();
     this.dependencies.windowContextCoordinator.resolveCurrentScope();

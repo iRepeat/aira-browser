@@ -7,6 +7,7 @@ import { WebStateSnapshotRecord, WebStateSnapshotStore } from '../web/WebStateSn
 import { BrowserFaultClassifier } from './BrowserFaultClassifier';
 import { BrowserHostedWebNodeDisposeReason } from './BrowserRuntimeActionReason';
 import { BrowserRuntimeLifecyclePort } from '../../services/web/BrowserRuntimeLifecyclePort';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 
 export interface BrowserActiveTabRestoreResolution {
   restorePlan: WebRestoreRecoveryPlan;
@@ -346,10 +347,18 @@ export class BrowserTabRecoveryCoordinator {
       snapshotReason
     );
     if (!precondition.shouldAttempt && precondition.resolution !== undefined) {
+      AiraNavForensicsProbe.logSnapshotPersist(
+        tab?.id ?? '',
+        snapshotReason,
+        precondition.resolution.status,
+        `reason=${precondition.resolution.reason} attached=${controllerAttached ? 1 : 0} ` +
+          `hasController=${hasController ? 1 : 0}`
+      );
       return precondition.resolution;
     }
     const targetTab = tab as BrowserTabState;
     if (serializedWebState === undefined || serializedWebState === null || serializedWebState.byteLength <= 0) {
+      AiraNavForensicsProbe.logSnapshotPersist(targetTab.id, snapshotReason, 'skipped', 'reason=empty_web_state');
       return this.buildSnapshotPersistResolution(
         'skipped',
         'empty_web_state',
@@ -362,6 +371,7 @@ export class BrowserTabRecoveryCoordinator {
     try {
       const snapshot = await snapshotStore.saveSnapshot(targetTab.id, serializedWebState);
       if (snapshot === undefined) {
+        AiraNavForensicsProbe.logSnapshotPersist(targetTab.id, snapshotReason, 'failed', 'reason=save_returned_empty');
         return this.buildSnapshotPersistResolution(
           'failed',
           'save_returned_empty',
@@ -371,6 +381,12 @@ export class BrowserTabRecoveryCoordinator {
           true
         );
       }
+      AiraNavForensicsProbe.logSnapshotPersist(
+        targetTab.id,
+        snapshotReason,
+        'saved',
+        `bytes=${serializedWebState.byteLength} path=${snapshot.path}`
+      );
       return {
         status: 'saved',
         reason: 'saved',

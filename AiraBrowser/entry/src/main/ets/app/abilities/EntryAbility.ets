@@ -31,6 +31,7 @@ import {
   sharedUserScriptInstallSessionCoordinator
 } from '../bootstrap/BrowserAppRuntime';
 import { AiraLoadScrollJankProbe } from '../../common/debug/AiraLoadScrollJankProbe';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 import { AppRuntimeContext } from '../runtime/AppRuntimeContext';
 import { BROWSER_SHELL_ROUTE, STARTUP_WELCOME_INTRO_ROUTE } from '../router/AppRoutes';
 import { BrowserTabSessionRuntime } from '../runtime/BrowserTabSessionRuntime';
@@ -213,6 +214,9 @@ export default class EntryAbility extends UIAbility {
     // Temporary [DEBUG-load-scroll-jank-7c4d] probe: subscribe to the platform's own scroll and
     // main-thread jank events before the first Web is created.
     AiraLoadScrollJankProbe.installPlatformJankWatchers();
+    AiraNavForensicsProbe.install((line: string): void => {
+      hilog.info(0x0000, 'NavForensics', `[NAV-FORENSICS-1f4a] %{public}s`, line);
+    });
     sharedSitePolicyService.acquirePermissionSession();
     this.permissionSessionAcquired = true;
     sharedAppCrashDiagnosticsService.initialize(this.context, launchParam);
@@ -470,6 +474,7 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     this.appInForeground = true;
     const windowId = BrowserWindowRuntime.resolveWindowIdFromStorage(this.pageStorage);
+    AiraNavForensicsProbe.markForeground('entry-ability', windowId);
     BrowserWindowRuntime.markWindowForeground(windowId);
     const arkWebTimerTransition = sharedBrowserArkWebProcessLifecycleCoordinator.resumeForProcessForeground();
     this.recordArkWebTimerTransition(arkWebTimerTransition);
@@ -497,6 +502,7 @@ export default class EntryAbility extends UIAbility {
   onBackground(): void {
     this.appInForeground = false;
     this.currentWindowId = BrowserWindowRuntime.resolveWindowIdFromStorage(this.pageStorage);
+    AiraNavForensicsProbe.markBackground('entry-ability', this.currentWindowId);
     this.applyContinuationMissionState(false);
     BrowserWindowRuntime.markWindowBackground(this.currentWindowId);
     BrowserWindowRuntime.reconcileSessionLifetime(this.browserWindowSessionId, false);

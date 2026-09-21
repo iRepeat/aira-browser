@@ -5,6 +5,7 @@ import {
   WebSessionRestoreType
 } from '../../common/models/BrowserModels';
 import { BrowserTabRuntimePatch, BrowserTabState } from '../tabs/TabManager';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 import { WebRecoveryManager, WebRestoreRecoveryPlan } from '../web/WebRecoveryManager';
 import { WebSessionStateStore } from '../web/WebSessionStateStore';
 import { BrowserDownloadNavigationStateCoordinator } from './BrowserDownloadNavigationStateCoordinator';
@@ -62,6 +63,15 @@ export class BrowserRestoreCoordinator {
     const restoreType = this.resolveRestoreType(basePlan);
     const targetUrl = this.resolveRestoreTargetUrl(tab, basePlan, effectiveReason);
     const restorePlan = this.copyRestorePlan(basePlan, targetUrl);
+    AiraNavForensicsProbe.logRestoreDecision(
+      'BrowserRestoreCoordinator',
+      tab.id,
+      `${reason}->${effectiveReason}`,
+      targetUrl,
+      restorePlan.attemptSnapshotRestore ? restorePlan.snapshotPath : '',
+      `state=${tab.runtimeState} lastGood=${tab.lastGoodUrl} lastRestorable=${tab.lastRestorableUrl} ` +
+        `pending=${tab.pendingUrl} url=${tab.url} historyIndex=${tab.navigationIndex}`
+    );
     const trace = this.createTrace(tab, effectiveReason, restoreType, restorePlan);
     const restoreTypePatch = sessionStateStore.buildRestoreTypePatch(restoreType, tab);
     return {

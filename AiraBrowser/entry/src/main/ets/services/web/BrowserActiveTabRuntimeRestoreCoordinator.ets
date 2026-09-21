@@ -4,6 +4,7 @@ import {
   TabRestoreReason
 } from '../../common/models/BrowserModels';
 import { BrowserFaultClassifier } from '../../core/browser/BrowserFaultClassifier';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 import {
   BrowserRestoreCoordinator,
   BrowserRestoreTrace
@@ -483,6 +484,7 @@ export class BrowserActiveTabRuntimeRestoreCoordinator {
     failurePrefix: string,
     exceptionPrefix: string
   ): string {
+    AiraNavForensicsProbe.logLoadIssued('ActiveTabRuntimeRestore', tabId, targetUrl, true);
     try {
       if (this.dependencies.webLoadRuntimeCoordinator.loadUrlForTab(tabId, targetUrl, true)) {
         return '';

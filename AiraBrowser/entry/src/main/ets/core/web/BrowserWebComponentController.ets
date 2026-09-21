@@ -1,4 +1,5 @@
 import { webview } from '@kit.ArkWeb';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 import {
   BrowserUnifiedLinkResult,
   BrowserUnifiedLinkSource
@@ -253,6 +254,7 @@ export class BrowserWebComponentController {
     this.restoringWebState = true;
     try {
       controller.restoreWebState(payload);
+      AiraNavForensicsProbe.logWebStateRestore(this.tabId, payload.byteLength, true, 'restored');
       host.recordRuntimeEvent('web_component_web_state_restored', `bytes=${payload.byteLength}`, this.tabId);
       return {
         restored: true,

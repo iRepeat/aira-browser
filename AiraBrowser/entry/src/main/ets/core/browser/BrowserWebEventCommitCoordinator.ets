@@ -171,7 +171,7 @@ export interface BrowserWebFollowupEventHost {
   setPageProgress: (pageProgress: number) => void;
   rememberTabNavigation: (tabId: string, url: string) => void;
   rememberProvisionalTabNavigation: (tabId: string, url: string) => void;
-  applyNavigationCommittedPatch: (tabId: string, url: string) => void;
+  applyNavigationCommittedPatch: (tabId: string, url: string, isSameDocument: boolean) => void;
   updateActiveCommittedUrl: (url: string) => void;
   shouldSkipTabStatePersistence: (tabId: string, url: string) => boolean;
   applyTabTitle: (tabId: string, title: string) => void;
@@ -355,13 +355,14 @@ export class BrowserWebEventCommitCoordinator {
     tabId: string,
     committedUrl: string,
     isMainFrame: boolean,
+    isSameDocument: boolean,
     shouldHandleActiveTab: boolean,
     commit: BrowserWebFollowupCommit,
     host: BrowserWebFollowupEventHost
   ): void {
     if (isMainFrame && committedUrl.length > 0 && !host.shouldSkipTabStatePersistence(tabId, committedUrl)) {
       host.rememberProvisionalTabNavigation(tabId, committedUrl);
-      host.applyNavigationCommittedPatch(tabId, committedUrl);
+      host.applyNavigationCommittedPatch(tabId, committedUrl, isSameDocument);
       if (shouldHandleActiveTab) {
         host.updateActiveCommittedUrl(committedUrl);
       }

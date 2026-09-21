@@ -1,4 +1,5 @@
 import { TabRecord } from '../../common/models/BrowserModels';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 import {
   ArkBrowserNonRestorableNavigationGuardStore,
   BrowserNonRestorableNavigationGuardRecord,
@@ -39,6 +40,10 @@ export interface BrowserDownloadNavigationLifecycleHost {
   resolveTab: (tabId: string) => BrowserTabState | undefined;
   resolveActiveTab: () => BrowserTabState | undefined;
   resolveLastKnownUrl: (tabId: string) => string;
+  /**
+   * The URL the tab is on right now, as ArkWeb reports it. A download must never rewind past this.
+   */
+  resolveLiveDocumentUrl?: (tabId: string) => string;
   applyTabPatch: (tabId: string, patch: BrowserTabRuntimePatch, persistTabs: boolean) => void;
   clearDownloadSnapshotForTab: (tab: BrowserTabState, reason: string) => void;
   applyActiveTabShellState: () => void;
@@ -103,7 +108,9 @@ export class BrowserDownloadNavigationStateCoordinator {
           resetResult.patch.lastRestorableUrl ??
           resetResult.patch.lastGoodUrl ??
           '';
-        if (restoredUrl.length > 0) {
+        // Same rule as the prompt path: repair the record, but do not re-issue a load for a document
+        // ArkWeb is already showing. Reloading it here would clear the tab's history for nothing.
+        if (restoredUrl.length > 0 && !this.isLiveDocumentUnchanged(tabId, restoredUrl)) {
           lifecycleHost.restoreWebViewToRestorableUrl(tabId, url, restoredUrl, `download_navigation_${phase}`);
         }
       }
@@ -395,9 +402,27 @@ export class BrowserDownloadNavigationStateCoordinator {
     lifecycleHost.applyTabPatch(activeTab.id, resetPatch, true);
     lifecycleHost.applyActiveTabShellState();
     const restoredUrl = resetPatch.url ?? resetPatch.lastRestorableUrl ?? resetPatch.lastGoodUrl ?? '';
-    if (restoredUrl.length > 0) {
+    // The prompt can be re-presented on every shell foreground resume. When the page itself never moved
+    // (the download came from an ad frame or a subresource), re-issuing the load would rewind a page the
+    // user is still reading and clear its history. The tab record is already repaired above, so the
+    // visible document is left exactly where it is.
+    if (restoredUrl.length > 0 && !this.isLiveDocumentUnchanged(activeTab.id, restoredUrl)) {
       lifecycleHost.restoreWebViewToRestorableUrl(activeTab.id, promptUrl, restoredUrl, 'download_prompt');
     }
+  }
+
+  /**
+   * True when ArkWeb is still showing the URL the tab record now points at, i.e. the download never
+   * replaced the tab's own document. Rewinding is then pointless and harmful.
+   */
+  private isLiveDocumentUnchanged(tabId: string, targetUrl: string): boolean {
+    const liveDocumentUrl = this.resolveLiveDocumentUrl(tabId);
+    if (liveDocumentUrl.length <= 0) {
+      return false;
+    }
+    const normalizedLiveUrl = this.normalizeUrl(liveDocumentUrl);
+    const normalizedTargetUrl = this.normalizeUrl(targetUrl);
+    return normalizedLiveUrl.length > 0 && normalizedLiveUrl === normalizedTargetUrl;
   }
 
   sanitizeRuntimeNavigationState(tabId: string, downloadUrl: string, source: string): void {
@@ -652,18 +677,54 @@ export class BrowserDownloadNavigationStateCoordinator {
     normalizedDownloadUrl: string,
     previousStableUrl: string
   ): string {
-    const normalizedPreviousStableUrl = this.normalizeUrl(previousStableUrl);
-    if (normalizedPreviousStableUrl.length > 0 && normalizedPreviousStableUrl !== normalizedDownloadUrl) {
-      return previousStableUrl.trim();
+    const resolved = this.resolveFallbackUrlInternal(tab, normalizedDownloadUrl, previousStableUrl);
+    AiraNavForensicsProbe.logDownloadRewind(
+      'DownloadNavigationState',
+      tab.id,
+      normalizedDownloadUrl,
+      resolved,
+      this.resolveLiveDocumentUrl(tab.id),
+      `state=${tab.runtimeState} lastGood=${tab.lastGoodUrl} lastRestorable=${tab.lastRestorableUrl} ` +
+        `pending=${tab.pendingUrl} url=${tab.url} prevStable=${previousStableUrl}`
+    );
+    return resolved;
+  }
+
+  private resolveFallbackUrlInternal(
+    tab: BrowserTabState,
+    normalizedDownloadUrl: string,
+    previousStableUrl: string
+  ): string {
+    // A download that did not take over the tab's own document (an ad frame, a subresource, a
+    // background fetch) must not move the page at all: the tab is still on its current URL and that
+    // URL is what the user must come back to. Only when the download url is the page the tab left
+    // (or is about to leave) is a rewind meaningful.
+    const normalizedTabUrl = this.normalizeUrl(tab.url);
+    const normalizedPendingUrl = this.normalizeUrl(tab.pendingUrl);
+    const liveDocumentUrl = this.resolveLiveDocumentUrl(tab.id);
+    const normalizedLiveDocumentUrl = this.normalizeUrl(liveDocumentUrl);
+    const downloadTookOverDocument = normalizedDownloadUrl === normalizedTabUrl ||
+      normalizedDownloadUrl === normalizedPendingUrl ||
+      normalizedDownloadUrl === normalizedLiveDocumentUrl;
+    if (!downloadTookOverDocument && normalizedLiveDocumentUrl.length > 0) {
+      return liveDocumentUrl;
+    }
+    // `previousStableUrl` is the runtime's last committed document. It legitimately lags when the
+    // download guard suppressed that commit, and rewinding to a stale document is exactly the bug the
+    // caller is trying to undo, so the tab's own last good page is preferred over it.
+    const lastGoodUrl = tab.lastGoodUrl.trim();
+    if (this.normalizeUrl(lastGoodUrl).length > 0 &&
+      this.normalizeUrl(lastGoodUrl) !== normalizedDownloadUrl) {
+      return lastGoodUrl;
     }
     const lastRestorableUrl = tab.lastRestorableUrl.trim();
     if (this.normalizeUrl(lastRestorableUrl).length > 0 &&
       this.normalizeUrl(lastRestorableUrl) !== normalizedDownloadUrl) {
       return lastRestorableUrl;
     }
-    const lastGoodUrl = tab.lastGoodUrl.trim();
-    if (this.normalizeUrl(lastGoodUrl).length > 0 && this.normalizeUrl(lastGoodUrl) !== normalizedDownloadUrl) {
-      return lastGoodUrl;
+    const normalizedPreviousStableUrl = this.normalizeUrl(previousStableUrl);
+    if (normalizedPreviousStableUrl.length > 0 && normalizedPreviousStableUrl !== normalizedDownloadUrl) {
+      return previousStableUrl.trim();
     }
     for (let index = tab.navigationHistory.length - 1; index >= 0; index -= 1) {
       const candidate = tab.navigationHistory[index].trim();
@@ -678,6 +739,18 @@ export class BrowserDownloadNavigationStateCoordinator {
       return tab.pendingUrl.trim();
     }
     return '';
+  }
+
+  private resolveLiveDocumentUrl(tabId: string): string {
+    const lifecycleHost = this.lifecycleHost;
+    if (lifecycleHost?.resolveLiveDocumentUrl === undefined) {
+      return '';
+    }
+    try {
+      return lifecycleHost.resolveLiveDocumentUrl(tabId).trim();
+    } catch (_error) {
+      return '';
+    }
   }
 
   private buildPromptResetPatch(sourcePatch: BrowserTabRuntimePatch | undefined): BrowserTabRuntimePatch {

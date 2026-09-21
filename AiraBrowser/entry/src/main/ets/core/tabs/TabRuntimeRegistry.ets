@@ -7,6 +7,7 @@ import {
   WebTabRuntimePatch,
   WebTabRuntimeRecord
 } from '../web/WebTabRuntime';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 
 export interface EnsureTabRuntimeResult {
   runtime: WebTabRuntimeRecord;
@@ -74,6 +75,17 @@ export class TabRuntimeRegistry {
     const runtime = this.runtimes[tabId];
     if (runtime === undefined) {
       return undefined;
+    }
+    if (patch.state !== undefined || patch.hasLiveController !== undefined ||
+      patch.currentUrl !== undefined || patch.lastKnownUrl !== undefined) {
+      AiraNavForensicsProbe.logRuntimeState(
+        tabId,
+        `${runtime.state}->${patch.state ?? runtime.state}`,
+        patch.hasLiveController ?? runtime.hasLiveController,
+        `current:${runtime.currentUrl}->${patch.currentUrl ?? runtime.currentUrl} ` +
+          `lastKnown:${runtime.lastKnownUrl}->${patch.lastKnownUrl ?? runtime.lastKnownUrl} ` +
+          `pending:${runtime.pendingUrl}->${patch.pendingUrl ?? runtime.pendingUrl}`
+      );
     }
     const nextRuntime = this.runtimeFactory.patchRuntime(runtime, patch);
     this.runtimes[tabId] = nextRuntime;

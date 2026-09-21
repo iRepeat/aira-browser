@@ -16,6 +16,7 @@ import {
 } from '../../common/models/BrowserModels';
 import { BrowserTabRuntimePatch, BrowserTabState, BrowserTabManagerPort } from '../../core/tabs/TabManager';
 import { BrowserDownloadNavigationStateCoordinator } from '../../core/browser/BrowserDownloadNavigationStateCoordinator';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 import { TabMutationCommitOptions } from '../../core/browser/BrowserShellRuntimeContracts';
 import { WebEventRouter } from '../../core/web/WebEventRouter';
 import { WebRecoveryManager } from '../../core/web/WebRecoveryManager';
@@ -640,6 +641,12 @@ export class BrowserWebLoadRuntimeCoordinator implements BrowserWebLoadExecution
     primeNavigationFeedback: boolean = true
   ): boolean {
     const startedAt = Date.now();
+    AiraNavForensicsProbe.logLoadIssued(
+      `WebLoadRuntime:${loadPlan.source}`,
+      loadPlan.tabId,
+      loadPlan.targetUrl,
+      loadPlan.clearHistory
+    );
     hilog.info(
       BROWSER_HOME_SUBMIT_DIAGNOSTIC_DOMAIN,
       BROWSER_HOME_SUBMIT_DIAGNOSTIC_TAG,
