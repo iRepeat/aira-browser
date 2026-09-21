@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 import { FrameCallback, KeyboardAvoidMode, window } from '@kit.ArkUI';
 import { accessibility } from '@kit.AccessibilityKit';
 import {
@@ -1340,6 +1341,20 @@ struct BrowserShellPage {
         this.tabManager.getActiveTab(this.tabs, this.activeTabId),
       resolveLastKnownUrl: (tabId: string): string =>
         this.browserRuntimeLifecyclePort.resolveRuntimeLastKnownUrl(tabId),
+      // The document ArkWeb is really showing. A download prompt must never rewind a tab past this,
+      // otherwise an ad-frame or subresource download drags an unchanged page back to an older URL
+      // (and re-loads it with clearHistory), which then survives every foreground resume.
+      resolveLiveDocumentUrl: (tabId: string): string => {
+        const controller = this.browserRuntimeLifecyclePort.resolveController(tabId);
+        if (controller === undefined) {
+          return '';
+        }
+        try {
+          return `${controller.getUrl() ?? ''}`.trim();
+        } catch (_error) {
+          return '';
+        }
+      },
       applyTabPatch: (tabId: string, patch: BrowserTabRuntimePatch, persistTabs: boolean): void => {
         this.browserTabSwitchCoordinator.applyTabPatch(tabId, patch, {
           persistTabs: persistTabs
@@ -5689,9 +5704,6 @@ struct BrowserShellPage {
    * The overview is entered while the finger is still down, and the finger keeps driving the entry:
    * these offsets are the finger's travel since the drag was claimed, republished for the overlay.
    */
-  @State tabsOverviewEntryGestureActive: boolean = false;
-  @State tabsOverviewEntryGestureOffsetX: number = 0;
-  @State tabsOverviewEntryGestureOffsetY: number = 0;
   @State @Watch('handleTabsOverviewSnapshotPipelineStateChanged')
   tabsOverviewSnapshotPipelineState: BrowserTabsOverviewSnapshotPipelineState =
     this.tabsOverviewSnapshotPipelineCoordinator.buildIdleState();
@@ -7194,8 +7206,8 @@ struct BrowserShellPage {
       tabSwipeTargetAddress: this.addressBarTabSwipeState.targetAddress,
       tabSwipeDirection: this.addressBarTabSwipeState.direction,
       onTabSwipe: (event) => this.browserAddressBarTabSwipeCoordinator.handle(event),
-      onTabsOverviewEntryGesture: (phase, offsetX, offsetY) => {
-        this.handleTabsOverviewEntryGesture(phase, offsetX, offsetY);
+      onOpenTabsOverview: () => {
+        this.handleTabsOverviewEntryGesture();
       },
       presentationChannel: renderContext.presentationChannel,
       privateMode: this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate(),
@@ -7965,9 +7977,6 @@ struct BrowserShellPage {
       ),
       entrySharedSnapshotState: this.tabsSharedSnapshotState,
       entrySharedSnapshotBackgroundColor: this.getWebViewportTopSafeAreaBackgroundColor(),
-      entryGestureActive: this.tabsOverviewEntryGestureActive,
-      entryGestureOffsetX: this.tabsOverviewEntryGestureOffsetX,
-      entryGestureOffsetY: this.tabsOverviewEntryGestureOffsetY,
       onDismiss: () => {
         this.dispatchTabsOverviewSession({ type: 'dismiss_to_home' });
       },
@@ -9407,24 +9416,25 @@ struct BrowserShellPage {
    * page is captured and the entry begins under the finger. Every later frame is republished so the
    * overview's entry follows the finger, and 'end' hands it back to the normal settling path.
    */
-  private handleTabsOverviewEntryGesture(
-    phase: 'start' | 'update' | 'end',
-    offsetX: number,
-    offsetY: number
-  ): void {
-    if (phase === 'start') {
-      this.tabsOverviewEntryGestureOffsetX = offsetX;
-      this.tabsOverviewEntryGestureOffsetY = offsetY;
-      this.tabsOverviewEntryGestureActive = true;
-      void this.openTabsOverview();
-      return;
-    }
-    this.tabsOverviewEntryGestureOffsetX = offsetX;
-    this.tabsOverviewEntryGestureOffsetY = offsetY;
-    if (phase === 'end') {
-      this.tabsOverviewEntryGestureActive = false;
-    }
+  /**
+   * The middle bar was dragged up while its setting asks for the tab overview.
+   *
+   * This is the same open the 标签页 button performs; only the trigger differs. There is deliberately
+   * no finger-driven entry here: the pull's animation was built around the stacked deck's geometry and
+   * meant nothing to the other two layouts, so the gesture just asks for the screen.
+   */
+  /**
+   * The middle bar was dragged up while its setting asks for the tab overview.
+   *
+   * This is the same open the 标签页 button performs; only the trigger differs. There is deliberately
+   * no finger-driven entry here: the pull's animation was built around the stacked deck's geometry and
+   * meant nothing to the other two layouts, so the gesture just asks for the screen.
+   */
+  private handleTabsOverviewEntryGesture(): void {
+    void this.openTabsOverview();
   }
+
+
 
   private async openTabsOverview(activeSection: BrowserTabsOverviewSessionSection = 'tabs'): Promise<void> {
     this.dumpTabPreviewDiagnostics('overview-open');
@@ -10566,9 +10576,13 @@ struct BrowserShellPage {
     return this.resolveTabBridgeUrl(this.tabManager.getTab(this.tabs, tabId));
   }
 
-  private recordRuntimeEvent(_type: string, _message: string, _tabId: string = this.activeTabId): void {}
+  private recordRuntimeEvent(type: string, message: string, tabId: string = this.activeTabId): void {
+    AiraNavForensicsProbe.logRuntimeEvent(type, message, tabId);
+  }
 
-  private appendRestoreTraceBreadcrumb(_tabId: string, _breadcrumb: string): void {}
+  private appendRestoreTraceBreadcrumb(tabId: string, breadcrumb: string): void {
+    AiraNavForensicsProbe.log('restore_breadcrumb', `tab=${tabId} ${breadcrumb}`);
+  }
 
   private applyShellVisualState(state: BrowserShellVisualState): void {
     if (this.startupHomeSurfacePending && !state.showHomePage) {

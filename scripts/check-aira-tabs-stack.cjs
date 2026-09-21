@@ -422,6 +422,55 @@ test('the middle bar\'s swipe-up is a second trigger for the same open, not a se
   assert.doesNotMatch(overlay, /resolveEntryGesturePulledRect|resolveEntryGestureCardMetrics|buildEntryGestureSnapshot/);
 });
 
+test('the middle bar\'s swipe-up is a second trigger for the same open, not a second animation', () => {
+  const read = relative => fs.readFileSync(path.resolve(__dirname, '..', relative), 'utf8');
+  const gestureExports = load(
+    'AiraBrowser/entry/src/main/ets/core/browser/tabsOverview/BrowserTabsOverviewEntryGesturePolicy.ets',
+    name => { throw new Error(`Pure policy must not import ${name}`); });
+  const gesture = new gestureExports.BrowserTabsOverviewEntryGesturePolicy();
+  // Only the claim is still used: one small upward travel per gesture, and only on the way up.
+  assert.equal(gesture.shouldClaim(4, false), false);
+  assert.equal(gesture.shouldClaim(-8, false), true);
+  assert.equal(gesture.shouldClaim(40, true), true);
+  const panel = read('AiraBrowser/entry/src/main/ets/app/components/browser/BrowserBottomAddressPanel.ets');
+  const page = read('AiraBrowser/entry/src/main/ets/app/pages/BrowserShellPage.ets');
+  // The panel latches the trigger once and reports it through a plain callback.
+  assert.match(panel, /onOpenTabsOverview: \(\) => void = \(\) => \{\};/);
+  assert.match(panel, /private shouldOpenTabsOverviewFromMiddleBar\(offsetY: number\): boolean \{/);
+  assert.match(panel, /this\.entryGesturePolicy\.shouldClaim\(offsetY, false\)/);
+  assert.match(panel, /if \(frame\.phase === 'update' && this\.shouldOpenTabsOverviewFromMiddleBar\(frame\.offsetY\)\) \{\s*this\.beginMiddleBarTabsOverviewGesture\(\);/);
+  // One decision, asked by every consumer. The release intercept and the toolbar Sheet gate both have
+  // to consult it, which is what stops the panel from expanding after the overview was already asked
+  // for — the flash of the toolbar panel that then tore itself down.
+  assert.match(panel, /private resolveMiddleBarSwipeUpTarget\(\s*source: BrowserBottomChromeGestureSource,\s*offsetY: number\s*\): 'tabs_overview' \| 'toolbar' \{/);
+  assert.match(panel, /private beginMiddleBarTabsOverviewGesture\(\): void \{\s*if \(this\.tabsOverviewMiddleBarGestureTriggered\) \{\s*return;\s*\}/);
+  const intercept = panel.slice(panel.indexOf('onPanelGestureEndIntercept: ('),
+    panel.indexOf('onPanelGestureRelease: ('));
+  assert.match(intercept, /if \(this\.resolveMiddleBarSwipeUpTarget\(source, offsetY\) === 'tabs_overview'\) \{\s*this\.beginMiddleBarTabsOverviewGesture\(\);\s*return 'low';\s*\}/);
+  assert.match(intercept, /if \(this\.shouldOpenToolbarSystemSheetFromGesture\(targetDetent, offsetY, source\)\) \{\s*this\.openToolbarSystemSheet\(\);/);
+  const sheetGate = panel.slice(panel.indexOf('private shouldOpenToolbarSystemSheetFromGesture('),
+    panel.indexOf('private isTabsOverviewPullEnabled('));
+  assert.match(sheetGate, /this\.resolveMiddleBarSwipeUpTarget\(source, offsetY\) === 'toolbar' &&/);
+  assert.match(sheetGate, /!this\.tabsOverviewMiddleBarGestureTriggered &&/);
+  // The shell opens the overview through the same call the 标签页 button uses, and passes no finger
+  // state to the overlay at all.
+  assert.match(page, /private handleTabsOverviewEntryGesture\(\): void \{\s*void this\.openTabsOverview\(\);\s*\}/);
+  assert.match(page, /private async openTabsOverview\(activeSection: BrowserTabsOverviewSessionSection = 'tabs'\): Promise<void> \{\s*this\.dumpTabPreviewDiagnostics\('overview-open'\);\s*this\.dispatchTabsOverviewSession\(\{ type: 'request_open', section: activeSection \}\);/);
+  // Both triggers have to reach that one call: the button through the shell action, the gesture
+  // through `handleTabsOverviewEntryGesture`.
+  assert.match(page, /onOpenTabsOverview: \(\) => \{\s*this\.handleTabsOverviewEntryGesture\(\);/);
+  // Nothing may be left of the finger-driven pull, on either side of the boundary.
+  for (const [name, source] of [['panel', panel], ['page', page]]) {
+    assert.doesNotMatch(source, /entryGestureActive|entryGestureOffset[XY]|onTabsOverviewEntryGesture/,
+      `${name} must not carry finger state for the overview entry`);
+  }
+  const overlay = read('AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsFloatingOverlay.ets');
+  assert.doesNotMatch(overlay, /entryGesture|EntryGesture/,
+    'the overlay must not own any part of a finger-driven pull');
+  // And the pull-only geometry helpers must be gone from the overlay.
+  assert.doesNotMatch(overlay, /resolveEntryGesturePulledRect|resolveEntryGestureCardMetrics|buildEntryGestureSnapshot/);
+});
+
 test('the overlay deck wires the policy, per-frame motion and the reference visuals', () => {
   const overlay = fs.readFileSync(path.resolve(__dirname,
     '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsFloatingOverlay.ets'), 'utf8');
