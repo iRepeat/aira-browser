@@ -57,6 +57,12 @@ WEB_VIEWPORT_SURFACE_HOST_REL="AiraBrowser/entry/src/main/ets/app/components/bro
 WEB_VIEWPORT_SURFACE_HOST="${REPO_ROOT}/${WEB_VIEWPORT_SURFACE_HOST_REL}"
 QUICK_SEARCH_SWITCHING_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/search/BrowserQuickSearchSwitchingCoordinator.ets"
 QUICK_SEARCH_SWITCHING_COORDINATOR="${REPO_ROOT}/${QUICK_SEARCH_SWITCHING_COORDINATOR_REL}"
+ADDRESS_DISPLAY_FORMATTER_REL="AiraBrowser/entry/src/main/ets/core/browser/AddressDisplayFormatter.ets"
+ADDRESS_DISPLAY_FORMATTER="${REPO_ROOT}/${ADDRESS_DISPLAY_FORMATTER_REL}"
+TEMPLATE_SERVICE_REL="AiraBrowser/entry/src/main/ets/services/search/SearchEngineTemplateService.ets"
+TEMPLATE_SERVICE="${REPO_ROOT}/${TEMPLATE_SERVICE_REL}"
+BROWSER_MODELS_REL="AiraBrowser/entry/src/main/ets/common/models/BrowserModels.ets"
+BROWSER_MODELS="${REPO_ROOT}/${BROWSER_MODELS_REL}"
 ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserRootBottomPanelSessionCoordinator.ets"
 ROOT_BOTTOM_PANEL_SESSION_COORDINATOR="${REPO_ROOT}/${ROOT_BOTTOM_PANEL_SESSION_COORDINATOR_REL}"
 TRANSIENT_SURFACE_COORDINATOR_REL="AiraBrowser/entry/src/main/ets/core/browser/BrowserTransientSurfaceCoordinator.ets"
@@ -795,6 +801,45 @@ check_file_contains_rule "${QUICK_SEARCH_SWITCHING_COORDINATOR}" "${QUICK_SEARCH
 check_file_contains_rule "${QUICK_SEARCH_SWITCHING_COORDINATOR}" "${QUICK_SEARCH_SWITCHING_COORDINATOR_REL}" \
   'reconcileOwnedCommittedEntryReplacement\(' \
   "Quick Search Switching must preserve an owned initialization transaction when ArkWeb replaces the same committed history entry."
+check_file_contains_rule "${ADDRESS_DISPLAY_FORMATTER}" "${ADDRESS_DISPLAY_FORMATTER_REL}" \
+  'export function resolveSearchNavigationQuery\(' \
+  "Search Navigation must own reading the query a proven same-engine result document carries."
+check_file_contains_rule "${ADDRESS_DISPLAY_FORMATTER}" "${ADDRESS_DISPLAY_FORMATTER_REL}" \
+  'current\.host === resultDocument\.host && current\.path === resultDocument\.path' \
+  "Search Navigation query proof must require the live result document's normalized host and result path."
+check_file_contains_rule "${ADDRESS_DISPLAY_FORMATTER}" "${ADDRESS_DISPLAY_FORMATTER_REL}" \
+  'engineResultPageShape\.hosts\.some\(' \
+  "Search Navigation must prove a declared engine result-page host before reading any query from it."
+check_file_contains_rule "${ADDRESS_DISPLAY_FORMATTER}" "${ADDRESS_DISPLAY_FORMATTER_REL}" \
+  'engineResultPageShape\.pathSuffixes\.some\(' \
+  "Search Navigation must prove a declared engine result-page path suffix before reading any query from it."
+check_file_contains_rule "${ADDRESS_DISPLAY_FORMATTER}" "${ADDRESS_DISPLAY_FORMATTER_REL}" \
+  'findQueryParamNameByValue\(resultDocument\.query, previousQuery\)' \
+  "Search Navigation query proof must anchor the query parameter on the live document's own query, never on a URL guess."
+check_file_contains_rule "${TEMPLATE_SERVICE}" "${TEMPLATE_SERVICE_REL}" \
+  'resolveResultPageShape\(engineId: SearchEngineId\)' \
+  "Search Engine Templates must resolve a declared result-page shape by an engine identity Aira already holds."
+check_file_contains_rule "${BROWSER_MODELS}" "${BROWSER_MODELS_REL}" \
+  "queryKeys: \['wd', 'word'\]" \
+  "The Baidu engine must keep the verified query keys of its own result page, which posts word= while Aira submits wd=."
+check_file_contains_rule "${QUICK_SEARCH_SWITCHING_COORDINATOR}" "${QUICK_SEARCH_SWITCHING_COORDINATOR_REL}" \
+  'resolveContinuationContext\(' \
+  "Quick Search Switching must continue only a proven same-engine result document of the live context."
+check_file_contains_rule "${QUICK_SEARCH_SWITCHING_COORDINATOR}" "${QUICK_SEARCH_SWITCHING_COORDINATOR_REL}" \
+  'resolveSearchNavigationQuery\(' \
+  "Quick Search Switching continuation proof must stay anchored on the live result document and its live query."
+check_file_contains_rule "${QUICK_SEARCH_SWITCHING_COORDINATOR}" "${QUICK_SEARCH_SWITCHING_COORDINATOR_REL}" \
+  'this\.templateService\.resolveResultPageShape\(liveContext\.engineId\)' \
+  "Quick Search Switching may only use the declared result-page shape of the live context's own engine."
+check_file_contains_rule "${QUICK_SEARCH_SWITCHING_COORDINATOR}" "${QUICK_SEARCH_SWITCHING_COORDINATOR_REL}" \
+  "publishActiveTabIfNeeded\(normalizedTabId, 'continuation-page-begin'\)" \
+  "Quick Search Switching must keep a proven page-begin continuation visible before any unowned handling."
+check_file_contains_rule "${QUICK_SEARCH_SWITCHING_COORDINATOR}" "${QUICK_SEARCH_SWITCHING_COORDINATOR_REL}" \
+  'publishActiveTabIfNeeded\(normalizedTabId, `\$\{source\}-continuation`\)' \
+  "Quick Search Switching must keep a proven committed continuation visible before any unowned handling."
+check_file_contains_rule "${QUICK_SEARCH_SWITCHING_COORDINATOR}" "${QUICK_SEARCH_SWITCHING_COORDINATOR_REL}" \
+  "publishActiveTabIfNeeded\(normalizedTabId, 'history-api-continuation'\)" \
+  "Quick Search Switching must keep a proven same-document route change inside the result page."
 check_file_contains_rule "${WEB_PAGE_LIFECYCLE_COORDINATOR}" "${WEB_PAGE_LIFECYCLE_COORDINATOR_REL}" \
   'handleHistoryApiUrlChange\(tabId, normalizedEvent\)' \
   "Web Page Lifecycle must forward normalized typed History API facts to the Quick Search owner."

@@ -10,7 +10,7 @@ import {
 } from '../../data/search/QuickSearchSwitchPreferencesRepository';
 import { SearchEngineTemplateService } from '../../services/search/SearchEngineTemplateService';
 import { BrowserRuntimeLifecyclePort } from '../../services/web/BrowserRuntimeLifecyclePort';
-import { normalizeNavigationTarget } from '../browser/AddressDisplayFormatter';
+import { normalizeNavigationTarget, resolveSearchNavigationQuery } from '../browser/AddressDisplayFormatter';
 import { BrowserAppUrlOpenCoordinator } from '../browser/BrowserAppUrlOpenCoordinator';
 import {
   BrowserWebTopImmersionSessionCoordinator
@@ -340,6 +340,22 @@ export class BrowserQuickSearchSwitchingCoordinator implements BrowserQuickSearc
       this.publishActiveTabIfNeeded(normalizedTabId, 'reload-page-begin');
       return;
     }
+    const continuationContext = this.resolveContinuationContext(session, normalizedEventUrl);
+    if (continuationContext !== undefined) {
+      // A webpage-owned document that proves to be this engine's result page continues the live search context, which
+      // is what keeps the row usable after the user corrects the query inside the page. It re-enters the owned
+      // navigation transaction here, so navigation completion either commits this context or drops it again.
+      session.pendingContext = continuationContext;
+      session.currentContext = continuationContext;
+      session.ownedNavigationStarted = true;
+      session.latestOwnedBeginUrl = normalizedEventUrl;
+      session.supersededNavigationUrls = [];
+      session.unownedNavigationInFlight = false;
+      session.failureRetained = false;
+      session.ownedDocumentInitializing = true;
+      this.publishActiveTabIfNeeded(normalizedTabId, 'continuation-page-begin');
+      return;
+    }
     session.currentContext = undefined;
     session.latestOwnedBeginUrl = '';
     session.supersededNavigationUrls = [];
@@ -450,6 +466,38 @@ export class BrowserQuickSearchSwitchingCoordinator implements BrowserQuickSearc
         session.failureRetained = false;
         session.ownedDocumentInitializing = false;
         this.publishActiveTabIfNeeded(normalizedTabId, 'history-api-associated');
+        return;
+      }
+    }
+    if (snapshot !== undefined && (event.kind === 'pushState' || event.kind === 'replaceState') &&
+      this.sameUrl(snapshot.currentUrl, event.newUrl)) {
+      const continuationContext = this.resolveContinuationContext(session, event.newUrl);
+      if (continuationContext !== undefined) {
+        // A same-document route change inside the proven result page (result tabs, filters, paging) keeps the context,
+        // and the entry it rewrote stays associated so Back/Forward can restore it by itself.
+        const rewrittenContext: BrowserQuickSearchContext = {
+          query: continuationContext.query,
+          engineId: continuationContext.engineId,
+          targetUrl: continuationContext.targetUrl,
+          committedUrl: snapshot.currentUrl,
+          generation: continuationContext.generation
+        };
+        this.retainAssociationsBefore(session, snapshot);
+        session.associations.push({
+          historyIndex: snapshot.currentIndex,
+          historySize: snapshot.size,
+          historyUrl: snapshot.currentUrl,
+          context: rewrittenContext
+        });
+        session.pendingContext = undefined;
+        session.currentContext = rewrittenContext;
+        session.ownedNavigationStarted = false;
+        session.latestOwnedBeginUrl = '';
+        session.supersededNavigationUrls = [];
+        session.unownedNavigationInFlight = false;
+        session.failureRetained = false;
+        session.ownedDocumentInitializing = false;
+        this.publishActiveTabIfNeeded(normalizedTabId, 'history-api-continuation');
         return;
       }
     }
@@ -572,6 +620,35 @@ export class BrowserQuickSearchSwitchingCoordinator implements BrowserQuickSearc
       session.unownedNavigationInFlight = false;
       session.failureRetained = false;
       this.publishActiveTabIfNeeded(normalizedTabId, `${source}-associated`);
+      return;
+    }
+    const continuationContext = this.resolveContinuationContext(session, normalizedCommittedUrl);
+    if (continuationContext !== undefined) {
+      // ArkWeb may report the committed entry before onPageBegin, so a proven continuation must also be able to
+      // commit here; it then owns an exact history association for later Back/Forward like any Aira result entry.
+      const committedContext: BrowserQuickSearchContext = {
+        query: continuationContext.query,
+        engineId: continuationContext.engineId,
+        targetUrl: continuationContext.targetUrl,
+        committedUrl: normalizedCommittedUrl,
+        generation: continuationContext.generation
+      };
+      this.retainAssociationsBefore(session, snapshot);
+      session.associations.push({
+        historyIndex: snapshot.currentIndex,
+        historySize: snapshot.size,
+        historyUrl: snapshot.currentUrl,
+        context: committedContext
+      });
+      session.pendingContext = undefined;
+      session.currentContext = committedContext;
+      session.ownedNavigationStarted = false;
+      session.latestOwnedBeginUrl = '';
+      session.supersededNavigationUrls = [];
+      session.unownedNavigationInFlight = false;
+      session.failureRetained = false;
+      session.ownedDocumentInitializing = true;
+      this.publishActiveTabIfNeeded(normalizedTabId, `${source}-continuation`);
       return;
     }
     this.retainAssociationsBefore(session, snapshot);
@@ -803,14 +880,54 @@ export class BrowserQuickSearchSwitchingCoordinator implements BrowserQuickSearc
     if (normalizedQuery.length <= 0 || normalizedTargetUrl.length <= 0 || engineId.trim().length <= 0) {
       return undefined;
     }
-    this.generation += 1;
+    const generation = this.nextGeneration();
     return {
       query: normalizedQuery,
       engineId: engineId,
       targetUrl: normalizedTargetUrl,
       committedUrl: '',
-      generation: this.generation
+      generation: generation
     };
+  }
+
+  /**
+   * A live Aira-owned result context survives a webpage-owned navigation only when the new document proves to be the
+   * same engine result page as this tab's live result document. The proof is anchored on the result document URL Aira
+   * already trusts plus the query it was searching, and on the declared result-page shape of the context's own engine;
+   * no engine is ever inferred from an arbitrary URL, and a navigation that cannot be proven keeps the ordinary
+   * unowned handling.
+   */
+  private resolveContinuationContext(
+    session: BrowserQuickSearchTabSession,
+    observedUrl: string
+  ): BrowserQuickSearchContext | undefined {
+    const liveContext = session.currentContext;
+    const observedTargetUrl = observedUrl.trim();
+    if (liveContext === undefined || session.pendingContext !== undefined || observedTargetUrl.length === 0) {
+      return undefined;
+    }
+    const resultDocumentUrl = liveContext.committedUrl.length > 0 ? liveContext.committedUrl : liveContext.targetUrl;
+    const query = resolveSearchNavigationQuery(
+      observedTargetUrl,
+      resultDocumentUrl,
+      liveContext.query,
+      this.templateService.resolveResultPageShape(liveContext.engineId)
+    );
+    if (query.length === 0) {
+      return undefined;
+    }
+    return {
+      query: query,
+      engineId: liveContext.engineId,
+      targetUrl: observedTargetUrl,
+      committedUrl: '',
+      generation: this.nextGeneration()
+    };
+  }
+
+  private nextGeneration(): number {
+    this.generation += 1;
+    return this.generation;
   }
 
   private clearPendingAddressSubmission(context: BrowserQuickSearchContext): void {

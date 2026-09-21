@@ -1,3 +1,5 @@
+import { SearchEngineResultPageShape } from '../../common/models/BrowserModels';
+
 export interface ResolvedAddressDisplay {
   displayText: string;
   pendingDisplayText: string;
@@ -85,6 +87,68 @@ export function isMatchingSearchNavigation(url: string, targetUrl: string, query
     return false;
   }
   return hasQueryParamValue(current.query, queryParamName, query);
+}
+
+/**
+ * Reads the query a proven same-engine Search Result Context carries, so a webpage-owned search on the result page
+ * can still be attributed to the search the user started in Aira.
+ *
+ * Aira never infers an engine from an arbitrary URL. Two proofs are accepted, and both are anchored on data Aira
+ * already holds:
+ * - the live result document's own URL: the observed document URL must match its normalized host and result path, and
+ *   the query parameter name is discovered from the previous query value inside it; and
+ * - the live context engine's declared result-page shape, which covers an engine's own result page using a different
+ *   host, path, or query key than the template Aira submits (Baidu posts its own search box to `.../s` with `word=`).
+ *
+ * Anything else returns '' so the caller keeps the navigation webpage-owned.
+ */
+export function resolveSearchNavigationQuery(
+  url: string,
+  resultDocumentUrl: string,
+  previousQuery: string,
+  engineResultPageShape?: SearchEngineResultPageShape
+): string {
+  const current = parseSearchNavigationUrl(url);
+  const resultDocument = parseSearchNavigationUrl(resultDocumentUrl);
+  if (current === undefined || resultDocument === undefined) {
+    return '';
+  }
+  if (current.host === resultDocument.host && current.path === resultDocument.path) {
+    const queryParamName = findQueryParamNameByValue(resultDocument.query, previousQuery);
+    if (queryParamName.length > 0) {
+      const queryValue = readQueryParamValue(current.query, queryParamName);
+      if (queryValue.length > 0) {
+        return queryValue;
+      }
+    }
+  }
+  return resolveDeclaredResultPageQuery(current, engineResultPageShape);
+}
+
+function resolveDeclaredResultPageQuery(
+  current: SearchNavigationUrlParts,
+  engineResultPageShape: SearchEngineResultPageShape | undefined
+): string {
+  if (engineResultPageShape === undefined) {
+    return '';
+  }
+  const hostMatches = engineResultPageShape.hosts.some((host: string): boolean => {
+    return normalizeSearchNavigationHost(host) === current.host;
+  });
+  const pathMatches = engineResultPageShape.pathSuffixes.some((suffix: string): boolean => {
+    const normalizedSuffix = normalizeSearchNavigationPath(suffix);
+    return normalizedSuffix.length > 0 && current.path.endsWith(normalizedSuffix);
+  });
+  if (!hostMatches || !pathMatches) {
+    return '';
+  }
+  for (let index = 0; index < engineResultPageShape.queryKeys.length; index += 1) {
+    const queryValue = readQueryParamValue(current.query, engineResultPageShape.queryKeys[index]);
+    if (queryValue.length > 0) {
+      return queryValue;
+    }
+  }
+  return '';
 }
 
 interface SearchNavigationUrlParts {
@@ -193,6 +257,26 @@ function hasQueryParamValue(query: string, expectedName: string, expectedValue: 
     }
   }
   return false;
+}
+
+function readQueryParamValue(query: string, expectedName: string): string {
+  const normalizedName = expectedName.trim().toLowerCase();
+  if (query.length === 0 || normalizedName.length === 0) {
+    return '';
+  }
+  const parts = query.split('&');
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    const separatorIndex = part.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const name = decodeSearchQueryPart(part.substring(0, separatorIndex)).trim().toLowerCase();
+    if (name === normalizedName) {
+      return decodeSearchQueryPart(part.substring(separatorIndex + 1)).trim().replace(/\s+/g, ' ');
+    }
+  }
+  return '';
 }
 
 function normalizeSearchQueryValue(value: string): string {

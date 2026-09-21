@@ -59,6 +59,7 @@ TAB_PREVIEW_IMAGE_LEASE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tab-previe
 TABS_STACK_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tabs-stack.cjs"
 SAME_DOCUMENT_RESTORABLE_STATE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-same-document-restorable-state.cjs"
 DOWNLOAD_REWIND_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-download-rewind-does-not-move-page.cjs"
+QUICK_SEARCH_CONTINUATION_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-quick-search-continuation.cjs"
 HUAWEI_APP_IDENTITY_RESOLVER="${REPO_ROOT}/scripts/huawei-app-identity.js"
 HUAWEI_APP_IDENTITY_TEST="${REPO_ROOT}/scripts/huawei-app-identity.test.js"
 PRODUCTION_BUNDLE_NAME="com.aira.browser"
@@ -402,6 +403,12 @@ if [ ! -f "${DOWNLOAD_REWIND_GUARD_SCRIPT}" ]; then
 fi
 node "${DOWNLOAD_REWIND_GUARD_SCRIPT}" || \
   fail "Download rewind guard failed: ${DOWNLOAD_REWIND_GUARD_SCRIPT}"
+
+if [ ! -f "${QUICK_SEARCH_CONTINUATION_GUARD_SCRIPT}" ]; then
+  fail "Quick Search continuation guard not found: ${QUICK_SEARCH_CONTINUATION_GUARD_SCRIPT}"
+fi
+node "${QUICK_SEARCH_CONTINUATION_GUARD_SCRIPT}" || \
+  fail "Quick Search continuation guard failed: ${QUICK_SEARCH_CONTINUATION_GUARD_SCRIPT}"
 
 if [ -x "${ICON_GUARD_SCRIPT}" ]; then
   NODE_BIN="${NODE_BIN}" "${ICON_GUARD_SCRIPT}"

@@ -65,6 +65,23 @@ export interface SearchEngineOption {
   availabilityExpectedStatus?: number;
   kind?: SearchEngineKind;
   isEditable?: boolean;
+  resultPageShape?: SearchEngineResultPageShape;
+}
+
+/**
+ * The shape an engine's own result page uses when the page itself performs the search, which can differ from the
+ * template Aira submits. Baidu is the observed case: Aira submits `https://www.baidu.com/s?wd=` while Baidu's own
+ * mobile result page posts its search box to `/from=844b/ssid=0/s` with `word=`, and its own result links live on
+ * `https://m.baidu.com/from=844b/ssid=0/s?word=`.
+ *
+ * Only built-in engines may declare this, because Aira can verify these shapes. It never makes a page count as an
+ * engine by itself; Quick Search Switching uses it only to continue a live context whose engine is the one that
+ * declared the shape.
+ */
+export interface SearchEngineResultPageShape {
+  hosts: string[];
+  pathSuffixes: string[];
+  queryKeys: string[];
 }
 
 export const SEARCH_ENGINE_OPTIONS: SearchEngineOption[] = [
@@ -102,7 +119,12 @@ export const SEARCH_ENGINE_OPTIONS: SearchEngineOption[] = [
     homepageUrl: 'https://www.baidu.com',
     availabilityProbeUrl: 'https://www.baidu.com',
     kind: 'built_in',
-    isEditable: false
+    isEditable: false,
+    resultPageShape: {
+      hosts: ['baidu.com', 'm.baidu.com'],
+      pathSuffixes: ['/s'],
+      queryKeys: ['wd', 'word']
+    }
   },
   {
     id: 'qihoo',

@@ -3,7 +3,8 @@ import {
   SEARCH_ENGINE_OPTIONS,
   SearchEngineId,
   SearchEngineOption,
-  SearchEngineRecord
+  SearchEngineRecord,
+  SearchEngineResultPageShape
 } from '../../common/models/BrowserModels';
 import { looksLikeUrl, normalizeUrl } from '../../common/utils/UrlUtils';
 
@@ -69,6 +70,22 @@ export class SearchEngineTemplateService {
     const compactName = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     const suffix = compactName.length > 0 ? compactName : 'engine';
     return `${CUSTOM_SEARCH_ENGINE_ID_PREFIX}${suffix}_${now}`;
+  }
+
+  /**
+   * The declared result-page shape of a built-in engine, or undefined when Aira has not verified one.
+   *
+   * The lookup is always keyed by an engine identity Aira already holds, never by URL inference, and custom engines
+   * never declare a shape because Aira cannot verify how their own result page submits a search.
+   */
+  resolveResultPageShape(engineId: SearchEngineId): SearchEngineResultPageShape | undefined {
+    const option = SEARCH_ENGINE_OPTIONS.find((candidate: SearchEngineOption): boolean => candidate.id === engineId);
+    const shape = option?.resultPageShape;
+    if (shape === undefined || shape.hosts.length === 0 || shape.pathSuffixes.length === 0 ||
+      shape.queryKeys.length === 0) {
+      return undefined;
+    }
+    return shape;
   }
 
   isBuiltInEngineId(engineId: string): boolean {
