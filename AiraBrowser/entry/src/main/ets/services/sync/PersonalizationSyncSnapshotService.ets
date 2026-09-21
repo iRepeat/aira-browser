@@ -690,7 +690,7 @@ export class PersonalizationSyncSnapshotService {
   private sanitizeTabsOverviewLayoutStyle(
     value: BrowserTabsOverviewLayoutStyle | undefined
   ): BrowserTabsOverviewLayoutStyle | undefined {
-    return value === 'grid' || value === 'horizontal_cards' ? value : undefined;
+    return value === 'grid' || value === 'horizontal_cards' || value === 'stack' ? value : undefined;
   }
 
   private sanitizeHomeShortcutLayoutDensity(

@@ -126,8 +126,7 @@ export struct TabOverviewLayoutChoiceSheet {
                 this.onSelect(style);
               }
             })
-              .layoutWeight(1)
-          }, (option: TabOverviewLayoutOptionState) =>
+              .layoutWeight(1)          }, (option: TabOverviewLayoutOptionState) =>
             `${option.style}:${option.isSelected ? 'selected' : 'idle'}`)
         }
         .width('100%')
@@ -196,6 +195,10 @@ export struct TabOverviewLayoutChoiceSheet {
     if (style === 'horizontal_cards') {
       return this.storedResolvedThemeMode === 'dark' ?
         $r('app.media.tab_overview_large_cards_dark') : $r('app.media.tab_overview_large_cards_light');
+    }
+    if (style === 'stack') {
+      return this.storedResolvedThemeMode === 'dark' ?
+        $r('app.media.tab_overview_stack_dark') : $r('app.media.tab_overview_stack_light');
     }
     return this.storedResolvedThemeMode === 'dark' ?
       $r('app.media.tab_overview_grid_dark') : $r('app.media.tab_overview_grid_light');

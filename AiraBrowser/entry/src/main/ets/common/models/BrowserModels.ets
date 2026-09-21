@@ -1114,7 +1114,15 @@ export interface ReaderModePreferences {
   pageMode: ReadingPageMode;
 }
 
-export type BrowserTabsOverviewLayoutStyle = 'grid' | 'horizontal_cards';
+/**
+ * 标签页概览的三种样式。
+ *
+ * `grid` is 卡片平铺 and the default, `horizontal_cards` is the large centred card strip, and
+ * `stack` is the stacked deck. `horizontal_cards` keeps its released meaning: a stored value from a
+ * shipped build is a large card strip, so the deck had to take a value of its own instead of
+ * reusing it.
+ */
+export type BrowserTabsOverviewLayoutStyle = 'grid' | 'horizontal_cards' | 'stack';
 export type BrowserHomeShortcutLayoutDensity = 'standard' | 'compact';
 export type BrowserBottomToolbarScrollBehavior = 'fixed' | 'compact' | 'hidden';
 

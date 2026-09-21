@@ -210,7 +210,7 @@ export const DEFAULT_BROWSER_APPEARANCE_SETTINGS: BrowserAppearanceSettings = {
   homeShortcutIconSizeRatio: 0.54,
   siteIconCornerRadiusRatio: 0.3,
   themePaletteId: DEFAULT_BROWSER_THEME_PALETTE_ID,
-  tabsOverviewLayoutStyle: 'horizontal_cards',
+  tabsOverviewLayoutStyle: 'grid',
   tabsOverviewCloseButtonAlwaysVisible: false,
   showDesktopBookmarkBar: true
 };
@@ -1043,15 +1043,15 @@ export class PreferencesRepository {
   }
 
   /**
-   * Both styles are their own value; only an unknown one falls back to the default.
+   * Each of the three styles is its own value; only an unknown one falls back to the default.
    *
-   * The default is the stacked deck, so an unrecognised value must be tested against `grid` as well:
-   * naming only the other style would quietly turn a stored `grid` back into the default.
+   * The default is 卡片平铺, so every stored style has to be named here: testing only for the
+   * non-default one would quietly turn a stored `horizontal_cards` or `stack` back into `grid`.
    */
   private normalizeTabsOverviewLayoutStyle(
     value: BrowserTabsOverviewLayoutStyle | string | undefined
   ): BrowserTabsOverviewLayoutStyle {
-    return value === 'grid' || value === 'horizontal_cards' ?
+    return value === 'grid' || value === 'horizontal_cards' || value === 'stack' ?
       value :
       DEFAULT_BROWSER_APPEARANCE_SETTINGS.tabsOverviewLayoutStyle;
   }

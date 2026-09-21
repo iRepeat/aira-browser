@@ -159,7 +159,7 @@ export class PersonalizationSyncSnapshotValidationService {
       !this.isAllowedString(appearance.themePaletteId, [
         'default', 'aira_classic', 'aira_origin', 'aurora', 'sage', 'cedar', 'lagoon', 'glacier',
         'indigo', 'wisteria', 'rosewood', 'terracotta', 'amber', 'moss', 'cyan', 'steel', 'plum', 'coral'
-      ]) || !this.isAllowedString(appearance.tabsOverviewLayoutStyle, ['grid', 'horizontal_cards']) ||
+      ]) || !this.isAllowedString(appearance.tabsOverviewLayoutStyle, ['grid', 'horizontal_cards', 'stack']) ||
       !this.isOptionalAllowedString(appearance.homeWallpaperMode, ['theme', 'bing', 'custom'])) {
       return false;
     }

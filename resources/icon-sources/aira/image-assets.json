@@ -300,7 +300,9 @@
         "base/media/tab_overview_grid_dark.svg",
         "base/media/tab_overview_grid_light.svg",
         "base/media/tab_overview_large_cards_dark.svg",
-        "base/media/tab_overview_large_cards_light.svg"
+        "base/media/tab_overview_large_cards_light.svg",
+        "base/media/tab_overview_stack_dark.svg",
+        "base/media/tab_overview_stack_light.svg"
       ]
     },
     {

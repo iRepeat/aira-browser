@@ -383,7 +383,7 @@ export class ArkPreferencesStorageAdapter implements PreferencesStorageAdapter {
     value: BrowserTabsOverviewLayoutStyle | string | undefined,
     defaultValue: BrowserTabsOverviewLayoutStyle
   ): BrowserTabsOverviewLayoutStyle {
-    return value === 'grid' || value === 'horizontal_cards' ? value : defaultValue;
+    return value === 'grid' || value === 'horizontal_cards' || value === 'stack' ? value : defaultValue;
   }
 
   private parseAppearanceSettings(
@@ -889,6 +889,10 @@ export class ArkPreferencesStorageAdapter implements PreferencesStorageAdapter {
           defaultValue.leadingSlotSwipeUpActionId ?? 'home'),
         tabsSlotSwipeUpActionId: String(parsed.tabsSlotSwipeUpActionId ??
           defaultValue.tabsSlotSwipeUpActionId ?? 'home'),
+        // The middle bar has no slot of its own, so its one setting is easy to leave out of the
+        // parse — which silently reverted it to `tools` on every cold start.
+        centerCapsuleSwipeUpActionId: String(parsed.centerCapsuleSwipeUpActionId ??
+          defaultValue.centerCapsuleSwipeUpActionId ?? 'tools'),
         updatedAt: this.normalizeNonNegativeTimestamp(parsed.updatedAt, defaultValue.updatedAt)
       };
     } catch (_error) {

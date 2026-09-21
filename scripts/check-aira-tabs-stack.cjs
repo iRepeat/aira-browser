@@ -351,97 +351,103 @@ test('a removal moves only the cards beyond it, and only towards the focus', () 
   assert.deepEqual(shift(tabs, 'zz', 2), { nextPosition: 2, moved: {} });
 });
 
-test('the stacked deck is the default style and leads the appearance settings', () => {
+test('the three styles are offered 卡片平铺 first, and every normaliser names all three', () => {
   const read = relative => fs.readFileSync(path.resolve(__dirname, '..', relative), 'utf8');
   const coordinator = read('AiraBrowser/entry/src/main/ets/core/settings/TabOverviewLayoutSettingsCoordinator.ets');
   const options = coordinator.slice(coordinator.indexOf('buildOptions('),
     coordinator.indexOf('private normalizeStyle('));
-  assert.ok(options.indexOf("style: 'horizontal_cards'") >= 0 &&
-    options.indexOf("style: 'horizontal_cards'") < options.indexOf("style: 'grid'"),
-  'the stacked deck must lead the styles offered');
-  // Every normaliser has to name both styles. Naming only the non-default one would quietly turn a
-  // stored `grid` back into the default the moment the default changed.
-  assert.match(coordinator, /return style === 'grid' \? 'grid' : 'horizontal_cards';/);
+  assert.ok(options.indexOf("style: 'grid'") >= 0 &&
+    options.indexOf("style: 'grid'") < options.indexOf("style: 'horizontal_cards'") &&
+    options.indexOf("style: 'horizontal_cards'") < options.indexOf("style: 'stack'"),
+  '卡片平铺 must lead, then 横向大卡片, then 堆叠式');
+  // Every normaliser has to name all three styles. Naming only the non-default ones would quietly
+  // turn a stored style back into the default the moment the default changed.
+  assert.match(coordinator,
+    /return style === 'horizontal_cards' \|\| style === 'stack' \? style : 'grid';/);
   const preferences = read('AiraBrowser/entry/src/main/ets/data/preferences/PreferencesRepository.ets');
-  assert.match(preferences, /tabsOverviewLayoutStyle: 'horizontal_cards',/);
-  assert.match(preferences, /return value === 'grid' \|\| value === 'horizontal_cards' \?/);
+  assert.match(preferences, /tabsOverviewLayoutStyle: 'grid',/);
+  assert.match(preferences,
+    /return value === 'grid' \|\| value === 'horizontal_cards' \|\| value === 'stack' \?/);
   const layoutViewModel = read('AiraBrowser/entry/src/main/ets/core/browser/BrowserTabsOverviewLayoutViewModel.ets');
-  assert.match(layoutViewModel, /return style === 'grid' \? 'grid' : 'horizontal_cards';/);
+  assert.match(layoutViewModel,
+    /return style === 'horizontal_cards' \|\| style === 'stack' \? style : 'grid';/);
 });
 
-test('the bottom-bar pull drives the entry, and the finger keeps the layer while it is down', () => {
+test('the middle bar\'s swipe-up is a second trigger for the same open, not a second animation', () => {
   const read = relative => fs.readFileSync(path.resolve(__dirname, '..', relative), 'utf8');
   const gestureExports = load(
     'AiraBrowser/entry/src/main/ets/core/browser/tabsOverview/BrowserTabsOverviewEntryGesturePolicy.ets',
     name => { throw new Error(`Pure policy must not import ${name}`); });
   const gesture = new gestureExports.BrowserTabsOverviewEntryGesturePolicy();
-  // Claimed on a small upward travel, and only on the way up; a claimed drag stays claimed so a pull
-  // back down never hands the gesture to the toolbar half way through.
+  // Only the claim is still used: one small upward travel per gesture, and only on the way up.
   assert.equal(gesture.shouldClaim(4, false), false);
   assert.equal(gesture.shouldClaim(-8, false), true);
   assert.equal(gesture.shouldClaim(40, true), true);
-  // One easing curve over the whole pull: it starts at the page, ends at the smallest the pull allows,
-  // and every further vp of travel changes the card less than the one before it.
-  const reach = 800 * gestureExports.BROWSER_TABS_OVERVIEW_ENTRY_GESTURE_REACH_RATIO;
-  const minRatio = gestureExports.BROWSER_TABS_OVERVIEW_ENTRY_GESTURE_MIN_CARD_RATIO;
-  const at = offsetY => gesture.resolveLayout({
-    offsetX: 0, offsetY: offsetY, viewportWidth: 390, viewportHeight: 800
-  });
-  assert.equal(at(0).progress, 0);
-  assert.equal(at(200).progress, 0, 'a pull downwards cannot grow the page past itself');
-  close(at(-reach).progress, 1);
-  close(at(-reach * 0.5).progress, 1 - Math.pow(0.5, 1.8));
-  // The steps only get smaller: the shrink decelerates for the whole drag, which is the opposite of
-  // shrinking fastest at the start and then creeping.
-  let previousStep = Infinity;
-  let previousProgress = 0;
-  for (let step = 1; step <= 10; step += 1) {
-    const change = at(-reach * step / 10).progress - previousProgress;
-    assert.ok(change <= previousStep + 1e-9,
-      `step ${step} changed by ${change}, more than the ${previousStep} before it`);
-    previousStep = change;
-    previousProgress += change;
-  }
-  // The card is `lerp(page, smallest, progress)` and nothing else, so a decelerating progress is a
-  // decelerating shrink. `minRatio` is what the caller scales the deck's card by for the small end.
-  assert.ok(minRatio > 0 && minRatio < 1);
-  assert.ok(at(-800).progress <= 1);
-  // Sideways travel only nudges the row, and it stops well before a card could leave the sheet.
-  const pan = offsetX => gesture.resolveLayout({
-    offsetX: offsetX, offsetY: 0, viewportWidth: 390, viewportHeight: 800
-  });
-  close(pan(100).panX, 34);
-  close(pan(10000).panX, 390 * 0.36);
-  close(pan(-10000).panX, -390 * 0.36);
-  for (const value of [NaN, Infinity, -Infinity]) {
-    const fallback = gesture.resolveLayout({
-      offsetX: value, offsetY: value, viewportWidth: value, viewportHeight: value
-    });
-    assert.ok(Number.isFinite(fallback.progress));
-    assert.ok(Number.isFinite(fallback.panX) && Number.isFinite(fallback.panY));
-  }
-  // The panel claims the drag while the finger is down and hands the whole gesture over once,
-  // which is what keeps the toolbar sheet from opening on its end.
   const panel = read('AiraBrowser/entry/src/main/ets/app/components/browser/BrowserBottomAddressPanel.ets');
-  assert.match(panel, /onTabsOverviewEntryGesture: \(/);
-  assert.match(panel, /this\.entryGesturePolicy\.shouldClaim\(frame\.offsetY, this\.tabsOverviewEntryGestureClaimed\)/);
-  assert.match(panel, /if \(this\.tabsOverviewEntryGestureClaimed\) \{\s*this\.tabsOverviewEntryGestureClaimed = false;\s*this\.onTabsOverviewEntryGesture\('end', 0, offsetY\);\s*return 'low';/);
-  assert.match(panel, /!this\.tabsOverviewEntryGestureClaimed &&\s*!this\.isAddressInputPresentationActive\(\)/);
   const page = read('AiraBrowser/entry/src/main/ets/app/pages/BrowserShellPage.ets');
-  assert.match(page, /private handleTabsOverviewEntryGesture\(/);
-  assert.match(page, /if \(phase === 'start'\) \{\s*this\.tabsOverviewEntryGestureOffsetX = offsetX;\s*this\.tabsOverviewEntryGestureOffsetY = offsetY;\s*this\.tabsOverviewEntryGestureActive = true;\s*void this\.openTabsOverview\(\);/);
-  assert.match(page, /entryGestureActive: this\.tabsOverviewEntryGestureActive,/);
+  // The panel latches the trigger once and reports it through a plain callback.
+  assert.match(panel, /onOpenTabsOverview: \(\) => void = \(\) => \{\};/);
+  assert.match(panel, /private shouldOpenTabsOverviewFromMiddleBar\(offsetY: number\): boolean \{/);
+  assert.match(panel, /this\.entryGesturePolicy\.shouldClaim\(offsetY, false\)/);
+  assert.match(panel, /if \(frame\.phase === 'update' && this\.shouldOpenTabsOverviewFromMiddleBar\(frame\.offsetY\)\) \{\s*this\.beginMiddleBarTabsOverviewGesture\(\);/);
+  // One decision, asked by every consumer. The release intercept and the toolbar Sheet gate both have
+  // to consult it, which is what stops the panel from expanding after the overview was already asked
+  // for — the flash of the toolbar panel that then tore itself down.
+  assert.match(panel, /private resolveMiddleBarSwipeUpTarget\(\s*source: BrowserBottomChromeGestureSource,\s*offsetY: number\s*\): 'tabs_overview' \| 'toolbar' \{/);
+  assert.match(panel, /private beginMiddleBarTabsOverviewGesture\(\): void \{\s*if \(this\.tabsOverviewMiddleBarGestureTriggered\) \{\s*return;\s*\}/);
+  const intercept = panel.slice(panel.indexOf('onPanelGestureEndIntercept: ('),
+    panel.indexOf('onPanelGestureRelease: ('));
+  assert.match(intercept, /if \(this\.resolveMiddleBarSwipeUpTarget\(source, offsetY\) === 'tabs_overview'\) \{\s*this\.beginMiddleBarTabsOverviewGesture\(\);\s*return 'low';\s*\}/);
+  assert.match(intercept, /if \(this\.shouldOpenToolbarSystemSheetFromGesture\(targetDetent, offsetY, source\)\) \{\s*this\.openToolbarSystemSheet\(\);/);
+  const sheetGate = panel.slice(panel.indexOf('private shouldOpenToolbarSystemSheetFromGesture('),
+    panel.indexOf('private isTabsOverviewPullEnabled('));
+  assert.match(sheetGate, /this\.resolveMiddleBarSwipeUpTarget\(source, offsetY\) === 'toolbar' &&/);
+  assert.match(sheetGate, /!this\.tabsOverviewMiddleBarGestureTriggered &&/);
+  // The shell opens the overview through the same call the 标签页 button uses, and passes no finger
+  // state to the overlay at all.
+  assert.match(page, /private handleTabsOverviewEntryGesture\(\): void \{\s*void this\.openTabsOverview\(\);\s*\}/);
+  assert.match(page, /private async openTabsOverview\(activeSection: BrowserTabsOverviewSessionSection = 'tabs'\): Promise<void> \{\s*this\.dumpTabPreviewDiagnostics\('overview-open'\);\s*this\.dispatchTabsOverviewSession\(\{ type: 'request_open', section: activeSection \}\);/);
+  // Both triggers have to reach that one call: the button through the shell action, the gesture
+  // through `handleTabsOverviewEntryGesture`.
+  assert.match(page, /onOpenTabsOverview: \(\) => \{\s*this\.handleTabsOverviewEntryGesture\(\);/);
+  // Nothing may be left of the finger-driven pull, on either side of the boundary.
+  for (const [name, source] of [['panel', panel], ['page', page]]) {
+    assert.doesNotMatch(source, /entryGestureActive|entryGestureOffset[XY]|onTabsOverviewEntryGesture/,
+      `${name} must not carry finger state for the overview entry`);
+  }
+  const overlay = read('AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsFloatingOverlay.ets');
+  assert.doesNotMatch(overlay, /entryGesture|EntryGesture/,
+    'the overlay must not own any part of a finger-driven pull');
+  // And the pull-only geometry helpers must be gone from the overlay.
+  assert.doesNotMatch(overlay, /resolveEntryGesturePulledRect|resolveEntryGestureCardMetrics|buildEntryGestureSnapshot/);
 });
 
 test('the overlay deck wires the policy, per-frame motion and the reference visuals', () => {
   const overlay = fs.readFileSync(path.resolve(__dirname,
     '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsFloatingOverlay.ets'), 'utf8');
-  // The horizontal branch is a Stack of translated cards, never a List.
-  const horizontal = overlay.slice(overlay.indexOf('private buildHorizontalCardsLayer'),
+  // The stacked deck is a Stack of translated cards, never a List; the large card strip beside it is
+  // the List, so the two branches cannot collapse back into one.
+  const deck = overlay.slice(overlay.indexOf('private buildStackCardsLayer'),
     overlay.indexOf('private buildBlankGridItem'));
-  assert.match(horizontal, /Stack\(\{ alignContent: Alignment\.Center \}\)/);
-  assert.match(horizontal, /PanGesture\(\{ direction: PanDirection\.Horizontal/);
-  assert.doesNotMatch(horizontal, /\bList\(/);
+  assert.match(deck, /Stack\(\{ alignContent: Alignment\.Center \}\)/);
+  assert.match(deck, /PanGesture\(\{ direction: PanDirection\.Horizontal/);
+  assert.doesNotMatch(deck, /\bList\(/);
+  const strip = overlay.slice(overlay.indexOf('private buildHorizontalCardsLayer'),
+    overlay.indexOf('private buildStackCardsLayer'));
+  assert.match(strip, /List\(\{/);
+  assert.match(strip, /listDirection\(Axis\.Horizontal\)/);
+  assert.match(strip, /scrollSnapAlign\(ScrollSnapAlign\.CENTER\)/);
+  assert.match(strip, /contentStartOffset\(this\.resolveHorizontalEdgeInset\(true\)\)/);
+  assert.doesNotMatch(strip, /resolveDeckMetrics/);
+  // The strip is the only style whose card box follows its own screenshot, so its box must be frozen
+  // on first sight. Deriving it per render resized and re-placed the focused card when the entry
+  // capture handed over to the persisted thumbnail, which read as the card vanishing and reappearing
+  // at the end of the entry animation.
+  assert.match(overlay, /private stripCardFrameByTabId: Record<string, BrowserTabsOverviewHorizontalCardFrame> = \{\};/);
+  assert.match(overlay, /private resolveHorizontalCardFrame\(item: BrowserTabsFloatingItem\): BrowserTabsOverviewHorizontalCardFrame \{\s*const frozen = this\.stripCardFrameByTabId\[item\.tab\.id\];\s*if \(frozen !== undefined\) \{\s*return frozen;\s*\}/);
+  // Every real geometry change has to drop the frozen boxes, or a rotation keeps the old card size.
+  assert.match(overlay, /this\.layoutState = nextState;\s*\/\/[\s\S]{0,240}?this\.clearStripCardFrames\(\);/);
+  assert.match(overlay, /private clearStripCardFrames\(\): void \{\s*this\.stripCardFrameByTabId = \{\};\s*\}/);
   // Selection and closing both stop the deck motion first.
   assert.match(overlay, /private selectOverviewTab\(tabId: string/);
   assert.match(overlay, /private stopDeckMotion\(\): void/);
@@ -459,10 +465,10 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   // The deck item key must not include the index, or every later card is rebuilt on a removal.
   assert.doesNotMatch(overlay, /resolveCardIdentityKey\(item\)\}\|\$\{item\.index\}/);
   // The per-frame scalar must not re-run presentation construction.
-  assert.match(overlay, /if \(this\.isHorizontalCardsLayout\(\)\) \{\s*return this\.deckItems\.length <= 0;/);
+  assert.match(overlay, /if \(this\.isStackLayout\(\)\) \{\s*return this\.deckItems\.length <= 0;/);
   // Shade and cover are the reference's dark overlay and card-filling screenshot.
-  assert.match(overlay, /deckShadeOpacity: this\.isHorizontalCardsLayout\(\)/);
-  assert.match(overlay, /snapshotCoverEnabled: this\.isHorizontalCardsLayout\(\)/);
+  assert.match(overlay, /deckShadeOpacity: this\.isStackLayout\(\)/);
+  assert.match(overlay, /snapshotCoverEnabled: this\.isStackLayout\(\)/);
   const card = fs.readFileSync(path.resolve(__dirname,
     '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabOverviewCard.ets'), 'utf8');
   assert.match(card, /ImageFit\.Cover/);
@@ -492,13 +498,13 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   const latchReleases = item.match(
     /if \(this\.localSwipePhase === 'dismissing'\) \{[\s\S]{0,600}?this\.onSwipeCancel\(this\.tab\.id\);/g) || [];
   assert.equal(latchReleases.length, 2, 'both gesture ends must release the deck latch while leaving');
-  assert.match(horizontal, /this\.buildDeckEntryMorphSlot\(\)/);
+  assert.match(deck, /this\.buildDeckEntryMorphSlot\(\)/);
   // A card's slot, geometry and layer order come from recorded state, never from the `ForEach` item:
   // a reused node keeps the item it was built with, so reading the index from it left every card on
   // its old slot after a removal and the gap never closed.
-  assert.match(horizontal, /\.zIndex\(this\.resolveDeckCardLayerZIndex\(item\)\)/);
-  assert.doesNotMatch(horizontal, /item\.index/);
-  assert.match(horizontal, /\.zIndex\(this\.resolveDeckEntryMorphLayerZIndex\(\)\)/);
+  assert.match(deck, /\.zIndex\(this\.resolveDeckCardLayerZIndex\(item\)\)/);
+  assert.doesNotMatch(deck, /item\.index/);
+  assert.match(deck, /\.zIndex\(this\.resolveDeckEntryMorphLayerZIndex\(\)\)/);
   assert.match(overlay, /private resolveDeckIndex\(item: BrowserTabsFloatingItem\): number \{\s*const slot = this\.deckSlotIndexById\[item\.id\];/);
   assert.match(overlay, /@State private deckSlotIndexById: Record<string, number> = \{\};/);
   assert.match(overlay, /private recordDeckSlots\(items: BrowserTabsFloatingItem\[\]\): void/);
@@ -508,20 +514,13 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   assert.match(overlay, /this\.stackLayoutPolicy\.resolveCard\(slot, this\.horizontalDeckPosition,/);
   // Clip stays on except during a vertical dismiss flight. Toggling it at the morph handover
   // re-rasterises every card in the same frame the current card is revealed.
-  assert.match(horizontal, /\.clip\(this\.deckSwipeTabId\.length <= 0\)/);
-  assert.match(horizontal, /Stack\(\) \{\s*if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(true\)/);
+  assert.match(deck, /\.clip\(this\.deckSwipeTabId\.length <= 0\)/);
+  assert.match(deck, /Stack\(\) \{\s*if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(true\)/);
   assert.match(overlay, /private shouldMountSharedSnapshotInDeck\(\): boolean \{[\s\S]{0,400}?return this\.entrySharedSnapshotMounted &&\s*this\.entrySharedSnapshotState\.direction === 'enter' &&/);
   assert.match(overlay, /return slot < 0 \? 0 : slot \* 2 \+ 1;/);
-  assert.match(overlay, /if \(this\.shouldRenderEntryGestureOverlay\(\)\) \{[\s\S]{0,120}?this\.buildEntryGestureSnapshot\(\)\s*\} else if \(this\.entrySharedSnapshotMounted && !this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(\)/);
-  // The pull-open entry paints the scene's snapshot from the cards layer instead, from its own copy,
-  // so the scene's overlay must stand down while the finger owns the layer.
-  assert.match(overlay, /private shouldApplyEntryGestureLayout\(\): boolean \{\s*return this\.entryGestureActive \|\| this\.entryGestureSettling;/);
-  // The deck's slot must not paint the scene's copy of the same snapshot under the pull's card.
-  assert.match(overlay, /if \(this\.shouldApplyEntryGestureLayout\(\)\) \{\s*return false;\s*\}\s*return this\.entrySharedSnapshotMounted/);
-  // The held card is a card, so it keeps the icon and title its neighbours have.
-  assert.match(overlay, /private buildEntryGestureHeldIdentity\(\)/);
-  assert.match(overlay, /private resolveEntryGestureHeldIdentity\(\): BrowserTabOverviewIdentityPresentation/);
-  assert.match(overlay, /@Prop entryGestureActive: boolean = false;/);
+  // The entering morph is the only overlay there is: the deck paints it from its own slot, and every
+  // other layout paints it from the root.
+  assert.match(overlay, /if \(this\.entrySharedSnapshotMounted && !this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.buildSharedSnapshotOverlay\(\)/);
   // In-deck morph must not reuse the overlay-root 20/25 z-index; the slot wrapper owns stacking.
   assert.match(overlay, /snapshotLayerZIndex: inDeck \? 0 : FLOATING_TABS_SHARED_SNAPSHOT_Z_INDEX/);
   assert.match(overlay, /this\.buildSharedSnapshotOverlay\(true\)/);
@@ -539,7 +538,10 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   const predicted = overlay.slice(overlay.indexOf('private buildPredictedEntryTargetPreviewRect'),
     overlay.indexOf('private syncLayoutState'));
   assert.match(predicted, /this\.resolveDeckPreviewRect\(targetTabId\)/);
-  assert.doesNotMatch(predicted, /targetWidth = this\.layoutState\.cardWidth/);
+  // The unscaled layout slot must not reappear in the deck's own branch. The strip branch beside it
+  // sizes to its own screenshot on purpose, so the check is scoped to the deck.
+  const predictedDeck = predicted.slice(predicted.indexOf('if (this.isStackLayout())'));
+  assert.doesNotMatch(predictedDeck, /targetWidth = this\.layoutState\.cardWidth/);
   assert.match(overlay, /private buildDeckPreviewRect\(metrics: BrowserTabsOverviewStackCardMetrics\)/);
   const coordinator = fs.readFileSync(path.resolve(__dirname,
     '../AiraBrowser/entry/src/main/ets/core/browser/BrowserTabsOverviewSessionCoordinator.ets'), 'utf8');
@@ -577,7 +579,7 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   assert.match(overlay, /this\.scheduleDeckDismissCommit\(\);/);
   assert.match(overlay, /private scheduleDeckDismissCommit\(\): void/);
   assert.match(overlay, /this\.clearDeckDismissCommitTimer\(\);/);
-  assert.match(overlay, /swipeFlyoutOffset: this\.isHorizontalCardsLayout\(\) \? this\.resolveRootHeight\(\)/);
+  assert.match(overlay, /swipeFlyoutOffset: this\.usesUpwardCardDismiss\(\) \? this\.resolveRootHeight\(\)/);
   assert.doesNotMatch(overlay, /private playDeckSlotReorder/);
   assert.doesNotMatch(overlay, /settleTo\(/);
 });

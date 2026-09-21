@@ -313,7 +313,7 @@ export class SettingsDetailViewModel {
       homeShortcutIconSizeRatio: 0.54,
       siteIconCornerRadiusRatio: 0.3,
       themePaletteId: 'default',
-      tabsOverviewLayoutStyle: 'horizontal_cards',
+      tabsOverviewLayoutStyle: 'grid',
       tabsOverviewCloseButtonAlwaysVisible: false,
       showDesktopBookmarkBar: true
     },
@@ -1822,7 +1822,10 @@ export class SettingsDetailViewModel {
   }
 
   private getTabOverviewLayoutStyleLabel(style: BrowserTabsOverviewLayoutStyle): string {
-    return style === 'horizontal_cards' ? '堆叠式' : '卡片平铺';
+    if (style === 'horizontal_cards') {
+      return '横向大卡片';
+    }
+    return style === 'stack' ? '堆叠式' : '卡片平铺';
   }
 
   private resolvePermissionDefaultAction(kind: SitePermissionKind): SettingsDetailRowAction {

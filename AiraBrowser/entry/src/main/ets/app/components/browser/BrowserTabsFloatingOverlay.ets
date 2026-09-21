@@ -10,6 +10,7 @@ import {
   BrowserTabsOverlayViewModel
 } from '../../../core/browser/BrowserTabsOverlayViewModel';
 import {
+  BrowserTabsOverviewHorizontalCardFrame,
   BrowserTabsOverviewLayoutState,
   BrowserTabsOverviewLayoutViewModel,
   isSameTabsOverviewLayoutState
@@ -50,10 +51,6 @@ import {
 import {
   BrowserTabsOverviewSwipeDismissPolicy
 } from '../../../core/browser/tabsOverview/BrowserTabsOverviewSwipeDismissPolicy';
-import {
-  BROWSER_TABS_OVERVIEW_ENTRY_GESTURE_MIN_CARD_RATIO,
-  BrowserTabsOverviewEntryGesturePolicy
-} from '../../../core/browser/tabsOverview/BrowserTabsOverviewEntryGesturePolicy';
 import { BrowserTabsOverviewStackMotion } from '../../../core/browser/tabsOverview/BrowserTabsOverviewStackMotion';
 import {
   BrowserTabsOverviewStackCardMetrics,
@@ -95,10 +92,6 @@ const FLOATING_TABS_CLOSE_ALL_COMMIT_DELAY_MS: number = 32;
 const FLOATING_TABS_BOTTOM_POSITION_DELAY_MS: number = 0;
 const FLOATING_TABS_ENTRY_START_DELAY_MS: number = 32;
 const FLOATING_TABS_REORDER_DURATION_MS: number = 360;
-/** How long the released pull takes to land the row in the deck. */
-const ENTRY_GESTURE_SETTLE_DURATION_MS: number = 360;
-/** Clear space between the cards the pull shows, in vp. */
-const FLOATING_TABS_ENTRY_GESTURE_ROW_GAP: number = 10;
 const FLOATING_TABS_ENTRY_TARGET_READY_DELAY_MS: number = 0;
 const FLOATING_TABS_ENTRY_TARGET_READY_RETRY_MS: number = 16;
 const FLOATING_TABS_ENTRY_TARGET_READY_MAX_ATTEMPTS: number = 24;
@@ -139,7 +132,7 @@ interface BrowserTabsFloatingContentPadding {
 export struct BrowserTabsFloatingOverlay {
   @StorageProp(BROWSER_APPEARANCE_STORAGE_TABS_OVERVIEW_LAYOUT_STYLE_KEY)
   @Watch('handleStoredTabsOverviewLayoutStyleChanged')
-  private storedTabsOverviewLayoutStyle: string = 'horizontal_cards';
+  private storedTabsOverviewLayoutStyle: string = 'grid';
   @StorageProp(BROWSER_APPEARANCE_STORAGE_TABS_OVERVIEW_CLOSE_BUTTON_ALWAYS_VISIBLE_KEY)
   private storedTabsOverviewCloseButtonAlwaysVisible: boolean = false;
   @StorageProp(BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY) private storedPageBackgroundColor: string = DEFAULT_THEME_PALETTE.light.pageBackground;
@@ -181,23 +174,8 @@ export struct BrowserTabsFloatingOverlay {
   @Watch('startCloseAllTabsAnimationFromRequest')
   @Prop closeAllTabsAnimationRequestVersion: number = 0;
   @Prop entrySharedSnapshotMounted: boolean = false;
-  @Watch('handleEntrySharedSnapshotChanged')
   @Prop entrySharedSnapshotState: BrowserTabsSharedSnapshotTransitionState =
     new BrowserTabsSharedSnapshotTransitionCoordinator().buildIdleState();
-  /**
-   * An upward drag on the middle of the bottom bar is pulling the overview open.
-   *
-   * The overview is entered while the finger is still down, so the page-to-card morph is driven by the
-   * drag instead of by its own clock: the finger's travel decides how far the card has come and how
-   * much smaller than the deck's card it still is. Releasing hands the entry back to its normal
-   * settling path.
-   */
-  @Watch('handleEntryGestureActiveChanged')
-  @Prop entryGestureActive: boolean = false;
-  @Watch('handleEntryGestureOffsetsChanged')
-  @Prop entryGestureOffsetX: number = 0;
-  @Watch('handleEntryGestureOffsetsChanged')
-  @Prop entryGestureOffsetY: number = 0;
   @Prop entrySharedSnapshotBackgroundColor: ResourceColor | undefined = undefined;
   // Incremented by the page every time the sheet is opened. While the overlay is
   // resident (mounted but closed) it never re-runs aboutToAppear, so the per-open
@@ -211,7 +189,7 @@ export struct BrowserTabsFloatingOverlay {
       gridWidth: 0,
       sheetWidth: 360,
       sheetHeight: 844,
-      layoutStyle: 'horizontal_cards'
+      layoutStyle: 'grid'
     });
   @State private entryProgress: number = 0;
   @State private removalState: BrowserTabsOverviewLocalRemovalState =
@@ -231,42 +209,7 @@ export struct BrowserTabsFloatingOverlay {
    */
   @State private horizontalDeckPosition: number = 0;
   @State private deckItems: BrowserTabsFloatingItem[] = [];
-  private entryGesturePolicy: BrowserTabsOverviewEntryGesturePolicy =
-    new BrowserTabsOverviewEntryGesturePolicy();
-  /**
-   * The entry snapshot the finger drives.
-   *
-   * The scene owns the real one and publishes it as idle the moment the entry settles, which can
-   * happen while the finger is still down. This copy is what keeps the card under the finger after
-   * that, so a pull that is held does not lose its picture half way through.
-   */
-  @State private entryGestureSnapshotState: BrowserTabsSharedSnapshotTransitionState | undefined =
-    undefined;
-  /**
-   * The rectangle the pull paints the held card in.
-   *
-   * One interpolation from the page to the smallest card, driven by the finger and nothing else, so
-   * the shrink only ever slows down as the finger climbs. It is also what the release animates to the
-   * deck's own card, which is why letting go lands the card instead of jumping to it.
-   */
-  @State private entryGestureCardRect: BrowserTabsOverlayRect = { left: 0, top: 0, width: 1, height: 1 };
-  /** Used only until the held tab is known, so the header builder needs no undefined branch. */
-  private entryGesturePlaceholderIdentity: BrowserTabOverviewIdentityPresentation = {
-    label: '',
-    iconUri: '',
-    iconPixelMap: undefined,
-    fallbackLabel: '?',
-    fallbackAiraIconId: 'browser.shortcut.home',
-    sourceRevision: 0
-  };
-  @State private entryGesturePanX: number = 0;
-  @State private entryGesturePanY: number = 0;
-  /** 0 while the finger holds the row flat, 1 once the cards have settled into the deck. */
-  @State private entryGestureSettle: number = 0;
-  /** True while the finger's release is still landing the row into the deck. */
-  @State private entryGestureSettling: boolean = false;
-  @State private deckSwipeTabId: string = '';
-  @State private deckDismissGhostTabId: string = '';
+  @State private deckSwipeTabId: string = '';  @State private deckDismissGhostTabId: string = '';
   /**
    * Each card's slot in the deck, keyed by tab id.
    *
@@ -408,6 +351,9 @@ export struct BrowserTabsFloatingOverlay {
     this.commitPendingDeckDismiss();
     this.stopDeckMotion();
     this.deckPositionSeeded = false;
+    // A new open re-derives the strip's boxes: the snapshot published for a tab can have been
+    // recaptured since the last open, and a frozen box from that open would stop fitting it.
+    this.clearStripCardFrames();
     this.selectedSection = this.activeSection;
     this.entryReturnTabId = this.activeTabId.trim();
     // A close-all leaves this latched true. It used to be cleared by the remount;
@@ -461,14 +407,9 @@ export struct BrowserTabsFloatingOverlay {
       }
 
       // The entering morph is stacked inside the deck instead of above the cards layer, so the
-      // cards that trail the covered one keep the slot they own at rest. Every other case — the
-      // grid, the exit back to the page — still paints it from here.
-      // The held pull paints its own copy of the snapshot — the scene drops the real one the moment the
-      // entry settles, which can happen while the finger is still down.
-      if (this.shouldRenderEntryGestureOverlay()) {
-        this.buildEntryGestureHeldIdentity()
-        this.buildEntryGestureSnapshot()
-      } else if (this.entrySharedSnapshotMounted && !this.shouldMountSharedSnapshotInDeck()) {
+      // cards that trail the covered one keep the slot they own at rest. The grid, the large card
+      // strip and the exit back to the page all paint it from here.
+      if (this.entrySharedSnapshotMounted && !this.shouldMountSharedSnapshotInDeck()) {
         this.buildSharedSnapshotOverlay()
       }
 
@@ -632,413 +573,11 @@ export struct BrowserTabsFloatingOverlay {
   private buildCardsLayer() {
     if (this.layoutState.layoutStyle === 'horizontal_cards') {
       this.buildHorizontalCardsLayer()
+    } else if (this.layoutState.layoutStyle === 'stack') {
+      this.buildStackCardsLayer()
     } else {
       this.buildGridCardsLayer()
     }
-  }
-
-  /**
-   * Whether the finger, not the scene, owns the page's snapshot.
-   *
-   * While a pull is in flight the deck is already there — it is what supplies the neighbours the pull
-   * shows — but the card the page morphs into is held by the finger, so the snapshot paints it from
-   * the root exactly like the normal entry does.
-   */
-  private shouldRenderEntryGestureOverlay(): boolean {
-    return this.shouldApplyEntryGestureLayout() && this.entryGestureSnapshotState !== undefined;
-  }
-
-  /**
-   * Whether the finger owns the deck's layout.
-   *
-   * True for the whole drag and for its landing, whether or not the page's snapshot has arrived: the
-   * row is flat from the first claimed frame, and only the card the finger holds needs the capture.
-   */
-  private shouldApplyEntryGestureLayout(): boolean {
-    return this.entryGestureActive || this.entryGestureSettling;
-  }
-
-  /**
-   * The held card's icon and title, on top of its snapshot.
-   *
-   * The snapshot is the page's picture and nothing else — that is what a page-to-card morph needs,
-   * because the card's own header fades in behind it. A pull shows a *card* the whole time, so its
-   * header has to be painted here, at the same size and place as the ones on the cards beside it.
-   */
-  @Builder
-  private buildEntryGestureHeldIdentity() {
-    if (this.shouldRenderEntryGestureHeldIdentity()) {
-      // A whole card box, scaled about its own centre exactly like a deck card, with the header at its
-      // top. Scaling the header on its own moved it: a scale happens about the node's centre, so the row
-      // drifted away from the card as the card shrank.
-      Column() {
-        this.buildEntryGestureHeldIdentityHeader()
-      }
-      .width(this.layoutState.cardWidth)
-      .height(this.resolveItemHeight())
-      .alignItems(HorizontalAlign.Start)
-      .position({
-        x: this.resolveEntryGestureHeldBoxLeft(),
-        y: this.resolveEntryGestureHeldBoxTop()
-      })
-      .scale({
-        x: this.resolveEntryGestureRowScale(),
-        y: this.resolveEntryGestureRowScale()
-      })
-      .hitTestBehavior(HitTestMode.None)
-      .zIndex(FLOATING_TABS_SHARED_SNAPSHOT_DECORATION_Z_INDEX)
-    }
-  }
-
-  @Builder
-  private buildEntryGestureHeldIdentityHeader() {
-    Row({ space: BROWSER_TABS_OVERVIEW_IDENTITY_ICON_TEXT_GAP }) {
-      SiteIconView({
-        iconUri: this.resolveEntryGestureHeldIdentity().iconUri,
-        iconPixelMap: this.resolveEntryGestureHeldIdentity().iconPixelMap,
-        fallbackLabel: this.resolveEntryGestureHeldIdentity().fallbackLabel,
-        fallbackAiraIconId: this.resolveEntryGestureHeldIdentity().fallbackAiraIconId,
-        fallbackIconSize: 16,
-        iconSize: BROWSER_TABS_OVERVIEW_IDENTITY_ICON_SIZE,
-        cornerRadiusRatio: 0.22,
-        frameBorderWidth: 0,
-        contentPadding: 0,
-        fallbackFontSize: 12,
-        fallbackFontWeight: FontWeight.Medium,
-        containerBackgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
-        textColor: this.storedSecondaryTextColor,
-        fit: ImageFit.Contain,
-        preferPixelMap: this.resolveEntryGestureHeldIdentity().iconPixelMap !== undefined,
-        sourceRevision: this.resolveEntryGestureHeldIdentity().sourceRevision,
-        hitTestMode: HitTestMode.None
-      })
-
-      Text(this.resolveEntryGestureHeldIdentity().label)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.storedPrimaryTextColor)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .height(this.layoutState.identityHeaderHeight)
-    .width(this.layoutState.cardWidth)
-    .margin({ left: BROWSER_TABS_OVERVIEW_IDENTITY_HORIZONTAL_INSET })
-    .alignItems(VerticalAlign.Center)
-    .hitTestBehavior(HitTestMode.None)
-  }
-
-  /** The header box of a card of the pull: the preview's own rectangle drives where it sits. */
-  private resolveEntryGestureHeldBoxLeft(): number {
-    const scale = this.resolveEntryGestureRowScale();
-    return this.entryGestureCardRect.left -
-      this.layoutState.cardWidth * (1 - scale) / 2;
-  }
-
-  private resolveEntryGestureHeldBoxTop(): number {
-    const scale = this.resolveEntryGestureRowScale();
-    const header = this.layoutState.identityHeaderHeight + this.layoutState.identityPreviewGap;
-    const visibleItemTop = this.entryGestureCardRect.top - header * scale;
-    return visibleItemTop - this.resolveItemHeight() * (1 - scale) / 2;
-  }
-
-  private resolveEntryGestureRowScale(): number {
-    return Math.max(0.05,
-      this.entryGestureCardRect.width / Math.max(1, this.layoutState.cardWidth));
-  }
-
-  private shouldRenderEntryGestureHeldIdentity(): boolean {
-    return this.shouldRenderEntryGestureOverlay() &&
-      this.entryGestureCardRect.width > 1 &&
-      this.entryGestureCardRect.width < this.resolveRootWidth() * 0.98;
-  }
-
-  private resolveEntryGestureHeldIdentity(): BrowserTabOverviewIdentityPresentation {
-    const heldTabId = this.resolveEntryGestureHeldTabId();
-    const item = this.deckItems.find(
-      (candidate: BrowserTabsFloatingItem): boolean => candidate.id === heldTabId);
-    if (item === undefined) {
-      return this.entryGesturePlaceholderIdentity;
-    }
-    return item.presentation.identity;
-  }
-
-  @Builder
-  private buildEntryGestureSnapshot() {
-    BrowserTabsSharedSnapshotOverlay({
-      state: this.buildEntryGestureSnapshotPresentationState(),
-      snapshotBackgroundColor: this.entrySharedSnapshotBackgroundColor,
-      snapshotLayerZIndex: FLOATING_TABS_SHARED_SNAPSHOT_Z_INDEX,
-      snapshotDecorationLayerZIndex: FLOATING_TABS_SHARED_SNAPSHOT_DECORATION_Z_INDEX,
-      viewportLeft: this.resolveRootLeft(),
-      viewportTop: this.resolveRootTop(),
-      onSnapshotRectChange: (rect: BrowserTabsOverlayRect) => {
-        this.onEntrySharedSnapshotRectChange(rect);
-      },
-      onSnapshotTap: (tabId: string) => {
-        this.onEntrySharedSnapshotTap(tabId);
-      }
-    })
-  }
-
-  /**
-   * The entry snapshot with the finger folded in: the whole card pans with the damped travel, and its
-   * card end is scaled so pulling past it keeps shrinking the card. Scaling the *end* rectangles rather
-   * than the painted frame is what lets the morph's own interpolation do the work — a pan applied to
-   * both ends is a pan applied to every frame in between.
-   */
-  private buildEntryGestureSnapshotPresentationState(): BrowserTabsSharedSnapshotTransitionState {
-    const base = this.entryGestureSnapshotState as BrowserTabsSharedSnapshotTransitionState;
-    const target = this.entryGestureCardRect;
-    return {
-      phase: base.phase,
-      direction: base.direction,
-      tabId: base.tabId,
-      // 1 puts the overlay's own frame exactly on `targetRect`: the pull's geometry is already the
-      // interpolation, and running a second one over it is what made the shrink accelerate.
-      progress: 1,
-      sourceRect: target,
-      targetRect: target,
-      imageUri: base.imageUri,
-      imagePixelMap: base.imagePixelMap,
-      imageRevision: base.imageRevision,
-      imageWidth: base.imageWidth,
-      imageHeight: base.imageHeight,
-      useFullWebSnapshot: base.useFullWebSnapshot,
-      sourceImageTopInset: base.sourceImageTopInset,
-      previewCornerRadius: base.previewCornerRadius,
-      imageBlurRadius: base.imageBlurRadius,
-      // Pulled open by a finger, this is a card from the first frame: it must not start square and
-      // round off on the way, which is what the page-to-card morph does on its own.
-      cornerRadiusFollowsProgress: false
-    };
-  }
-
-  /** The tab the finger is holding: the one the entry morphs, or the active tab until that is known. */
-  private resolveEntryGestureHeldTabId(): string {
-    const base = this.entryGestureSnapshotState;
-    if (base !== undefined) {
-      return base.tabId;
-    }
-    const sceneState = this.entrySharedSnapshotState;
-    return sceneState.tabId.trim().length > 0 ? sceneState.tabId : this.activeTabId.trim();
-  }
-
-  /**
-   * The pull's page end, with the finger's travel already in it.
-   *
-   * The capture's own rectangle while it is there, and the visible web viewport before it lands: the row
-   * has to be flat from the frame the drag is claimed, not from the frame the capture arrives, or the
-   * deck is seen stacking up and then flattening again.
-   */
-  private resolveEntryGestureSourceRect(): BrowserTabsOverlayRect {
-    const base = this.entryGestureSnapshotState;
-    if (base !== undefined) {
-      return this.panEntryGestureRect(base.sourceRect);
-    }
-    return this.panEntryGestureRect({
-      left: this.resolveRootLeft() + this.viewportLeft,
-      top: this.resolveRootTop() + this.viewportTop,
-      width: Math.max(1, this.viewportWidth),
-      height: Math.max(1, this.viewportHeight)
-    });
-  }
-
-  /**
-   * The card the finger is holding, as it is painted this frame.
-   *
-   * Both ends already carry the finger's travel, so interpolating between them is the whole gesture —
-   * the row has nothing else moving it.
-   */
-  private resolveEntryGestureCardFrame(): BrowserTabsOverlayRect {
-    return this.entryGestureCardRect;
-  }
-
-  private resolveEntryGestureDeckCardRect(scale: number): BrowserTabsOverlayRect {
-    const heldTabId = this.resolveEntryGestureHeldTabId();
-    const heldItem = this.deckItems.find(
-      (candidate: BrowserTabsFloatingItem): boolean => candidate.id === heldTabId);
-    if (heldItem === undefined) {
-      return this.entryGestureCardRect;
-    }
-    const deck = this.stackLayoutPolicy.resolveCard(this.resolveDeckIndex(heldItem),
-      this.horizontalDeckPosition, this.deckItems.length, this.layoutState.cardWidth);
-    return this.scaleEntryGestureRectAboutCentre(this.buildDeckPreviewRect(deck), scale);
-  }
-
-  /** One interpolation from the page to the smallest card, eased, plus the finger's damped travel. */
-  private resolveEntryGesturePulledRect(progress: number): BrowserTabsOverlayRect {
-    const source = this.resolveEntryGestureSourceRect();
-    const smallest = this.resolveEntryGestureDeckCardRect(
-      BROWSER_TABS_OVERVIEW_ENTRY_GESTURE_MIN_CARD_RATIO);
-    const eased = Math.max(0, Math.min(1, progress));
-    return {
-      left: source.left + (smallest.left - source.left) * eased,
-      top: source.top + (smallest.top - source.top) * eased,
-      width: source.width + (smallest.width - source.width) * eased,
-      height: source.height + (smallest.height - source.height) * eased
-    };
-  }
-
-  /**
-   * Where a card sits while the finger is pulling the overview open.
-   *
-   * The tab order never changes — only the layout does. Every card is laid out flat, the same distance
-   * apart and all at the held card's size, so what the pull shows is the whole row of tabs side by side
-   * instead of the deck's stack, and it travels with the finger as one piece. Because each card's place
-   * is measured from the held card's own frame, the row slides in from the screen edges as that card
-   * shrinks, and the cards stay clear of each other instead of overlapping like the deck.
-   *
-   * The far end of the movement is the deck's own metrics, which is what a release blends into: every
-   * card, in order, slides from its flat place into its slot in the stack.
-   */
-  private resolveEntryGestureCardMetrics(item: BrowserTabsFloatingItem): BrowserTabsOverviewStackCardMetrics {
-    const index = this.resolveDeckIndex(item);
-    const deck = this.stackLayoutPolicy.resolveCard(index, this.horizontalDeckPosition,
-      this.deckItems.length, this.layoutState.cardWidth);
-    const heldIndex = this.deckItems.findIndex(
-      (candidate: BrowserTabsFloatingItem): boolean =>
-        candidate.id === this.resolveEntryGestureHeldTabId());
-    if (heldIndex < 0) {
-      return deck;
-    }
-    if (index === heldIndex && this.entryGestureSnapshotState !== undefined) {
-      // The card the finger holds is painted by the snapshot, so the deck hides its own copy.
-      return {
-        offsetX: deck.offsetX,
-        offsetY: 0,
-        scale: deck.scale,
-        opacity: 0,
-        titleOpacity: 0,
-        shadeOpacity: 0,
-        zIndex: deck.zIndex
-      };
-    }
-    const frame = this.resolveEntryGestureCardFrame();
-    const flatScale = Math.max(0.05, frame.width / Math.max(1, this.layoutState.cardWidth));
-    const spacing = frame.width + FLOATING_TABS_ENTRY_GESTURE_ROW_GAP;
-    const rowOffset = index - heldIndex;
-    const flatPreviewCentreX = frame.left + frame.width / 2 + rowOffset * spacing;
-    const flatOffsetX = flatPreviewCentreX - (this.resolveRootLeft() + this.resolveRootWidth() / 2);
-    // Lined up with the held card, not with the deck's baseline: the card the finger pulls is on its
-    // way down the screen, and the whole row has to travel with it.
-    const padding = this.resolveHorizontalContentPadding();
-    const deckCentreY = this.resolveRootTop() + padding.top +
-      (this.resolveRootHeight() - padding.top - padding.bottom) / 2;
-    const flatOffsetY = (frame.top + frame.height / 2) - deckCentreY -
-      this.layoutState.identityHeaderHeight * flatScale / 2;
-    const settle = Math.max(0, Math.min(1, this.entryGestureSettle));
-    return {
-      offsetX: flatOffsetX + (deck.offsetX - flatOffsetX) * settle,
-      offsetY: flatOffsetY * (1 - settle),
-      scale: flatScale + (deck.scale - flatScale) * settle,
-      // Flat cards all stand on their own, so every one of them shows a title; the deck only shows the
-      // ones near the focus. Blending instead of switching is what stops the whole row lighting its
-      // titles up and then dropping them the frame the deck takes over.
-      opacity: 1 + (deck.opacity - 1) * settle,
-      titleOpacity: 1 + (deck.titleOpacity - 1) * settle,
-      // Flat cards are not stacked, so nothing casts the deck's depth shading either.
-      shadeOpacity: deck.shadeOpacity * settle,
-      zIndex: deck.zIndex
-    };
-  }
-
-  private panEntryGestureRect(rect: BrowserTabsOverlayRect): BrowserTabsOverlayRect {
-    return {
-      left: rect.left + this.entryGesturePanX,
-      top: rect.top + this.entryGesturePanY,
-      width: rect.width,
-      height: rect.height
-    };
-  }
-
-  private scaleEntryGestureRectAboutCentre(rect: BrowserTabsOverlayRect, scale: number): BrowserTabsOverlayRect {
-    const safeScale = Number.isFinite(scale) ? Math.max(0.1, Math.min(1, scale)) : 1;
-    const width = Math.max(1, rect.width * safeScale);
-    const height = Math.max(1, rect.height * safeScale);
-    return {
-      left: rect.left + (rect.width - width) / 2,
-      top: rect.top + (rect.height - height) / 2,
-      width: width,
-      height: height
-    };
-  }
-
-  /** Keep the last usable entry snapshot, because the scene drops it as soon as the entry settles. */
-  private handleEntrySharedSnapshotChanged(): void {
-    const state = this.entrySharedSnapshotState;
-    if (state.direction !== 'enter') {
-      return;
-    }
-    if (state.imageUri.trim().length <= 0 && state.imagePixelMap === undefined) {
-      return;
-    }
-    this.entryGestureSnapshotState = state;
-  }
-
-  private handleEntryGestureOffsetsChanged(): void {
-    if (!this.entryGestureActive) {
-      return;
-    }
-    this.applyEntryGestureLayout();
-  }
-
-  private applyEntryGestureLayout(): void {
-    const layout = this.entryGesturePolicy.resolveLayout({
-      offsetX: this.entryGestureOffsetX,
-      offsetY: this.entryGestureOffsetY,
-      viewportWidth: this.resolveRootWidth(),
-      viewportHeight: this.resolveRootHeight()
-    });
-    this.entryGesturePanX = layout.panX;
-    this.entryGesturePanY = layout.panY;
-    this.entryGestureCardRect = this.panEntryGestureRect(
-      this.resolveEntryGesturePulledRect(layout.progress));
-  }
-
-  private handleEntryGestureActiveChanged(): void {
-    if (this.entryGestureActive) {
-      this.entryGestureSettling = false;
-      this.entryGestureSettle = 0;
-      this.applyEntryGestureLayout();
-      return;
-    }
-    if (this.entryGestureSnapshotState === undefined) {
-      return;
-    }
-    if (this.resolveEntryGestureLayoutSettled()) {
-      this.entryGestureSettling = false;
-      return;
-    }
-    // The finger let go: the held card finishes shrinking into the deck's card and the two cards
-    // beside it slide into the slots the deck already has for them, so the release reads as the row
-    // being dealt into the stack rather than the screen switching.
-    this.entryGestureSettling = true;
-    animateTo({
-      // The same spring the deck uses when it settles: a flat ease-out over a fifth of a second read as
-      // the row being snapped into place rather than landing.
-      duration: ENTRY_GESTURE_SETTLE_DURATION_MS,
-      curve: this.animationViewModel.getFloatingCardEntryCurve(),
-      onFinish: () => {
-        this.entryGestureSettling = false;
-        // The deck owns every card from here; a stale copy would flash the old page at the next pull.
-        this.entryGestureSnapshotState = undefined;
-      }
-    }, () => {
-      // Straight onto the deck's own card rectangle: one move, so the card lands where the stack
-      // expects it instead of growing and then being replaced by something else.
-      this.entryGestureCardRect = this.resolveEntryGestureDeckCardRect(1);
-      this.entryGesturePanX = 0;
-      this.entryGesturePanY = 0;
-      this.entryGestureSettle = 1;
-    });
-  }
-
-  private resolveEntryGestureLayoutSettled(): boolean {
-    const deck = this.resolveEntryGestureDeckCardRect(1);
-    return Math.abs(this.entryGestureCardRect.width - deck.width) < 0.5 &&
-      Math.abs(this.entryGestureCardRect.left - deck.left) < 0.5 &&
-      Math.abs(this.entryGestureCardRect.top - deck.top) < 0.5 &&
-      Math.abs(this.entryGesturePanX) < 0.5 && Math.abs(this.entryGesturePanY) < 0.5;
   }
 
   @Builder
@@ -1074,13 +613,64 @@ export struct BrowserTabsFloatingOverlay {
     .zIndex(FLOATING_TABS_CARDS_Z_INDEX)
   }
 
+  /**
+   * The large centred card strip.
+   *
+   * One card per page in a horizontal `List` that snaps to the centre, so a sideways swipe moves to
+   * the next page instead of to the next row of a grid. Every card is sized to its own screenshot,
+   * which is the point of the strip: a whole page stays visible at the largest size that fits it.
+   */
+  @Builder
+  private buildHorizontalCardsLayer() {
+    List({
+      space: this.layoutState.gridGap,
+      scroller: this.scroller
+    }) {
+      ForEach(this.resolveVisibleItems(), (item: BrowserTabsFloatingItem) => {
+        ListItem() {
+          Stack({ alignContent: Alignment.Center }) {
+            this.buildCard(item)
+          }
+          .width('100%')
+          .height('100%')
+          .padding({
+            top: this.resolveHorizontalContentPadding().top,
+            bottom: this.resolveHorizontalContentPadding().bottom
+          })
+          .clip(false)
+        }
+        .width(this.resolveCardWidthForItem(item))
+        .height(this.resolveRootHeight())
+        .clip(false)
+      }, (item: BrowserTabsFloatingItem) => this.resolveCardIdentityKey(item))
+    }
+    .width('100%')
+    .height('100%')
+    .listDirection(Axis.Horizontal)
+    .alignListItem(ListItemAlign.Center)
+    .scrollSnapAlign(ScrollSnapAlign.CENTER)
+    .contentStartOffset(this.resolveHorizontalEdgeInset(true))
+    .contentEndOffset(this.resolveHorizontalEdgeInset(false))
+    .cachedCount(8)
+    .padding({
+      left: FLOATING_TABS_HORIZONTAL_PADDING,
+      right: FLOATING_TABS_HORIZONTAL_PADDING
+    })
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+    .clip(false)
+    .hitTestBehavior((this.interactionEnabled && !this.closeAllExitActive) ?
+      HitTestMode.Transparent : HitTestMode.None)
+    .zIndex(FLOATING_TABS_CARDS_Z_INDEX)
+  }
+
   // Each tab has one render node. Fixed index order matches StackSwipe, so a trailing card
   // covers a leading one throughout the drag; no layer swaps at rounded-index boundaries.
   //
   // Card slots are doubled so the entering morph can hold a slot of its own strictly between the
   // covered card and its successor, instead of being one more layer painted above the whole deck.
   @Builder
-  private buildHorizontalCardsLayer() {
+  private buildStackCardsLayer() {
     Stack({ alignContent: Alignment.Center }) {
       ForEach(this.resolveDeckItems(), (item: BrowserTabsFloatingItem) => {
         this.buildDeckCard(item)
@@ -1197,11 +787,11 @@ export struct BrowserTabsFloatingOverlay {
       presentation: item.presentation,
       snapshotImageUri: item.presentation.preview.sharedSnapshotImageUri,
       snapshotPixelMap: item.presentation.preview.sharedSnapshotPixelMap,
-      snapshotAspectFitEnabled: this.isHorizontalCardsLayout(),
-      snapshotCoverEnabled: this.isHorizontalCardsLayout(),
-      deckShadeOpacity: this.isHorizontalCardsLayout() ? this.resolveDeckMetrics(item).shadeOpacity : 0,
-      previewHeight: this.layoutState.previewHeight,
-      cardWidth: this.layoutState.cardWidth,
+      snapshotAspectFitEnabled: this.usesItemSizedCardFrame(),
+      snapshotCoverEnabled: this.isStackLayout(),
+      deckShadeOpacity: this.isStackLayout() ? this.resolveDeckMetrics(item).shadeOpacity : 0,
+      previewHeight: this.resolveCardPreviewHeightForItem(item),
+      cardWidth: this.resolveCardWidthForItem(item),
       identityHeaderHeight: this.layoutState.identityHeaderHeight,
       identityPreviewGap: this.layoutState.identityPreviewGap,
       tabTranslateX: this.resolveCardTranslateX(item),
@@ -1209,7 +799,7 @@ export struct BrowserTabsFloatingOverlay {
       tabScale: this.resolveCardScale(item),
       tabOpacity: this.resolveCardOpacity(item),
       identityOpacity: this.resolveIdentityMotion(item).opacity *
-        (this.isHorizontalCardsLayout() ? this.resolveDeckMetrics(item).titleOpacity : 1),
+        (this.isStackLayout() ? this.resolveDeckMetrics(item).titleOpacity : 1),
       identityTranslateY: this.resolveIdentityMotion(item).translateY,
       previewCardOpacity: 1,
       snapshotImageOpacity: 1,
@@ -1228,15 +818,15 @@ export struct BrowserTabsFloatingOverlay {
       entryMountCurve: this.animationViewModel.getFloatingCardEntryCurve(),
       entryMountDelayMs: this.resolveCardMotionDelayMs(this.resolveDeckIndex(item)),
       swipeDismissThreshold: this.resolveSwipeDismissThreshold(),
-      swipeFlyoutOffset: this.isHorizontalCardsLayout() ? this.resolveRootHeight() : this.resolveRootWidth(),
-      swipeDismissMode: this.layoutState.layoutStyle === 'horizontal_cards' ? 'upward' : 'horizontal',
+      swipeFlyoutOffset: this.usesUpwardCardDismiss() ? this.resolveRootHeight() : this.resolveRootWidth(),
+      swipeDismissMode: this.usesUpwardCardDismiss() ? 'upward' : 'horizontal',
       closeButtonEnabled: true,
       closeButtonAlwaysVisible: this.storedTabsOverviewCloseButtonAlwaysVisible,
       onCloseTab: (tabId: string) => {
         this.closeTabFromOverlay(tabId);
       },
       onSwipeStart: (tabId: string) => {
-        if (this.isHorizontalCardsLayout()) {
+        if (this.isStackLayout()) {
           // The card's vertical gesture claimed the touch, so the deck's horizontal one is over.
           this.abortDeckMotion();
           this.deckSwipeTabId = tabId;
@@ -1259,8 +849,85 @@ export struct BrowserTabsFloatingOverlay {
         this.handlePreviewRectChange(tabId, left, top, width, height);
       }
     })
-    .width(this.resolveCardWidth())
-    .height(this.resolveItemHeight())
+    .width(this.resolveCardWidthForItem(item))
+    .height(this.resolveCardItemHeightForItem(item))
+  }
+
+  /**
+   * The card surface's own width.
+   *
+   * The strip sizes every card to its screenshot, so a card's box is resolved per item; the grid and
+   * the deck share the one width their layout state carries.
+   */
+  private resolveCardWidthForItem(item: BrowserTabsFloatingItem): number {
+    return this.isHorizontalCardsLayout() ? this.resolveHorizontalCardFrame(item).width :
+      this.layoutState.cardWidth;
+  }
+
+  private resolveCardPreviewHeightForItem(item: BrowserTabsFloatingItem): number {
+    return this.isHorizontalCardsLayout() ? this.resolveHorizontalCardFrame(item).height :
+      this.layoutState.previewHeight;
+  }
+
+  private resolveCardItemHeightForItem(item: BrowserTabsFloatingItem): number {
+    return this.resolveCardPreviewHeightForItem(item) + this.layoutState.identityHeaderHeight +
+      this.layoutState.identityPreviewGap;
+  }
+
+  /**
+   * The strip's card box, per item, frozen on the first snapshot size seen for that tab.
+   *
+   * The strip is the only style whose card is sized to its own screenshot, which makes the box a
+   * function of published snapshot state rather than of the layout state. That state changes under
+   * the card while it is on screen: an overview open installs the entry capture (real capture size)
+   * and hands it over to the persisted thumbnail (normalised size) as the entry finishes, and a
+   * preview refresh can replace the thumbnail again. Re-deriving the box at those moments resizes and
+   * re-places the card, which reads as the card vanishing and reappearing at the end of the entry.
+   *
+   * Freezing on first sight keeps the box stable for as long as the overview is open. The card's own
+   * snapshot renderer keeps fitting the current image inside the box, so a later image with another
+   * aspect ratio letterboxes or crops instead of moving the box.
+   */
+  private stripCardFrameByTabId: Record<string, BrowserTabsOverviewHorizontalCardFrame> = {};
+
+  private resolveHorizontalCardFrame(item: BrowserTabsFloatingItem): BrowserTabsOverviewHorizontalCardFrame {
+    const frozen = this.stripCardFrameByTabId[item.tab.id];
+    if (frozen !== undefined) {
+      return frozen;
+    }
+    const frame = this.layoutViewModel.resolveHorizontalCardFrame({
+      maxWidth: this.layoutState.cardWidth,
+      maxHeight: this.layoutState.previewHeight,
+      snapshotWidth: item.presentation.preview.sharedSnapshotImageWidth,
+      snapshotHeight: item.presentation.preview.sharedSnapshotImageHeight
+    });
+    this.stripCardFrameByTabId[item.tab.id] = frame;
+    return frame;
+  }
+
+  /**
+   * Drop the frozen boxes and re-derive them from the new layout state.
+   */
+  private clearStripCardFrames(): void {
+    this.stripCardFrameByTabId = {};
+  }
+
+  /**
+   * Whether the style sizes each card to its own screenshot instead of to one shared box.
+   */
+  private usesItemSizedCardFrame(): boolean {
+    return this.isHorizontalCardsLayout();
+  }
+
+  /**
+   * Whether a card is dismissed by flicking it upwards.
+   *
+   * The strip and the deck are both one card wide, so a sideways flick belongs to their own paging
+   * and the dismiss gesture has to take the other axis. The grid has no paging, so it keeps the
+   * sideways flick.
+   */
+  private usesUpwardCardDismiss(): boolean {
+    return this.layoutState.layoutStyle !== 'grid';
   }
 
   private startEntryAnimation(): void {
@@ -1338,7 +1005,7 @@ export struct BrowserTabsFloatingOverlay {
       targetTabId,
       this.entryTargetCoordinator.resolveCurrentRectGeneration(this.entryTargetPreparationState)
     );
-    if (this.isHorizontalCardsLayout()) {
+    if (this.isStackLayout()) {
       this.seedDeckPosition(targetIndex);
     } else {
       this.scroller.scrollToIndex(targetIndex, false, ScrollAlign.CENTER);
@@ -1351,12 +1018,19 @@ export struct BrowserTabsFloatingOverlay {
     if (lastItemIndex < 0) {
       return;
     }
-    if (this.isHorizontalCardsLayout()) {
+    if (this.isStackLayout()) {
       // The deck has no scroll position to restore, so opening on a tab means placing the deck on
       // that tab. When the active tab is not in the selected section there is nothing to centre
       // on, and the last card is the honest default.
       const activeTabIndex = this.resolveDisplacementTargetIndex(this.activeTabId);
       this.seedDeckPosition(activeTabIndex >= 0 ? activeTabIndex : lastItemIndex);
+      return;
+    }
+    if (this.isHorizontalCardsLayout()) {
+      // The strip centres the active tab; without one the last card is the honest default.
+      const activeTabIndex = this.resolveDisplacementTargetIndex(this.activeTabId);
+      this.scroller.scrollToIndex(activeTabIndex >= 0 ? activeTabIndex : lastItemIndex, false,
+        activeTabIndex >= 0 ? ScrollAlign.CENTER : ScrollAlign.END);
       return;
     }
     this.scroller.scrollToIndex(lastItemIndex, false, ScrollAlign.END);
@@ -1401,13 +1075,6 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   private syncEntryDisplacementFromProps(): void {
-    if (this.shouldApplyEntryGestureLayout()) {
-      // The pull lays every card out itself, flat and in order. The entry's own per-card fly-in is a
-      // second, independent offset on the same cards: it would shift the flat row while the finger
-      // holds it and then snap back when the entry finished, which is the jump seen on release.
-      this.entryDisplacementProgress = 1;
-      return;
-    }
     if (!this.isEntryDisplacementActive()) {
       this.entryDisplacementTargetId = '';
       this.entryDisplacementProgress = 1;
@@ -1488,7 +1155,7 @@ export struct BrowserTabsFloatingOverlay {
       tabId.trim().length <= 0 || this.isLocallyRemovedTab(tabId)) {
       return;
     }
-    if (this.isHorizontalCardsLayout()) {
+    if (this.isStackLayout()) {
       this.beginDeckDismiss(tabId);
       return;
     }
@@ -1546,7 +1213,7 @@ export struct BrowserTabsFloatingOverlay {
   private isSelectedSectionEmpty(): boolean {
     // The deck already holds its item list; rebuilding every presentation here would run on every
     // animation frame, because `horizontalDeckPosition` is a `@State` the deck writes each frame.
-    if (this.isHorizontalCardsLayout()) {
+    if (this.isStackLayout()) {
       return this.deckItems.length <= 0;
     }
     return this.resolveVisibleItems().length <= 0;
@@ -1663,7 +1330,7 @@ export struct BrowserTabsFloatingOverlay {
     // every deck card would report the same centred rectangle. The same geometry that paints the
     // card supplies the rect instead, so the entry morph and the remembered rect stay honest.
     let rect: BrowserTabsOverlayRect;
-    const deckRect = this.isHorizontalCardsLayout() ? this.resolveDeckPreviewRect(tabId) : undefined;
+    const deckRect = this.isStackLayout() ? this.resolveDeckPreviewRect(tabId) : undefined;
     if (deckRect !== undefined) {
       rect = deckRect;
     } else {
@@ -1754,7 +1421,34 @@ export struct BrowserTabsFloatingOverlay {
       return undefined;
     }
     const visibleTabIds = this.resolveVisibleTabIds();
-    if (this.layoutState.layoutStyle === 'horizontal_cards') {
+    if (this.isHorizontalCardsLayout()) {
+      // The strip centres one card per page, so the predicted landing rect is that card's own box.
+      if (visibleTabIds.indexOf(targetTabId) < 0) {
+        return undefined;
+      }
+      const targetItem = this.resolveVisibleItems().find(
+        (item: BrowserTabsFloatingItem): boolean => item.tab.id === targetTabId);
+      const targetWidth = targetItem === undefined ? this.layoutState.cardWidth :
+        this.resolveCardWidthForItem(targetItem);
+      const targetHeight = targetItem === undefined ? this.layoutState.previewHeight :
+        this.resolveCardPreviewHeightForItem(targetItem);
+      const targetItemHeight = targetItem === undefined ? this.layoutState.itemHeight :
+        this.resolveCardItemHeightForItem(targetItem);
+      const contentPadding = this.resolveHorizontalContentPadding();
+      const availableHeight = Math.max(1,
+        this.resolveRootHeight() - contentPadding.top - contentPadding.bottom);
+      const usableWidth = Math.max(1, this.resolveRootWidth() - FLOATING_TABS_HORIZONTAL_PADDING * 2);
+      return {
+        left: this.resolveRootLeft() + FLOATING_TABS_HORIZONTAL_PADDING +
+          Math.max(0, (usableWidth - targetWidth) / 2),
+        top: this.resolveRootTop() + contentPadding.top +
+          Math.max(0, (availableHeight - targetItemHeight) / 2) +
+          this.layoutState.identityHeaderHeight + this.layoutState.identityPreviewGap,
+        width: targetWidth,
+        height: targetHeight
+      };
+    }
+    if (this.isStackLayout()) {
       if (visibleTabIds.indexOf(targetTabId) < 0) {
         return undefined;
       }
@@ -1814,7 +1508,10 @@ export struct BrowserTabsFloatingOverlay {
       return;
     }
     this.layoutState = nextState;
-    if (nextState.layoutStyle === 'horizontal_cards') {
+    // The strip's frozen boxes were derived from the previous card box, so a real geometry change
+    // has to re-derive them; a rotation or a window resize otherwise keeps the old card size.
+    this.clearStripCardFrames();
+    if (this.isStackLayout()) {
       // The deck needs its own item list and a starting card as soon as the style is known.
       this.ensureDeckPositionForCurrentSection();
     } else {
@@ -1828,7 +1525,7 @@ export struct BrowserTabsFloatingOverlay {
    * observe the horizontal style.
    */
   private ensureDeckPositionForCurrentSection(): void {
-    if (!this.isHorizontalCardsLayout()) {
+    if (!this.isStackLayout()) {
       return;
     }
     this.refreshDeckPresentation();
@@ -1847,6 +1544,9 @@ export struct BrowserTabsFloatingOverlay {
     if (previousStyle === this.layoutState.layoutStyle) {
       return;
     }
+    // Switching styles swaps which box the strip derived its frames from, so the frozen boxes of the
+    // style being left must not be reused if the user comes back to it.
+    this.clearStripCardFrames();
     this.stopDeckMotion();
     this.refreshDeckPresentation();
     this.positionCardsForCurrentSection();
@@ -2168,12 +1868,6 @@ export struct BrowserTabsFloatingOverlay {
    * own draw order. The exit morph grows back out to the page and stays above every card.
    */
   private shouldMountSharedSnapshotInDeck(): boolean {
-    // The pull already paints the held card from its own copy of this snapshot. Letting the deck's slot
-    // mount the scene's copy as well put two screenshots of the same page on screen — the lower one at
-    // the deck's card, which then vanished the moment the entry handed over.
-    if (this.shouldApplyEntryGestureLayout()) {
-      return false;
-    }
     return this.entrySharedSnapshotMounted &&
       this.entrySharedSnapshotState.direction === 'enter' &&
       this.resolveDeckEntryMorphSlot() >= 0;
@@ -2186,7 +1880,7 @@ export struct BrowserTabsFloatingOverlay {
    * it, so the morph holds a stacking slot that belongs to no other card.
    */
   private resolveDeckEntryMorphSlot(): number {
-    if (!this.isHorizontalCardsLayout()) {
+    if (!this.isStackLayout()) {
       return -1;
     }
     const coveredTabId = this.resolveMorphCoveredTabId();
@@ -2256,8 +1950,8 @@ export struct BrowserTabsFloatingOverlay {
       selectedTabId: this.selectionDisplacementTabId,
       selectedIndex: this.resolveSelectionDisplacementIndex(),
       columnCount: this.resolveDisplacementColumnCount(),
-      cardWidth: this.layoutState.cardWidth,
-      itemHeight: this.resolveItemHeight(),
+      cardWidth: this.resolveCardWidthForItem(item),
+      itemHeight: this.resolveCardItemHeightForItem(item),
       gridGap: this.layoutState.gridGap
     });
   }
@@ -2273,14 +1967,14 @@ export struct BrowserTabsFloatingOverlay {
       selectedTabId: this.entryDisplacementTabId,
       selectedIndex: this.resolveEntryDisplacementIndex(),
       columnCount: this.resolveDisplacementColumnCount(),
-      cardWidth: this.layoutState.cardWidth,
-      itemHeight: this.resolveItemHeight(),
+      cardWidth: this.resolveCardWidthForItem(item),
+      itemHeight: this.resolveCardItemHeightForItem(item),
       gridGap: this.layoutState.gridGap
     });
   }
 
   private resolveDisplacementColumnCount(): number {
-    if (this.layoutState.layoutStyle === 'horizontal_cards') {
+    if (this.layoutState.layoutStyle === 'horizontal_cards' || this.layoutState.layoutStyle === 'stack') {
       return Math.max(1, this.deckItems.length);
     }
     return Math.max(1, this.layoutState.columnCount);
@@ -2318,13 +2012,14 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   /**
-   * Deck cards share one width and one height.
+   * The one width and height a card shares with its neighbours.
    *
    * The flat strip sized every card to its own screenshot so a whole page stayed visible at the
    * largest size that fit it. A deck cannot do that: a card of a different width sits a different
    * distance from the focused card and overlaps its neighbours by a different amount, so the whole
    * deck geometry stops matching. Every deck screenshot therefore fills the one shared card with
-   * `ImageFit.Cover`; the grid and the flat strip keep their own sizing.
+   * `ImageFit.Cover`; the grid and the flat strip keep their own sizing. Callers that need the strip's
+   * per-item box ask `resolveCardWidthForItem` / `resolveCardItemHeightForItem` instead.
    */
   private resolveCardWidth(): number {
     return this.layoutState.cardWidth;
@@ -2342,13 +2037,41 @@ export struct BrowserTabsFloatingOverlay {
    * fifth of a desktop card and two thirds of a phone one.
    */
   private resolveSwipeDismissThreshold(): number {
-    const extent = this.isHorizontalCardsLayout() ?
+    const extent = this.usesUpwardCardDismiss() ?
       this.resolveItemHeight() : this.resolveCardWidth();
     return this.swipeDismissPolicy.resolveThresholdVp(extent);
   }
 
+  /**
+   * The stacked deck. Every deck-only behaviour is gated on this instead of on a "not grid" test, so
+   * the large card strip can share the overlay without inheriting the deck's geometry.
+   */
+  private isStackLayout(): boolean {
+    return this.layoutState.layoutStyle === 'stack';
+  }
+
+  /**
+   * The large centred card strip.
+   */
   private isHorizontalCardsLayout(): boolean {
     return this.layoutState.layoutStyle === 'horizontal_cards';
+  }
+
+  /**
+   * The inset that centres one strip card in the viewport.
+   *
+   * The strip centres the first and the last card too, so both edges get their own inset instead of
+   * a single shared one: cards differ in width, and a shared inset would leave the narrowest card
+   * off centre at one of the ends.
+   */
+  private resolveHorizontalEdgeInset(first: boolean): number {
+    const items = this.resolveVisibleItems();
+    if (items.length <= 0) {
+      return this.layoutState.horizontalContentInset;
+    }
+    const edgeItem = first ? items[0] : items[items.length - 1];
+    const usableWidth = Math.max(1, this.resolveRootWidth() - FLOATING_TABS_HORIZONTAL_PADDING * 2);
+    return Math.max(0, (usableWidth - this.resolveCardWidthForItem(edgeItem)) / 2);
   }
 
   private resolveDeckItems(): BrowserTabsFloatingItem[] {
@@ -2395,10 +2118,6 @@ export struct BrowserTabsFloatingOverlay {
     // `build()` reads the metrics several times per card per display frame. They are pure in the
     // deck scalar, the recorded slots and the card width, so one memo table serves the whole frame.
     const slot = this.resolveDeckIndex(item);
-    // Flat for the whole drag, snapshot or not: the row never stacks first.
-    if (this.shouldApplyEntryGestureLayout()) {
-      return this.resolveEntryGestureCardMetrics(item);
-    }
     const key = `${this.horizontalDeckPosition}|${this.layoutState.cardWidth}|` +
       `${this.deckItemsSignature}|${this.deckSlotSignature}`;
     if (key !== this.deckMetricsCacheKey) {
@@ -2419,7 +2138,7 @@ export struct BrowserTabsFloatingOverlay {
   // list is rebuilt only when the tab list itself changes; the per-frame cost is the metrics, and
   // `build()` reads `deckItems` instead of rebuilding presentations.
   private refreshDeckPresentation(): void {
-    if (!this.isHorizontalCardsLayout()) { return; }
+    if (!this.isStackLayout()) { return; }
     const next = this.resolveVisibleItems();
     const previousIds = this.deckItems.map((item: BrowserTabsFloatingItem): string => item.id);
     const nextIds = next.map((item: BrowserTabsFloatingItem): string => item.id);
@@ -2598,7 +2317,7 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   private settleDeckToNearestCard(): void {
-    if (!this.isHorizontalCardsLayout() || this.deckItems.length <= 0) {
+    if (!this.isStackLayout() || this.deckItems.length <= 0) {
       return;
     }
     if (this.exiting || this.closeAllExitActive) {
@@ -2654,14 +2373,14 @@ export struct BrowserTabsFloatingOverlay {
   }
 
   private seedDeckPosition(index: number): void {
-    if (!this.isHorizontalCardsLayout()) { return; }
+    if (!this.isStackLayout()) { return; }
     this.stopDeckMotion();
     this.horizontalDeckPosition = this.deckMotion.seed(index, this.deckItems.length);
     this.deckPositionSeeded = true;
   }
 
   private selectOverviewTab(tabId: string, rect?: BrowserTabOverviewCardSelectRect): void {
-    if (this.isHorizontalCardsLayout()) {
+    if (this.isStackLayout()) {
       if (this.deckDragActive) { return; }
       this.stopDeckMotion();
       const deckRect = this.resolveDeckPreviewRect(tabId);
