@@ -172,7 +172,7 @@ export class BrowserWebLoadRuntimeCoordinator implements BrowserWebLoadExecution
     sharedBrowserHttpsFirstNavigationService.attachFallbackExecutor(
       tabId,
       (fallbackTabId: string, fallbackUrl: string): boolean =>
-        this.loadUrlForTab(fallbackTabId, fallbackUrl, true)
+        this.loadUrlForTab(fallbackTabId, fallbackUrl, true, false, true, 'HttpsFirstFallback')
     );
     const navigationId = this.dependencies.webEventRouter.beginNavigation(
       tabId,
@@ -226,10 +226,17 @@ export class BrowserWebLoadRuntimeCoordinator implements BrowserWebLoadExecution
     targetUrl: string,
     strict: boolean = true,
     clearHistory: boolean = false,
-    primeNavigationFeedback: boolean = true
+    primeNavigationFeedback: boolean = true,
+    caller: string = 'unspecified'
   ): boolean {
     const diagnosticStartedAt = Date.now();
     const runtimeTargetUrl = this.resolveRuntimeLoadUrl(targetUrl, tabId);
+    AiraNavForensicsProbe.logLoadIssued(
+      `loadUrlForTab:${caller}`,
+      tabId,
+      runtimeTargetUrl,
+      clearHistory
+    );
     if (this.dependencies.resolveOfflineFastFailureCoordinator().applyIfNeeded(tabId, runtimeTargetUrl)) {
       hilog.info(
         BROWSER_HOME_SUBMIT_DIAGNOSTIC_DOMAIN,
@@ -467,7 +474,7 @@ export class BrowserWebLoadRuntimeCoordinator implements BrowserWebLoadExecution
           targetUrl.length,
           Date.now() - diagnosticStartedAt
         );
-        const issued = this.loadUrlForTab(tabId, targetUrl, true, false, false);
+        const issued = this.loadUrlForTab(tabId, targetUrl, true, false, false, 'OpenResolvedUrl');
         hilog.info(
           BROWSER_HOME_SUBMIT_DIAGNOSTIC_DOMAIN,
           BROWSER_HOME_SUBMIT_DIAGNOSTIC_TAG,
@@ -607,7 +614,7 @@ export class BrowserWebLoadRuntimeCoordinator implements BrowserWebLoadExecution
     tabId: string,
     targetUrl: string
   ): boolean {
-    return this.loadUrlForTab(tabId, targetUrl, true, true);
+    return this.loadUrlForTab(tabId, targetUrl, true, true, true, 'WebContextMenuLink');
   }
 
   buildOpenResolvedUrlApplicationResult(
@@ -751,7 +758,7 @@ export class BrowserWebLoadRuntimeCoordinator implements BrowserWebLoadExecution
       runtimeLifecyclePort: this.runtimeLifecyclePort,
       downloadNavigationStateCoordinator: this.dependencies.downloadNavigationStateCoordinator,
       executeLoadUrl: (tabId: string, targetUrl: string, clearHistory: boolean): boolean => {
-        return this.loadUrlForTab(tabId, targetUrl, true, clearHistory);
+        return this.loadUrlForTab(tabId, targetUrl, true, clearHistory, true, 'RuntimeNavigationRecovery');
       },
       commitRetryTabPatch: (tabId: string, patch: BrowserTabRuntimePatch): void => {
         this.applyTabPatch(tabId, patch, { persistTabs: false });

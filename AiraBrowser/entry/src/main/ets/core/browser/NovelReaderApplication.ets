@@ -297,7 +297,7 @@ export class NovelReaderApplication {
       if (effect.tabId.length > 0 &&
         this.dependencies.tabSwitchCoordinator.resolveTabSnapshot(effect.tabId) !== undefined) {
         void this.dependencies.tabSwitchCoordinator.switchToTab(effect.tabId).then((): void => {
-          this.dependencies.webNavigationApplication.loadUrlForTab(effect.tabId, effect.url, true);
+          this.dependencies.webNavigationApplication.loadUrlForTab(effect.tabId, effect.url, true, false, true, 'NovelReader');
         });
       } else {
         this.dependencies.appUrlOpenCoordinator.open({
@@ -312,7 +312,7 @@ export class NovelReaderApplication {
       return true;
     }
     if (effect.type === 'navigate_source_chapter') {
-      return this.dependencies.webNavigationApplication.loadUrlForTab(effect.tabId, effect.url, true);
+      return this.dependencies.webNavigationApplication.loadUrlForTab(effect.tabId, effect.url, true, false, true, 'NovelReader');
     }
     if (effect.type === 'copy_source_url') {
       void this.clipboardService.copyText({

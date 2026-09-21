@@ -59,6 +59,7 @@ TAB_PREVIEW_IMAGE_LEASE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tab-previe
 TABS_STACK_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-tabs-stack.cjs"
 SAME_DOCUMENT_RESTORABLE_STATE_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-same-document-restorable-state.cjs"
 DOWNLOAD_REWIND_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-download-rewind-does-not-move-page.cjs"
+NATIVE_NAV_REQUEST_TOKEN_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-native-navigation-request-token.cjs"
 QUICK_SEARCH_CONTINUATION_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-quick-search-continuation.cjs"
 HUAWEI_APP_IDENTITY_RESOLVER="${REPO_ROOT}/scripts/huawei-app-identity.js"
 HUAWEI_APP_IDENTITY_TEST="${REPO_ROOT}/scripts/huawei-app-identity.test.js"
@@ -403,6 +404,12 @@ if [ ! -f "${DOWNLOAD_REWIND_GUARD_SCRIPT}" ]; then
 fi
 node "${DOWNLOAD_REWIND_GUARD_SCRIPT}" || \
   fail "Download rewind guard failed: ${DOWNLOAD_REWIND_GUARD_SCRIPT}"
+
+if [ ! -f "${NATIVE_NAV_REQUEST_TOKEN_GUARD_SCRIPT}" ]; then
+  fail "Native navigation request token guard not found: ${NATIVE_NAV_REQUEST_TOKEN_GUARD_SCRIPT}"
+fi
+node "${NATIVE_NAV_REQUEST_TOKEN_GUARD_SCRIPT}" || \
+  fail "Native navigation request token guard failed: ${NATIVE_NAV_REQUEST_TOKEN_GUARD_SCRIPT}"
 
 if [ ! -f "${QUICK_SEARCH_CONTINUATION_GUARD_SCRIPT}" ]; then
   fail "Quick Search continuation guard not found: ${QUICK_SEARCH_CONTINUATION_GUARD_SCRIPT}"

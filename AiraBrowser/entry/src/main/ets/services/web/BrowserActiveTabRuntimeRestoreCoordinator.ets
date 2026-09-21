@@ -486,7 +486,7 @@ export class BrowserActiveTabRuntimeRestoreCoordinator {
   ): string {
     AiraNavForensicsProbe.logLoadIssued('ActiveTabRuntimeRestore', tabId, targetUrl, true);
     try {
-      if (this.dependencies.webLoadRuntimeCoordinator.loadUrlForTab(tabId, targetUrl, true)) {
+      if (this.dependencies.webLoadRuntimeCoordinator.loadUrlForTab(tabId, targetUrl, true, true, true, 'ActiveTabRuntimeRestore')) {
         return '';
       }
       return `${failurePrefix}：${targetUrl}`;

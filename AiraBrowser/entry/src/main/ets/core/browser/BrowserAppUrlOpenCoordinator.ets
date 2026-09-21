@@ -49,6 +49,7 @@ import { BrowserTabSwitchCoordinator } from './BrowserTabSwitchCoordinator';
 import { BrowserAddressDisplayCoordinator } from './BrowserAddressDisplayCoordinator';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { resolveBrowserNewWindowTestTitle } from '../../app/debug/BrowserNewWindowTestPage';
+import { AiraNavForensicsProbe } from '../../common/debug/AiraNavForensicsProbe';
 import {
   sharedBrowserHttpsFirstNavigationService
 } from '../../services/web/BrowserHttpsFirstNavigationService';
@@ -166,6 +167,11 @@ export class BrowserAppUrlOpenCoordinator {
 
   open(request: BrowserAppUrlOpenRequest): void {
     const plan = this.buildPlan(request);
+    AiraNavForensicsProbe.log(
+      'app_url_open',
+      `source=${request.source ?? '-'} intent=${request.intent ?? '-'} ` +
+        `url=${request.url} action=${plan.action} tab=${request.openerTabId ?? '-'} requestId=${request.requestId ?? '-'}`
+    );
     this.executePlan(plan);
   }
 
@@ -650,7 +656,7 @@ export class BrowserAppUrlOpenCoordinator {
         dataScope: plan.dataScope
       },
       (fallbackTabId: string, fallbackUrl: string): boolean =>
-        this.dependencies.webLoadRuntimeCoordinator.loadUrlForTab(fallbackTabId, fallbackUrl, true)
+        this.dependencies.webLoadRuntimeCoordinator.loadUrlForTab(fallbackTabId, fallbackUrl, true, false, true, 'AppUrlOpenHttpsFallback')
     );
   }
 

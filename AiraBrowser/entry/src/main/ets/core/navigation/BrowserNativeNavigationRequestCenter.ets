@@ -21,6 +21,11 @@ export interface BrowserPendingNavigationRequest {
   dataScope?: BrowserDataScope;
   createdAt: number;
   requestId: string;
+  /**
+   * The route token this request was staged with, when it was delivered through both the in-memory queue
+   * and the shell route params. Empty for requests that only use the in-memory queue.
+   */
+  routeToken?: string;
 }
 
 export interface BrowserNavigationBoundaryOptions {
@@ -71,7 +76,8 @@ const EMPTY_PENDING_BROWSER_REQUEST: BrowserPendingNavigationRequest = {
   intent: 'current_tab',
   source: 'app_ui',
   createdAt: 0,
-  requestId: ''
+  requestId: '',
+  routeToken: ''
 };
 
 let pendingBrowserRequest: BrowserPendingNavigationRequest = EMPTY_PENDING_BROWSER_REQUEST;
@@ -92,10 +98,12 @@ export function requestOpenBrowserUrl(
   intent: BrowserAppUrlOpenIntent = 'current_tab',
   title: string = '',
   source: BrowserAppUrlOpenSource = 'app_ui',
-  boundary: BrowserNavigationBoundaryOptions = {}
+  boundary: BrowserNavigationBoundaryOptions = {},
+  routeToken: string = ''
 ): void {
   const normalizedSource = normalizeBrowserNavigationSource(source);
   const normalizedBoundary = normalizeBrowserNavigationBoundary(boundary);
+  const normalizedRouteToken = routeToken.trim();
   pendingBrowserRequest = {
     url: url,
     title: title,
@@ -105,7 +113,10 @@ export function requestOpenBrowserUrl(
     privacyMode: normalizedBoundary.privacyMode,
     dataScope: normalizedBoundary.dataScope,
     createdAt: Date.now(),
-    requestId: createBrowserNavigationRequestId(normalizedSource, 'memory')
+    requestId: normalizedRouteToken.length > 0
+      ? normalizedRouteToken
+      : createBrowserNavigationRequestId(normalizedSource, 'memory'),
+    routeToken: normalizedRouteToken
   };
 }
 
@@ -116,10 +127,19 @@ export function requestOpenBrowserUrlWithRouteParams(
   source: BrowserAppUrlOpenSource = 'app_ui',
   boundary: BrowserNavigationBoundaryOptions = {}
 ): BrowserNavigationRouteParams {
-  requestOpenBrowserUrl(url, intent, title, source, boundary);
-  return buildBrowserNavigationRouteParams(url, intent, title, source, boundary);
+  // One request, two delivery paths: the in-memory queue (read by the shell's consume pass) and the route
+  // params this caller passes to `router.back`. Both must carry the same token, because the consume side
+  // only records the route token it was handed. Without that, the in-memory copy is consumed first and the
+  // still-readable route param is consumed again on every later page-show, re-opening this URL and
+  // replacing whatever page the tab has since navigated to.
+  const routeParams = buildBrowserNavigationRouteParams(url, intent, title, source, boundary);
+  requestOpenBrowserUrl(url, intent, title, source, boundary, routeParams.openToken);
+  return routeParams;
 }
 
+/**
+ * Builds the route params and stages the matching in-memory request under the same token.
+ */
 export function buildBrowserNavigationRouteParams(
   url: string,
   intent: BrowserAppUrlOpenIntent = 'current_tab',
@@ -155,7 +175,10 @@ export function consumePendingBrowserNavigationRequestWithRouteFallback(
     return {
       request: memoryRequest,
       origin: 'memory',
-      routeToken: ''
+      // The in-memory request and the route params it was staged with are the same request. Reporting the
+      // shared token here lets the consume side retire the route copy too, so a later page-show cannot
+      // deliver it a second time.
+      routeToken: memoryRequest.routeToken ?? ''
     };
   }
   const routeResult = readPendingBrowserNavigationRequestFromRouteParams(params, consumedToken);
@@ -212,7 +235,8 @@ export function readPendingBrowserNavigationRequestFromRouteParams(
       requestId: token.length > 0 ? token : createBrowserNavigationRequestId(
         normalizeBrowserNavigationSource(String(params?.openSource ?? '')),
         'route'
-      )
+      ),
+      routeToken: token
     },
     token: token
   };

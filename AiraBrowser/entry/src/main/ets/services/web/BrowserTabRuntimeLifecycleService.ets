@@ -217,7 +217,9 @@ export class BrowserTabRuntimeLifecycleService {
     request.executeRestoreRuntime(request.tabId, decision.reason);
     request.recordRuntimeEvent(
       'tab_runtime_restore_dispatched',
-      `reason=${decision.reason} state=${decision.stateBefore} marked=${decision.shouldMarkRestoring ? 'true' : 'false'}`,
+      `reason=${decision.reason} state=${decision.stateBefore} marked=${decision.shouldMarkRestoring ? 'true' : 'false'} ` +
+        `url=${tab.url} pending=${tab.pendingUrl} lastGood=${tab.lastGoodUrl} ` +
+        `lastRestorable=${tab.lastRestorableUrl} snapshot=${tab.webStatePath.length > 0 ? 1 : 0}`,
       request.tabId
     );
     return this.buildResult('restore_started', request.tabId, decision.reason);

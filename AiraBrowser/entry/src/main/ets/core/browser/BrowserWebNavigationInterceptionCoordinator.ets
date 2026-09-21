@@ -119,7 +119,7 @@ export class BrowserWebNavigationInterceptionCoordinator {
       sharedBrowserHttpsFirstNavigationService.attachFallbackExecutor(
         tabId,
         (fallbackTabId: string, fallbackUrl: string): boolean =>
-          this.webLoadRuntimeCoordinator.loadUrlForTab(fallbackTabId, fallbackUrl, true)
+          this.webLoadRuntimeCoordinator.loadUrlForTab(fallbackTabId, fallbackUrl, true, false, true, 'InterceptionHttpsFallback')
       );
     }
     return this.webLoadRuntimeCoordinator.loadUrlForTab(
