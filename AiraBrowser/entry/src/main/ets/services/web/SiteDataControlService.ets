@@ -332,6 +332,20 @@ export class SiteDataControlService {
     };
   }
 
+  /**
+   * ArkWeb keeps newly accepted cookies in memory and writes them about every 30 seconds.
+   * Force-stopping after background does not run onDestroy, so callers on the way to process
+   * death must flush here. Session cookies on PC, 2-in-1, and tablet are still not persisted.
+   */
+  persistMemoryCookies(): boolean {
+    try {
+      webview.WebCookieManager.saveCookieSync();
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   buildClearCurrentSiteDataDialogState(
     profileId: BrowserProfileId = DEFAULT_BROWSER_PROFILE_ID,
     privacyMode: BrowserSessionPrivacyMode = 'regular',

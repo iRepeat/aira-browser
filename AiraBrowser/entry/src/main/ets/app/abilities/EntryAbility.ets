@@ -393,6 +393,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageDestroy(): void {
+    this.flushPersistentCookies('window-stage-destroy');
     this.windowStageLifecycleGeneration += 1;
     this.browserLargeScreenWindowFactsRequestRevision += 1;
     this.browserWindowDisplayViewportCoordinator.unbind();
@@ -502,6 +503,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onBackground(): void {
+    this.flushPersistentCookies('ability-background');
     this.appInForeground = false;
     this.currentWindowId = BrowserWindowRuntime.resolveWindowIdFromStorage(this.pageStorage);
     AiraNavForensicsProbe.markBackground('entry-ability', this.currentWindowId);
@@ -574,6 +576,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onDestroy(): void {
+    this.flushPersistentCookies('ability-destroy');
     this.disconnectContinuationEligibility();
     this.resolveContentReadyWaiters();
     this.browserExternalShareIngressCoordinator.destroy();
@@ -799,6 +802,15 @@ export default class EntryAbility extends UIAbility {
       .catch((error: Error) => {
         hilog.warn(DOMAIN, TAG, 'Failed to flush preferences on %{public}s: %{public}s', source, JSON.stringify(error));
       });
+  }
+
+  private flushPersistentCookies(source: string): void {
+    const persisted = this.siteDataControlService.persistMemoryCookies();
+    if (persisted) {
+      hilog.info(DOMAIN, TAG, 'Flushed web cookies on %{public}s', source);
+    } else {
+      hilog.warn(DOMAIN, TAG, 'Failed to flush web cookies on %{public}s', source);
+    }
   }
 
   private waitForInitialRouteReadiness(): Promise<string> {
