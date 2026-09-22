@@ -40,7 +40,9 @@ export struct BrowserRootBottomPanelExpandedScrim {
         Stack()
           .width('100%')
           .height('100%')
-          .backgroundColor($r('app.color.start_window_background'))
+          // Keep the expanded backdrop interactive without painting a light veil over the page
+          // while the middle address capsule follows an upward drag.
+          .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
           .opacity(this.resolveEffectiveScrimOpacity())
           .hitTestBehavior(HitTestMode.None)
       }
