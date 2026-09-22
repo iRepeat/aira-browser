@@ -54,10 +54,18 @@ const HOME_CONTENT_ENTRANCE_DELAY_MS: number = 0;
 const HOME_CONTENT_ENTRANCE_OFFSET_Y: number = 10;
 const HOME_CONTENT_ENTRANCE_INITIAL_OPACITY: number = 0.72;
 const HOME_CONTENT_ENTRANCE_CURVE: string = 'cubic-bezier(0.2, 0, 0, 1)';
-// A third-party homepage reloads asynchronously on a cold start, so it enters
-// with an opacity fade only. A scale entrance made the reloaded page zoom up
-// behind the launch-snapshot cover and read as a flash when the cover lifted.
-const THIRD_PARTY_HOME_STARTUP_INITIAL_SCALE: number = 1;
+// A third-party homepage fades and grows in together on a cold start.
+//
+// The scale was disabled while a launch-snapshot cover existed: the reloaded page
+// zoomed up *behind* the cover, so the growth was invisible and only made the cover's
+// own lift read as a flash. With the cover gone, that reason is gone too, and the
+// scale is what turns "the document suddenly appears once it is ready" into a launch:
+// the page settles into place from slightly smaller instead of popping in.
+//
+// Kept close to 1 on purpose. A larger travel reads as the page being thrown at the
+// user, and the document is usually ready ~250ms in, so the animation mostly overlaps
+// work rather than delaying anything.
+const THIRD_PARTY_HOME_STARTUP_INITIAL_SCALE: number = 0.92;
 const THIRD_PARTY_HOME_STARTUP_ENTRANCE_DELAY_MS: number = 0;
 const THIRD_PARTY_HOME_STARTUP_ENTRANCE_DURATION_MS: number = 400;
 const THIRD_PARTY_HOME_STARTUP_ENTRANCE_CURVE: string = 'cubic-bezier(0.2, 0, 0, 1)';
