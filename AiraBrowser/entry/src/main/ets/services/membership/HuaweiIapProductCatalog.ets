@@ -13,6 +13,15 @@ export interface HuaweiIapProductPlan {
   period: HuaweiIapProductPeriod;
   title: string;
   displayPrice: string;
+  /**
+   * Price split for the membership page's price cards: the card renders the
+   * amount large and the cadence small beside it. `displayPrice` stays the
+   * single-line form for callers that render one string (the renewal sheet).
+   */
+  amountText: string;
+  periodText: string;
+  /** Period-end discount badge. Empty when the plan carries no discount. */
+  discountBadgeText: string;
   description: string;
   badgeText: string;
 }
@@ -33,6 +42,9 @@ export const AIRA_PRO_MONTHLY_PLAN: HuaweiIapProductPlan = {
   period: 'monthly',
   title: '连续包月',
   displayPrice: '¥1 / 月自动续费',
+  amountText: '¥1',
+  periodText: '/ 月',
+  discountBadgeText: '',
   description: '按月自动续费，可在订阅管理中取消',
   badgeText: ''
 };
@@ -43,6 +55,9 @@ export const AIRA_PRO_QUARTERLY_PLAN: HuaweiIapProductPlan = {
   period: 'quarterly',
   title: '连续包季',
   displayPrice: '¥8 / 季自动续费',
+  amountText: '¥8',
+  periodText: '/ 季',
+  discountBadgeText: '',
   description: '按季自动续费，可在订阅管理中取消',
   badgeText: ''
 };
@@ -53,6 +68,10 @@ export const AIRA_PRO_YEARLY_PLAN: HuaweiIapProductPlan = {
   period: 'yearly',
   title: '连续包年',
   displayPrice: '¥7.89 / 年自动续费',
+  amountText: '¥7.89',
+  periodText: '/ 年',
+  // 包月 ¥1 首月特惠 vs 包年 ¥7.89：按当前价对比约省 34%。
+  discountBadgeText: '−34%',
   description: '按年自动续费，可在订阅管理中取消',
   badgeText: '推荐'
 };
@@ -91,6 +110,17 @@ export function findAiraProIapPlan(period: string): HuaweiIapProductPlan | undef
 export function findAiraProIapPlanByProductId(productId: string): HuaweiIapProductPlan | undefined {
   const normalizedProductId = productId.trim();
   return AIRA_PRO_IAP_PLANS.find((item: HuaweiIapProductPlan) => item.productId === normalizedProductId);
+}
+
+/** The lease period as it reads under a price: `/ 月`, `/ 季`, `/ 年`. */
+export function resolveAiraProPlanPeriodText(period: HuaweiIapProductPeriod): string {
+  if (period === 'yearly') {
+    return '/ 年';
+  }
+  if (period === 'quarterly') {
+    return '/ 季';
+  }
+  return '/ 月';
 }
 
 export function isAiraProIapPlanId(planId: string): boolean {

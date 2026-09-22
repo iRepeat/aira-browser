@@ -39,6 +39,9 @@ const SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_GAP: number = 8;
 const SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_LEFT: number = 16;
 const SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_RIGHT: number = 16;
 const SETTINGS_TITLE_BAR_ACTION_ICON_SIZE: number = 21;
+const SETTINGS_TITLE_BAR_TEXT_ACTION_HEIGHT: number = 36;
+const SETTINGS_TITLE_BAR_TEXT_ACTION_HORIZONTAL_PADDING: number = 16;
+const SETTINGS_TITLE_BAR_TEXT_ACTION_FONT_SIZE: number = 14;
 
 @Component
 export struct SettingsHdsScaffold {
@@ -59,6 +62,12 @@ export struct SettingsHdsScaffold {
   @Prop contentKind: SettingsContentKind = 'standard';
   @Prop desktopPresentation: boolean = false;
   @Prop menuActionLabel: string = '';
+  /**
+   * Title-bar action rendered as a text pill instead of an icon button. Used by
+   * the membership page, whose only title-bar action is the low-frequency but
+   * must-be-findable “恢复购买”. Empty keeps the icon-only surfaces unchanged.
+   */
+  @Prop menuActionText: string = '';
   @Prop menuActionIcon: Resource | undefined = undefined;
   @Prop menuActionImageIcon: Resource | undefined = undefined;
   @Prop menuActionAiraIconId: AiraRenderableIconId | undefined = undefined;
@@ -259,6 +268,9 @@ export struct SettingsHdsScaffold {
   @Builder
   private buildGlassTrailingTitleActions() {
     Row({ space: SETTINGS_TITLE_BAR_CUSTOM_MENU_BUTTON_GAP }) {
+      if (this.menuActionText.length > 0) {
+        this.buildGlassTextAction()
+      }
       if (this.menuActions.length > 0) {
         ForEach(this.menuActions, (menuAction: SettingsHdsMenuAction) => {
           this.buildGlassMenuAction(menuAction)
@@ -294,6 +306,34 @@ export struct SettingsHdsScaffold {
     .position({ x: 0, y: this.resolveCustomMenuActionButtonTop() })
     .hitTestBehavior(HitTestMode.Transparent)
     .zIndex(4)
+  }
+
+  @Builder
+  private buildGlassTextAction() {
+    // The pill sizes itself to its label, so the material plate wraps the button
+    // instead of guessing a width from the font.
+    Stack({ alignContent: Alignment.Center }) {
+      Button() {
+        Text(this.menuActionText)
+          .fontSize(SETTINGS_TITLE_BAR_TEXT_ACTION_FONT_SIZE)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.resolveTitleActionIconColor())
+          .maxLines(1)
+      }
+      .height(SETTINGS_TITLE_BAR_TEXT_ACTION_HEIGHT)
+      .type(ButtonType.Normal)
+      .stateEffect(true)
+      .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
+      .borderRadius(SETTINGS_TITLE_BAR_TEXT_ACTION_HEIGHT / 2)
+      .padding({ left: SETTINGS_TITLE_BAR_TEXT_ACTION_HORIZONTAL_PADDING, right: SETTINGS_TITLE_BAR_TEXT_ACTION_HORIZONTAL_PADDING })
+      .accessibilityText(this.menuActionText)
+      .onClick(() => {
+        this.onMenuAction();
+      })
+    }
+    .height(SETTINGS_TITLE_BAR_TEXT_ACTION_HEIGHT)
+    .borderRadius(SETTINGS_TITLE_BAR_TEXT_ACTION_HEIGHT / 2)
+    .backgroundColor(this.resolveTitleActionBackground())
   }
 
   @Builder
@@ -474,7 +514,8 @@ export struct SettingsHdsScaffold {
   }
 
   private shouldShowTrailingTitleActions(): boolean {
-    return this.menuActions.length > 0 || this.menuActionLabel.length > 0 || this.showPrivateIndicator;
+    return this.menuActions.length > 0 || this.menuActionLabel.length > 0 || this.showPrivateIndicator ||
+      this.menuActionText.length > 0;
   }
 
   private resolveMenuActionIcon(icon: Resource | undefined): Resource {

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aira Pro 页 · 布局草稿</title>
+<style>
+  :root{
+    --bg:#F2F3F5;
+    --surface:#FFFFFF;
+    --control:#ECEDEF;
+    --divider:rgba(0,0,0,.08);
+    --outline:rgba(0,0,0,.12);
+    --text:#111318;
+    --text2:#5F6368;
+    --text3:rgba(60,60,67,.45);
+    --accent:#0A59F7;
+    --accent-soft:rgba(10,89,247,.05);
+    --on-accent:#FFFFFF;
+    --ok:#248A3D;
+    --chip:#FFFFFF;
+    --shadow:0 1px 2px rgba(16,22,38,.06);
+  }
+  html[data-theme="dark"]{
+    --bg:#101010;
+    --surface:#1C1C1E;
+    --control:#2C2C2E;
+    --divider:rgba(255,255,255,.12);
+    --outline:rgba(255,255,255,.16);
+    --text:#F4F4F5;
+    --text2:#B8B8BD;
+    --text3:rgba(235,235,245,.38);
+    --accent:#7EA7FF;
+    --accent-soft:rgba(126,167,255,.12);
+    --on-accent:#0B0D12;
+    --ok:#5FD08A;
+    --chip:#242426;
+    --shadow:none;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  html,body{margin:0}
+  body{
+    background:#E9EBEF;
+    background-image:radial-gradient(1100px 560px at 50% -12%,#FFFFFF 0%,#E9EBEF 62%);
+    color:var(--label,#000);
+    font:17px/1.35 -apple-system,"SF Pro Text","SF Pro Display","PingFang SC","Helvetica Neue",sans-serif;
+    padding:28px 24px 72px;
+  }
+
+  /* ---------- 页面壳 ---------- */
+  .head{max-width:1240px;margin:0 auto 18px}
+  .head .eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#8E8E93}
+  .head h1{font-size:28px;font-weight:700;letter-spacing:-.02em;margin:6px 0 8px}
+  .head p{margin:0;color:rgba(60,60,67,.62);font-size:14px;max-width:820px;line-height:1.55}
+
+  .toolbar{
+    max-width:1240px;margin:16px auto 26px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    background:#fff;border:.5px solid rgba(60,60,67,.16);border-radius:12px;padding:10px 12px;
+  }
+  .toolbar .lbl{font-size:12px;font-weight:600;color:#8E8E93;margin-right:4px;letter-spacing:.04em}
+  .toolbar button{
+    font:inherit;font-size:13px;padding:6px 12px;border-radius:999px;border:.5px solid rgba(60,60,67,.2);
+    background:#fff;color:#3C3C43;cursor:pointer
+  }
+  .toolbar button.on{background:#0A59F7;border-color:#0A59F7;color:#fff}
+  .toolbar .sep{width:1px;height:20px;background:rgba(60,60,67,.16);margin:0 6px}
+
+  .stage{max-width:1240px;margin:0 auto;display:flex;gap:48px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+  .device-wrap{display:flex;flex-direction:column;align-items:center}
+  .caption{margin-top:14px;font-size:12px;color:#8E8E93;text-align:center;max-width:400px;line-height:1.55}
+  .caption b{color:rgba(60,60,67,.7);font-weight:600;display:block;margin-bottom:3px}
+
+  .device{
+    width:392px;height:812px;position:relative;flex:0 0 auto;background:#000;border-radius:56px;padding:11px;
+    box-shadow:0 34px 60px -18px rgba(16,22,38,.34),0 8px 20px -8px rgba(16,22,38,.20),
+               inset 0 0 0 1.5px #3a3d42,inset 0 0 0 3px #16181c;
+  }
+  .screen{
+    position:relative;width:100%;height:100%;background:var(--bg);color:var(--text);
+    border-radius:45px;overflow:hidden;display:flex;flex-direction:column;
+  }
+  .island{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:112px;height:32px;background:#000;border-radius:20px;z-index:30}
+  .statusbar{
+    height:52px;flex:0 0 auto;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 30px 6px;font-size:14px;font-weight:600;letter-spacing:.01em;color:var(--text);
+  }
+  .statusbar .right{display:flex;align-items:center;gap:5px}
+
+  /* ---------- 顶部栏：关闭 + 恢复购买 ---------- */
+  .navbar{
+    flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+    padding:10px 16px 6px;gap:12px;
+  }
+  .icon-btn{
+    width:40px;height:40px;border-radius:50%;background:var(--surface);border:0;box-shadow:var(--shadow);
+    display:flex;align-items:center;justify-content:center;color:var(--text);cursor:pointer
+  }
+  .pill-btn{
+    height:40px;padding:0 18px;border-radius:999px;background:var(--surface);border:0;box-shadow:var(--shadow);
+    font:inherit;font-size:15px;font-weight:500;color:var(--text);cursor:pointer
+  }
+
+  /* ---------- 滚动内容 ---------- */
+  .scroll{
+    flex:1 1 auto;overflow-y:auto;overflow-x:hidden;
+    padding:6px 16px 30px;display:flex;flex-direction:column;gap:16px;
+    scrollbar-width:none;
+  }
+  .scroll::-webkit-scrollbar{display:none}
+
+  .hero{text-align:center;padding:18px 8px 4px}
+  .hero h2{
+    margin:0;font-size:32px;line-height:1.16;font-weight:700;letter-spacing:-.02em;color:var(--text);
+  }
+  .hero p{margin:10px auto 0;font-size:14px;line-height:1.5;color:var(--text2);max-width:280px}
+
+  /* 能力横排（对应参考图的模型 logo 行） */
+  .rail{
+    display:flex;gap:10px;overflow-x:auto;padding:2px 0 2px;
+    scrollbar-width:none;
+    -webkit-mask-image:linear-gradient(90deg,#000 0,#000 86%,transparent 100%);
+            mask-image:linear-gradient(90deg,#000 0,#000 86%,transparent 100%);
+  }
+  .rail::-webkit-scrollbar{display:none}
+  .rail .chip{
+    flex:0 0 auto;display:flex;align-items:center;gap:7px;height:38px;padding:0 14px;border-radius:999px;
+    background:var(--chip);border:.5px solid var(--outline);box-shadow:var(--shadow);
+    font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;
+  }
+  .rail .chip .gl{display:flex;width:18px;height:18px;color:var(--accent)}
+  .rail .chip .gl svg{width:18px;height:18px}
+
+  /* Pro 能力卡 */
+  .card{background:var(--surface);border-radius:26px;box-shadow:var(--shadow)}
+  .compare{padding:8px 18px 10px}
+  .crow{
+    display:grid;grid-template-columns:34px 1fr;align-items:center;gap:10px;
+    padding:16px 0;border-top:.5px solid var(--divider);font-size:16px;
+  }
+  .crow:first-child{border-top:0}
+  .crow .mark{display:flex;align-items:center;justify-content:center;color:var(--accent)}
+  .crow .mark svg{width:20px;height:20px}
+  .crow .name{color:var(--text);line-height:1.3}
+  .note{padding:10px 0 0;font-size:12px;line-height:1.6;color:var(--text3)}
+
+  /* 价格卡 */
+  .plans{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+  .plan{
+    position:relative;display:flex;flex-direction:column;text-align:left;font:inherit;cursor:pointer;
+    background:var(--surface);border:1.5px solid var(--outline);border-radius:22px;padding:16px 16px 14px;
+    box-shadow:var(--shadow);color:var(--text);min-height:148px;
+  }
+  .plan.on{border-color:var(--accent);background:var(--accent-soft)}
+  /* 标题行固定高度，角标绝对定位到右上，保证两张卡纵向完全对齐 */
+  .plan .top{position:relative;display:flex;align-items:center;height:22px}
+  .plan .title{font-size:15px;font-weight:600;color:var(--text2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .plan .top.has-tag .title{padding-right:58px}
+  .plan .tag{
+    position:absolute;top:50%;right:0;transform:translateY(-50%);
+    font-size:11px;font-weight:600;color:var(--accent);background:var(--control);border-radius:7px;
+    padding:3px 6px;white-space:nowrap;
+  }
+  .plan .price{margin-top:10px;font-size:28px;line-height:1.05;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+  .plan .price small{font-size:13px;font-weight:600;color:var(--text2);letter-spacing:0;margin-left:2px}
+  .plan .sub{margin-top:auto;padding-top:10px;font-size:12px;line-height:1.45;color:var(--text2)}
+
+  /* 当前权益卡（已开通） */
+  .current{padding:18px}
+  .current .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .current .t{font-size:17px;font-weight:600}
+  .current .d{margin-top:4px;font-size:13px;color:var(--text2)}
+  .tag-ok{font-size:12px;font-weight:600;color:#fff;background:var(--ok);border-radius:999px;padding:4px 10px;white-space:nowrap}
+  .current .acts{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+
+  /* 协议 + 主按钮 */
+  .consent{display:flex;gap:8px;align-items:flex-start;padding:0 6px;color:var(--text2);font-size:12px;line-height:1.6}
+  .consent .box{
+    flex:0 0 auto;width:16px;height:16px;margin-top:2px;border-radius:5px;border:1.5px solid var(--outline);
+    background:transparent;display:flex;align-items:center;justify-content:center;color:transparent;cursor:pointer
+  }
+  .consent .box.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .consent .box svg{width:10px;height:10px}
+  .consent a{color:var(--accent);text-decoration:none;font-weight:500}
+
+  .cta{
+    width:100%;height:54px;border:0;border-radius:999px;background:var(--accent);color:var(--on-accent);
+    font:inherit;font-size:17px;font-weight:700;cursor:pointer;
+  }
+  .cta:disabled{opacity:.5;cursor:default}
+  .cta.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent);font-weight:600;height:48px;font-size:15px}
+  .foot{text-align:center;font-size:11px;line-height:1.6;color:var(--text3);padding:0 8px}
+
+  /* ---------- 说明区 ---------- */
+  .notes{max-width:1240px;margin:56px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media (max-width:1100px){.notes{grid-template-columns:1fr}}
+  .panel{background:#fff;border-radius:18px;padding:22px 24px;border:.5px solid rgba(60,60,67,.14)}
+  .panel h3{margin:0 0 14px;font-size:15px;font-weight:600;letter-spacing:-.01em}
+  .panel ol,.panel ul{margin:0;padding-left:20px;font-size:14px;line-height:1.65;color:rgba(60,60,67,.62)}
+  .panel li{margin-bottom:8px}
+  .panel b{color:#000;font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="eyebrow">Aira Browser · 布局草稿（H5）</div>
+  <h1>Aira Pro 页 · 新布局</h1>
+  <p>只搬参考图的<strong>排布关系</strong>：关闭/恢复购买置顶 → 大标题 → 支持设备横排 → Pro 能力卡 → 价格卡 → 主按钮。配色与文案用 Aira 自己的 token 与真实商品数据。右上角可切未开通 / 已开通 / 私密会话。</p>
+</div>
+
+<div class="toolbar">
+  <span class="lbl">状态</span>
+  <button data-state="free" class="on">未开通</button>
+  <button data-state="pro">已开通（连续包年）</button>
+  <button data-state="private">私密会话</button>
+  <span class="sep"></span>
+  <span class="lbl">主题</span>
+  <button data-theme-btn="light" class="on">浅色</button>
+  <button data-theme-btn="dark">深色</button>
+</div>
+
+<div class="stage">
+  <div class="device-wrap">
+    <div class="device">
+      <div class="island"></div>
+      <div class="screen">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="right">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7.5" width="3" height="4.5" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3.5" width="3" height="8.5" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/></svg>
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 11.4 6.35 8.9a3.3 3.3 0 0 1 4.3 0l-2.15 2.5Z"/><path d="M8.5 4.6c1.6 0 3.05.55 4.2 1.48l1.35-1.6A9.1 9.1 0 0 0 8.5 2.3c-2.05 0-3.95.75-5.55 1.98l1.35 1.6A6.6 6.6 0 0 1 8.5 4.6Z"/></svg>
+            <svg width="26" height="13" viewBox="0 0 26 13"><rect x=".5" y=".5" width="22" height="12" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".38"/><rect x="2" y="2" width="17" height="9" rx="2.2" fill="currentColor"/><path d="M24.3 4.3v4.4c.9-.35 1.4-.95 1.4-2.2s-.5-1.85-1.4-2.2Z" fill="currentColor" fill-opacity=".38"/></svg>
+          </span>
+        </div>
+
+        <!-- 顶栏 -->
+        <div class="navbar">
+          <button class="icon-btn" aria-label="关闭">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3 3 13"/></svg>
+          </button>
+          <button class="pill-btn" id="restore-btn">恢复购买</button>
+        </div>
+
+        <div class="scroll" id="scroll">
+          <!-- 大标题 -->
+          <div class="hero">
+            <h2 id="hero-title">Aira Pro</h2>
+            <p id="hero-sub">本地功能永久免费，Pro 只用于官方托管云服务。</p>
+          </div>
+
+          <!-- 支持的设备与平台（对应参考图的 logo 行） -->
+          <div class="rail" id="rail"></div>
+
+          <!-- 免费 / Pro 对比 -->
+          <div class="card compare" id="compare"></div>
+
+          <!-- 价格 / 当前权益 -->
+          <div id="plans-area"></div>
+
+          <!-- 协议勾选 -->
+          <div class="consent" id="consent">
+            <button class="box" id="consent-box" aria-label="同意协议">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 6.2 4.6 9.4 10.4 2.8"/></svg>
+            </button>
+            <div id="consent-text">我已阅读并同意<a href="#">《会员服务协议》</a>和<a href="#">《自动续费服务协议》</a></div>
+          </div>
+
+          <button class="cta" id="cta">同意协议后立即开通</button>
+          <div class="foot" id="foot">订阅为自动续费服务，实际扣费与取消规则以华为支付页面为准。</div>
+        </div>
+      </div>
+    </div>
+    <div class="caption"><b>落在 HarmonyOS 上的样子</b>Pro 能力卡说清付费买到什么；价格卡等高对齐，选中只用描边 + 淡色底。</div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="panel">
+    <h3>布局里刻意做的几个决定</h3>
+    <ul>
+      <li><b>能力直接列成一张卡，不加表头。</b>上面已经是「Aira Pro」标题，再写一遍「Pro 包含的能力」是重复；卡片开头就是第一项能力。</li>
+      <li><b>顶栏只留关闭 + 恢复购买。</b>恢复购买从底部小字提到右上角，和参考图一致，低频但能一眼找到。</li>
+      <li><b>大标题只写「Aira Pro」。</b>卖点交给下面的卡片，标题不抢。</li>
+      <li><b>价格卡等高对齐。</b>折扣角标固定在右上角，不占标题行的流式位置，两张卡的标题 / 价格 / 说明纵向完全对齐；选中不靠勾选图标，只用描边加淡底。</li>
+      <li><b>协议勾选压缩在按钮上方。</b>参考图没有，但 Aira 必须先勾协议才能进华为支付，占一行小字即可。</li>
+      <li><b>横排是「支持的设备与平台」。</b>参考图那一行是支持的模型，Aira 的等价物是云能力覆盖哪些端，不再重复列能力。</li>
+    </ul>
+  </div>
+  <div class="panel">
+    <h3>等你拍板的点</h3>
+    <ul>
+      <li>这一页竖着排下来：设备横排 + 4 项能力卡 + 2 张价格卡 + 按钮，手机上一屏放不下。要不要把能力卡收成 2 行 + 「查看全部」？</li>
+      <li>“支持设备”横排现在是手机 / 平板 / Windows / macOS / Linux。要不要把 Chrome / Edge / Firefox 也标出来？待确认 Aira-sync 实际支持范围。</li>
+      <li>两张价格卡都不写「折合」，包年卡保留右上角「−34%」角标。这个百分比怎么算（对比包月还是对比原价）需要你定，我先按当前价简单算。</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  const ICONS = {
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="3"/><path d="M10.5 18.6h3"/></svg>',
+    tablet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.6"/><path d="M11 18.4h2"/></svg>',
+    desktop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="2.4"/><path d="M12 16.5v3"/><path d="M8.6 19.5h6.8"/></svg>',
+    laptop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="5" width="15" height="10.5" rx="2"/><path d="M2.5 18.5h19"/></svg>',
+    linux: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.8" width="18" height="16.4" rx="2.6"/><path d="M7.2 9.4 9.6 12 7.2 14.6"/><path d="M12 15h5"/></svg>'
+  };
+  const TICK = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 6.2 4.6 9.4 10.4 2.8"/></svg>';
+
+  // 对应参考图的「支持的模型」行：这里的等价物是 Pro 云能力覆盖的设备与平台
+  const RAIL = [
+    {icon:'phone',   label:'手机'},
+    {icon:'tablet',  label:'平板'},
+    {icon:'desktop', label:'Windows'},
+    {icon:'laptop',  label:'macOS'},
+    {icon:'linux',   label:'Linux'}
+  ];
+
+  const ROWS = [
+    {name:'书签在手机与电脑之间同步'},
+    {name:'浏览历史在手机与电脑之间同步'},
+    {name:'当前网页接力到其他设备打开'},
+    {name:'查看并打开其他设备的标签页'}
+  ];
+
+  const PLANS = {
+    yearly:  {id:'yearly',  title:'连续包年', tag:'−34%', price:'¥7.89', unit:'/年', sub:'¥0.66 / 月 · 自动续费'},
+    monthly: {id:'monthly', title:'连续包月', tag:'',      price:'¥1',    unit:'/月', sub:'¥12 / 年 · 首月特惠'}
+  };
+
+  const state = {mode:'free', plan:'yearly', accepted:false};
+
+  function planList(){
+    return [PLANS.yearly, PLANS.monthly];
+  }
+  function currentPlan(){
+    const list = planList();
+    return list.some(p => p.id === state.plan) ? PLANS[state.plan] : list[0];
+  }
+
+  function renderRail(){
+    document.getElementById('rail').innerHTML = RAIL.map(item =>
+      `<span class="chip"><span class="gl">${ICONS[item.icon]}</span>${item.label}</span>`
+    ).join('');
+  }
+
+  function renderCompare(){
+    let html = '';
+    ROWS.forEach(row => {
+      html += `<div class="crow">
+          <span class="mark">${TICK}</span>
+          <span class="name">${row.name}</span>
+        </div>`;
+    });
+    html += `<div class="note">这四个能力依赖 Aira 官方托管服务，需要在普通会话中登录华为账号后开启。</div>`;
+    document.getElementById('compare').innerHTML = html;
+  }
+
+  function renderPlans(){
+    const area = document.getElementById('plans-area');
+    if (state.mode === 'pro') {
+      area.innerHTML = `<div class="card current">
+        <div class="row">
+          <div>
+            <div class="t">连续包年</div>
+            <div class="d">2026.03.14 到期 · 自动续费已开启</div>
+          </div>
+          <span class="tag-ok">已开通</span>
+        </div>
+        <div class="acts">
+          <button class="cta ghost">管理自动续费</button>
+        </div>
+      </div>`;
+      return;
+    }
+    const list = planList();
+    area.innerHTML = `<div class="plans">` + list.map(p => `
+      <button class="plan ${currentPlan().id === p.id ? 'on' : ''}" data-plan="${p.id}">
+        <span class="top${p.tag ? ' has-tag' : ''}"><span class="title">${p.title}</span>${p.tag ? `<span class="tag">${p.tag}</span>` : ''}</span>
+        <span class="price">${p.price}${p.unit ? `<small>${p.unit}</small>` : ''}</span>
+        <span class="sub">${p.sub}</span>
+      </button>`).join('') + `</div>`;
+    area.querySelectorAll('.plan').forEach(el => {
+      el.addEventListener('click', () => { state.plan = el.dataset.plan; state.accepted = false; render(); });
+    });
+  }
+
+  function renderHeader(){
+    const isPro = state.mode === 'pro';
+
+    const title = document.getElementById('hero-title');
+    const sub = document.getElementById('hero-sub');
+    if (isPro) {
+      title.innerHTML = 'Aira Pro 已开通';
+      sub.textContent = '云书签、云历史、网页接力与跨设备标签页均已生效。';
+    } else {
+      title.innerHTML = 'Aira Pro';
+      sub.textContent = '本地功能永久免费，Pro 只用于官方托管云服务。';
+    }
+  }
+
+  function renderFooter(){
+    const consent = document.getElementById('consent');
+    const cta = document.getElementById('cta');
+    const foot = document.getElementById('foot');
+    const box = document.getElementById('consent-box');
+
+    if (state.mode === 'pro') {
+      consent.style.display = 'none';
+      cta.disabled = true;
+      cta.textContent = '已开通 Aira Pro';
+      cta.classList.remove('ghost');
+      foot.textContent = '权益与到期时间以华为账号中的订阅状态为准。';
+      return;
+    }
+    if (state.mode === 'private') {
+      consent.style.display = 'none';
+      cta.disabled = true;
+      cta.textContent = '当前会话不可订阅';
+      cta.classList.remove('ghost');
+      foot.textContent = '当前为私密会话，请在普通会话中订阅或恢复购买。';
+      return;
+    }
+    consent.style.display = 'flex';
+    box.classList.toggle('on', state.accepted);
+    cta.classList.remove('ghost');
+    cta.disabled = !state.accepted;
+    cta.textContent = state.accepted ? '立即开通 Aira Pro' : '同意协议后立即开通';
+    foot.textContent = '订阅为自动续费服务，实际扣费与取消规则以华为支付页面为准。';
+  }
+
+  function render(){
+    renderHeader();
+    renderCompare();
+    renderPlans();
+    renderFooter();
+  }
+
+  document.querySelectorAll('.toolbar [data-state]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.mode = btn.dataset.state;
+      document.querySelectorAll('.toolbar [data-state]').forEach(b => b.classList.toggle('on', b === btn));
+      document.getElementById('scroll').scrollTop = 0;
+      render();
+    });
+  });
+  document.querySelectorAll('.toolbar [data-theme-btn]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.documentElement.dataset.theme = btn.dataset.themeBtn;
+      document.querySelectorAll('.toolbar [data-theme-btn]').forEach(b => b.classList.toggle('on', b === btn));
+    });
+  });
+  document.getElementById('consent-box').addEventListener('click', () => {
+    state.accepted = !state.accepted;
+    renderFooter();
+  });
+
+  renderRail();
+  render();
+</script>
+</body>
+</html>

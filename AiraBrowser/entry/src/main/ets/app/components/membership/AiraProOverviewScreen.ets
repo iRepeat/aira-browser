@@ -1,35 +1,44 @@
 import {
   AiraProOverviewBenefitState,
   AiraProOverviewPlanState,
+  AiraProOverviewReachableDeviceState,
   AiraProOverviewViewState
 } from '../../../core/membership/AiraProOverviewViewModel';
+import { AiraProReachableDeviceGlyph } from '../../../core/membership/AiraProBenefitCatalog';
 import {
   BrowserSettingsIconBackgroundTokenSet,
   DEFAULT_BROWSER_SETTINGS_ICON_BACKGROUND_TOKENS
 } from '../../../features/theme/BrowserThemePaletteModels';
-import { AiraRenderableIconId } from '../../../core/resources/GeneratedAiraIconCatalog';
 import { AiraIcon } from '../common/AiraIcon';
 import {
   SettingsGroupCard,
   SettingsGroupDivider,
-  SettingsScrollBody,
-  SettingsSection
+  SettingsScrollBody
 } from '../settings/SettingsLayout';
 
-const AIRA_PRO_LOGO_SIZE: number = 76;
-const AIRA_PRO_HERO_CORNER_RADIUS: number = 24;
-const AIRA_PRO_BENEFIT_ICON_SIZE: number = 40;
-const AIRA_PRO_BENEFIT_ICON_IMAGE_SIZE: number = 22;
-const AIRA_PRO_BENEFIT_ROW_HORIZONTAL_PADDING: number = 16;
+const AIRA_PRO_HERO_TITLE_FONT_SIZE: number = 30;
+const AIRA_PRO_HERO_SUBTITLE_FONT_SIZE: number = 14;
+
+const AIRA_PRO_DEVICE_CHIP_HEIGHT: number = 38;
+const AIRA_PRO_DEVICE_CHIP_ICON_SIZE: number = 18;
+const AIRA_PRO_DEVICE_CHIP_CORNER_RADIUS: number = 19;
+
+const AIRA_PRO_BENEFIT_ICON_TILE_SIZE: number = 34;
+const AIRA_PRO_BENEFIT_ICON_IMAGE_SIZE: number = 18;
+const AIRA_PRO_BENEFIT_ROW_HORIZONTAL_PADDING: number = 14;
 const AIRA_PRO_BENEFIT_ROW_VERTICAL_PADDING: number = 14;
 const AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS: number = 18;
-const AIRA_PRO_PLAN_RADIO_GROUP: string = 'aira_pro_overview_plan';
-const AIRA_PRO_PLAN_ROW_HEIGHT: number = 86;
-const AIRA_PRO_PROMOTION_PLAN_ROW_HEIGHT: number = 102;
-const AIRA_PRO_PLAN_PRICE_MAX_WIDTH: number = 150;
-const AIRA_PRO_PLAN_ROW_CORNER_RADIUS: number = 18;
-const AIRA_PRO_SUBSCRIBE_BUTTON_HEIGHT: number = 50;
-const AIRA_PRO_RESTORE_BUTTON_HEIGHT: number = 36;
+
+const AIRA_PRO_PLAN_CARD_MIN_HEIGHT: number = 146;
+const AIRA_PRO_PLAN_CARD_CORNER_RADIUS: number = 22;
+const AIRA_PRO_PLAN_CARD_SELECTED_BORDER_WIDTH: number = 2;
+const AIRA_PRO_PLAN_AMOUNT_FONT_SIZE: number = 28;
+const AIRA_PRO_PLAN_PERIOD_FONT_SIZE: number = 13;
+const AIRA_PRO_PLAN_TITLE_ROW_HEIGHT: number = 22;
+const AIRA_PRO_PLAN_BADGE_RIGHT_PADDING: number = 62;
+
+const AIRA_PRO_SUBSCRIBE_BUTTON_HEIGHT: number = 52;
+const AIRA_PRO_MANAGE_BUTTON_HEIGHT: number = 48;
 const AIRA_PRO_TRANSPARENT_COLOR: string = '#00000000';
 
 @Component
@@ -38,6 +47,7 @@ export struct AiraProOverviewScreen {
     title: 'Aira Pro',
     subtitle: '',
     benefits: [],
+    reachableDevices: [],
     plans: [],
     proValue: '查看',
     proActivatedActionText: '已开通 Aira Pro',
@@ -60,6 +70,8 @@ export struct AiraProOverviewScreen {
   @Prop primaryTextColor: ResourceColor = '#111318';
   @Prop secondaryTextColor: ResourceColor = '#5F6875';
   @Prop dividerColor: ResourceColor = '#E3E8EF';
+  @Prop outlineStrokeColor: ResourceColor = '#26000000';
+  @Prop settingsIconForeground: ResourceColor = '#FFFFFF';
   @Prop settingsIconBackgrounds: BrowserSettingsIconBackgroundTokenSet =
     DEFAULT_BROWSER_SETTINGS_ICON_BACKGROUND_TOKENS;
   @State private selectedPlanId: string = 'yearly';
@@ -69,8 +81,6 @@ export struct AiraProOverviewScreen {
   onOpenMembershipTerms?: () => void;
   onOpenAutoRenewalNotice?: () => void;
   onManageSubscription?: () => void;
-  onRestorePurchase?: (planId: string) => void;
-  onOpenDesktopGuide?: () => void;
 
   build() {
     SettingsScrollBody({
@@ -80,133 +90,132 @@ export struct AiraProOverviewScreen {
       scroller: this.scroller
     }) {
       this.buildHero()
-      this.buildBenefitSection()
-      if (this.state.plans.length > 0) {
-        this.buildPlanSection()
-      }
+      this.buildReachableDeviceRail()
+      this.buildBenefitCard()
+      this.buildPlanArea()
+      this.buildSubscriptionActions()
     }
   }
 
+  /**
+   * The hero carries the page name and one line of positioning. The benefit list
+   * below answers "what do I get", so the title does not repeat it.
+   */
   @Builder
   private buildHero() {
-    Column({ space: 12 }) {
-      Image(this.state.title === 'Aira'
-        ? $r('app.media.aira_logo_brand')
-        : $r('app.media.app_membership_pro_logo'))
-        .width(AIRA_PRO_LOGO_SIZE)
-        .height(AIRA_PRO_LOGO_SIZE)
-        .objectFit(ImageFit.Contain)
-
+    Column({ space: 8 }) {
       Text(this.state.title)
         .width('100%')
-        .fontSize(28)
+        .fontSize(AIRA_PRO_HERO_TITLE_FONT_SIZE)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.primaryTextColor)
         .textAlign(TextAlign.Center)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      Text(this.state.subtitle)
-        .width('100%')
-        .fontSize(15)
-        .lineHeight(22)
-        .fontColor(this.secondaryTextColor)
-        .textAlign(TextAlign.Center)
+      if (this.state.subtitle.length > 0) {
+        Text(this.state.subtitle)
+          .width('100%')
+          .fontSize(AIRA_PRO_HERO_SUBTITLE_FONT_SIZE)
+          .lineHeight(20)
+          .fontColor(this.secondaryTextColor)
+          .textAlign(TextAlign.Center)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
     }
     .width('100%')
-    .padding({ left: 24, right: 24, top: 28, bottom: 28 })
-    .backgroundColor(this.surfaceBackground)
-    .borderRadius(AIRA_PRO_HERO_CORNER_RADIUS)
+    .padding({ top: 16, bottom: 2, left: 12, right: 12 })
     .alignItems(HorizontalAlign.Center)
   }
 
+  /**
+   * Which endpoints Pro reaches. It plays the same role as the model logos at
+   * the top of a subscription page, and deliberately does not restate the
+   * benefit list: the devices scroll, the capabilities live in the card.
+   */
   @Builder
-  private buildBenefitSection() {
-    SettingsSection({
-      title: this.state.title === 'Aira' ? '本地能力' : '官方托管云服务',
-      secondaryTextColor: this.secondaryTextColor
-    }) {
-      SettingsGroupCard({ surfaceColor: this.surfaceBackground }) {
-        ForEach(this.state.benefits, (benefit: AiraProOverviewBenefitState, index: number) => {
-          this.buildBenefitRow(benefit, index, this.resolveRowPosition(index, this.state.benefits.length))
-          if (index < this.state.benefits.length - 1) {
-            SettingsGroupDivider({ dividerColor: this.dividerColor })
-          }
-        }, (benefit: AiraProOverviewBenefitState) => benefit.id)
+  private buildReachableDeviceRail() {
+    Scroll() {
+      Row({ space: 8 }) {
+        ForEach(this.state.reachableDevices, (device: AiraProOverviewReachableDeviceState) => {
+          this.buildReachableDeviceChip(device)
+        }, (device: AiraProOverviewReachableDeviceState) => device.id)
       }
+    }
+    .width('100%')
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+  }
+
+  @Builder
+  private buildReachableDeviceChip(device: AiraProOverviewReachableDeviceState) {
+    Row({ space: 7 }) {
+      if (this.isBrowserBrandDevice(device.glyph)) {
+        Image(this.resolveBrowserBrandIcon(device.glyph))
+          .width(AIRA_PRO_DEVICE_CHIP_ICON_SIZE)
+          .height(AIRA_PRO_DEVICE_CHIP_ICON_SIZE)
+          .objectFit(ImageFit.Contain)
+      } else {
+        AiraIcon({
+          airaIconId: 'crossDeviceLink.localDevice',
+          iconSize: AIRA_PRO_DEVICE_CHIP_ICON_SIZE,
+          iconColor: this.accentColor
+        })
+      }
+
+      Text(device.label)
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.primaryTextColor)
+        .maxLines(1)
+    }
+    .height(AIRA_PRO_DEVICE_CHIP_HEIGHT)
+    .padding({ left: 12, right: 14 })
+    .backgroundColor(this.surfaceBackground)
+    .borderRadius(AIRA_PRO_DEVICE_CHIP_CORNER_RADIUS)
+    .border({ width: 1, color: this.outlineStrokeColor })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private buildBenefitCard() {
+    SettingsGroupCard({ surfaceColor: this.surfaceBackground }) {
+      ForEach(this.state.benefits, (benefit: AiraProOverviewBenefitState, index: number) => {
+        this.buildBenefitRow(benefit, index)
+        if (index < this.state.benefits.length - 1) {
+          SettingsGroupDivider({ dividerColor: this.dividerColor })
+        }
+      }, (benefit: AiraProOverviewBenefitState) => benefit.id)
     }
   }
 
   @Builder
-  private buildBenefitRow(
-    benefit: AiraProOverviewBenefitState,
-    index: number,
-    rowPosition: 'single' | 'first' | 'middle' | 'last'
-  ) {
-    Row({ space: 14 }) {
+  private buildBenefitRow(benefit: AiraProOverviewBenefitState, index: number) {
+    Row({ space: 12 }) {
       Stack({ alignContent: Alignment.Center }) {
         Circle()
-          .width(AIRA_PRO_BENEFIT_ICON_SIZE)
-          .height(AIRA_PRO_BENEFIT_ICON_SIZE)
+          .width(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
+          .height(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
           .fill(this.resolveBenefitIconBackgroundColor(index))
 
         AiraIcon({
-          airaIconId: this.resolveBenefitIcon(benefit.id),
+          airaIconId: benefit.iconId,
           iconSize: AIRA_PRO_BENEFIT_ICON_IMAGE_SIZE,
-          iconColor: this.onAccentColor
+          iconColor: this.settingsIconForeground
         })
       }
-      .width(AIRA_PRO_BENEFIT_ICON_SIZE)
-      .height(AIRA_PRO_BENEFIT_ICON_SIZE)
+      .width(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
+      .height(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
 
-      Column({ space: 4 }) {
-        Text(benefit.title)
-          .width('100%')
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.primaryTextColor)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        if (benefit.description.length > 0) {
-          if (benefit.tutorialText.length > 0) {
-            Button({ type: ButtonType.Normal }) {
-              Text() {
-                Span(benefit.description)
-                  .fontColor(this.secondaryTextColor)
-                Span(` ${benefit.tutorialText}`)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.accentColor)
-              }
-              .width('100%')
-              .fontSize(13)
-              .lineHeight(18)
-              .maxLines(2)
-              .textAlign(TextAlign.Start)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-            .width('100%')
-            .padding(0)
-            .buttonStyle(ButtonStyleMode.TEXTUAL)
-            .backgroundColor(AIRA_PRO_TRANSPARENT_COLOR)
-            .stateEffect(true)
-            .accessibilityText(`${benefit.description} ${benefit.tutorialText}`)
-            .onClick(() => {
-              this.onOpenDesktopGuide?.();
-            })
-          } else {
-            Text(benefit.description)
-              .width('100%')
-              .fontSize(13)
-              .lineHeight(18)
-              .fontColor(this.secondaryTextColor)
-              .maxLines(2)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
-        }
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+      Text(benefit.title)
+        .layoutWeight(1)
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.primaryTextColor)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
     .padding({
@@ -215,112 +224,110 @@ export struct AiraProOverviewScreen {
       top: AIRA_PRO_BENEFIT_ROW_VERTICAL_PADDING,
       bottom: AIRA_PRO_BENEFIT_ROW_VERTICAL_PADDING
     })
-    .borderRadius(this.resolveRowBorderRadius(rowPosition))
+    .borderRadius(AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS)
     .alignItems(VerticalAlign.Center)
   }
 
   @Builder
-  private buildPlanSection() {
-    SettingsSection({ title: '开通方式', secondaryTextColor: this.secondaryTextColor }) {
-      Column({ space: 12 }) {
-        ForEach(this.state.plans, (plan: AiraProOverviewPlanState) => {
-          this.buildPlanRow(plan)
-        }, (plan: AiraProOverviewPlanState) => plan.id)
-
+  private buildPlanArea() {
+    if (this.state.plans.length > 0) {
+      Column({ space: 14 }) {
+        this.buildPlanCards()
         this.buildLegalConsent()
-        this.buildSubscriptionActions()
       }
       .width('100%')
+    } else {
+      this.buildActiveMembershipCard()
     }
   }
 
+  /**
+   * Two cards, equal height. The discount badge is pinned to the card's top-right
+   * corner instead of sitting in the title row's flow, so a badged card and a
+   * plain one keep the same title / price / caption baseline.
+   */
   @Builder
-  private buildPlanRow(plan: AiraProOverviewPlanState) {
-    Row({ space: 13 }) {
-      Radio({
-        value: plan.id,
-        group: AIRA_PRO_PLAN_RADIO_GROUP
-      })
-        .checked(this.selectedPlanId === plan.id)
-        .enabled(this.canSelectPlan(plan))
-        .hitTestBehavior(HitTestMode.None)
-        .radioStyle({
-          checkedBackgroundColor: this.accentColor
-        })
-
-      Column({ space: 4 }) {
-        Row({ space: 8 }) {
-          Text(plan.title)
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.primaryTextColor)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-          if (plan.badgeText.length > 0) {
-            Text(plan.badgeText)
-              .fontSize(11)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.accentColor)
-              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-              .backgroundColor(this.controlBackground)
-              .borderRadius(9)
-              .maxLines(1)
-          }
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-
-        Text(plan.description)
-          .width('100%')
-          .fontSize(13)
-          .lineHeight(18)
-          .fontColor(this.secondaryTextColor)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Column({ space: 3 }) {
-        Text(plan.priceText)
-          .fontSize(plan.originalPriceText.length > 0 ? 18 : 14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(plan.originalPriceText.length > 0 ? this.accentColor : this.primaryTextColor)
-          .textAlign(TextAlign.End)
-          // Keep the price on one line: at 112 vp "¥7.89 / 年自动续费" wrapped and left a
-          // single trailing 费 on the second line. A wider box plus adaptive shrinking keeps
-          // any longer local price (currency or renewal wording) whole instead.
-          .maxLines(1)
-          .minFontSize(plan.originalPriceText.length > 0 ? 14 : 11)
-          .maxFontSize(plan.originalPriceText.length > 0 ? 18 : 14)
-          .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
-          .constraintSize({ maxWidth: AIRA_PRO_PLAN_PRICE_MAX_WIDTH })
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        if (plan.originalPriceText.length > 0) {
-          Text(plan.originalPriceText)
-            .fontSize(12)
-            .fontColor(this.secondaryTextColor)
-            .textAlign(TextAlign.End)
-            .decoration({ type: TextDecorationType.LineThrough, color: this.secondaryTextColor })
-            .maxLines(1)
-        }
-      }
-      .constraintSize({ maxWidth: AIRA_PRO_PLAN_PRICE_MAX_WIDTH })
-      .alignItems(HorizontalAlign.End)
+  private buildPlanCards() {
+    Row({ space: 12 }) {
+      ForEach(this.state.plans, (plan: AiraProOverviewPlanState) => {
+        this.buildPlanCard(plan)
+      }, (plan: AiraProOverviewPlanState) => plan.id)
     }
     .width('100%')
-    .height(plan.originalPriceText.length > 0 ? AIRA_PRO_PROMOTION_PLAN_ROW_HEIGHT : AIRA_PRO_PLAN_ROW_HEIGHT)
-    .padding({
-      left: AIRA_PRO_BENEFIT_ROW_HORIZONTAL_PADDING,
-      right: AIRA_PRO_BENEFIT_ROW_HORIZONTAL_PADDING,
-      top: 0,
-      bottom: 0
-    })
+    .alignItems(VerticalAlign.Top)
+  }
+
+  @Builder
+  private buildPlanCard(plan: AiraProOverviewPlanState) {
+    Column({ space: 0 }) {
+      Stack({ alignContent: Alignment.TopEnd }) {
+        Row() {
+          Text(plan.title)
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.secondaryTextColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .padding({ right: plan.discountBadgeText.length > 0 ? AIRA_PRO_PLAN_BADGE_RIGHT_PADDING : 0 })
+        }
+        .width('100%')
+        .height(AIRA_PRO_PLAN_TITLE_ROW_HEIGHT)
+        .alignItems(VerticalAlign.Center)
+
+        if (plan.discountBadgeText.length > 0) {
+          Text(plan.discountBadgeText)
+            .fontSize(11)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.accentColor)
+            .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+            .backgroundColor(this.controlBackground)
+            .borderRadius(7)
+            .maxLines(1)
+        }
+      }
+      .width('100%')
+      .height(AIRA_PRO_PLAN_TITLE_ROW_HEIGHT)
+
+      // One Text with two Spans, not a Row of two Texts: only inline spans share
+      // a baseline, so ¥7.89 and / 年 sit on the same line however the ratio of
+      // the two font sizes changes. A Row with alignItems(Bottom) aligns the two
+      // text boxes' bottoms, which is not the same thing — the smaller cadence
+      // carries descender space the amount does not, so its glyphs floated up.
+      Text() {
+        Span(plan.amountText)
+          .fontSize(AIRA_PRO_PLAN_AMOUNT_FONT_SIZE)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.primaryTextColor)
+
+        if (plan.periodText.length > 0) {
+          Span(plan.periodText)
+            .fontSize(AIRA_PRO_PLAN_PERIOD_FONT_SIZE)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.secondaryTextColor)
+        }
+      }
+      .width('100%')
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .padding({ top: 10 })
+
+      Text(plan.description)
+        .width('100%')
+        .fontSize(12)
+        .lineHeight(17)
+        .fontColor(this.secondaryTextColor)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .padding({ top: 8 })
+    }
+    .layoutWeight(1)
+    .constraintSize({ minHeight: AIRA_PRO_PLAN_CARD_MIN_HEIGHT })
+    .padding({ left: 14, right: 14, top: 14, bottom: 14 })
     .backgroundColor(this.surfaceBackground)
-    .borderRadius(AIRA_PRO_PLAN_ROW_CORNER_RADIUS)
-    .alignItems(VerticalAlign.Center)
+    .borderRadius(AIRA_PRO_PLAN_CARD_CORNER_RADIUS)
+    .border(this.resolvePlanCardBorder(plan))
+    .alignItems(HorizontalAlign.Start)
+    .justifyContent(FlexAlign.Start)
     .enabled(this.canSelectPlan(plan))
     .opacity(this.canSelectPlan(plan) ? 1 : 0.52)
     .onClick(() => {
@@ -328,6 +335,68 @@ export struct AiraProOverviewScreen {
         this.selectedPlanId = plan.id;
       }
     })
+  }
+
+  /**
+   * A member who already holds Pro has no plans to choose, so the same slot
+   * becomes a status card with the one action that still applies.
+   */
+  @Builder
+  private buildActiveMembershipCard() {
+    Column({ space: 14 }) {
+      Row({ space: 12 }) {
+        Column({ space: 4 }) {
+          Text(this.state.proActivatedActionText)
+            .width('100%')
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.primaryTextColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+          if (this.state.proValue.length > 0) {
+            Text(this.state.proValue)
+              .width('100%')
+              .fontSize(13)
+              .lineHeight(18)
+              .fontColor(this.secondaryTextColor)
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Button() {
+        Text('管理自动续费')
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.accentColor)
+          .maxLines(1)
+      }
+      .width('100%')
+      .height(AIRA_PRO_MANAGE_BUTTON_HEIGHT)
+      .type(ButtonType.Normal)
+      .buttonStyle(ButtonStyleMode.NORMAL)
+      .backgroundColor(AIRA_PRO_TRANSPARENT_COLOR)
+      .borderRadius(AIRA_PRO_MANAGE_BUTTON_HEIGHT / 2)
+      .border({ width: 1.5, color: this.accentColor })
+      .enabled(this.state.proActionsEnabled)
+      .opacity(this.state.proActionsEnabled ? 1 : 0.52)
+      .stateEffect(this.state.proActionsEnabled)
+      .onClick(() => {
+        if (this.state.proActionsEnabled) {
+          this.onManageSubscription?.();
+        }
+      })
+    }
+    .width('100%')
+    .padding({ left: 18, right: 18, top: 18, bottom: 18 })
+    .backgroundColor(this.surfaceBackground)
+    .borderRadius(AIRA_PRO_PLAN_CARD_CORNER_RADIUS)
   }
 
   @Builder
@@ -386,7 +455,6 @@ export struct AiraProOverviewScreen {
     }
     .width('100%')
     .padding({ left: 6, right: 6 })
-    .opacity(this.canOpenLegal() ? 1 : 0.52)
   }
 
   @Builder
@@ -410,109 +478,79 @@ export struct AiraProOverviewScreen {
 
   @Builder
   private buildSubscriptionActions() {
-    Column({ space: 8 }) {
-      this.buildSubscribeButton()
-      this.buildRestorePurchaseButton()
-    }
-    .width('100%')
-  }
-
-  @Builder
-  private buildSubscribeButton() {
-    Button() {
-      Text(this.resolveSubscribeButtonLabel())
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.onAccentColor)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .width('100%')
-    .height(AIRA_PRO_SUBSCRIBE_BUTTON_HEIGHT)
-    .type(ButtonType.Normal)
-    .buttonStyle(ButtonStyleMode.NORMAL)
-    .backgroundColor(this.accentColor)
-    .borderRadius(AIRA_PRO_SUBSCRIBE_BUTTON_HEIGHT / 2)
-    .opacity(this.canSubscribe() ? 1 : 0.56)
-    .enabled(this.canSubscribe())
-    .stateEffect(this.canSubscribe())
-    .onClick(() => {
-      if (this.canSubscribe()) {
-        const selectedPlan = this.resolveSelectedPlan();
-        if (selectedPlan === undefined) {
-          return;
-        }
-        if (selectedPlan.action === 'manage_subscription') {
-          this.onManageSubscription?.();
-          return;
-        }
-        this.onSubscribe?.(selectedPlan.id);
+    Column({ space: 10 }) {
+      Button() {
+        Text(this.resolveSubscribeButtonLabel())
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.onAccentColor)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
-    })
-  }
-
-  @Builder
-  private buildRestorePurchaseButton() {
-    Button() {
-      Text(this.resolveRestorePurchaseLabel())
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.accentColor)
-        .maxLines(1)
+      .width('100%')
+      .height(AIRA_PRO_SUBSCRIBE_BUTTON_HEIGHT)
+      .type(ButtonType.Normal)
+      .buttonStyle(ButtonStyleMode.NORMAL)
+      .backgroundColor(this.accentColor)
+      .borderRadius(AIRA_PRO_SUBSCRIBE_BUTTON_HEIGHT / 2)
+      .opacity(this.canSubscribe() ? 1 : 0.56)
+      .enabled(this.canSubscribe())
+      .stateEffect(this.canSubscribe())
+      .onClick(() => {
+        if (this.canSubscribe()) {
+          const selectedPlan = this.resolveSelectedPlan();
+          if (selectedPlan === undefined) {
+            return;
+          }
+          if (selectedPlan.action === 'manage_subscription') {
+            this.onManageSubscription?.();
+            return;
+          }
+          this.onSubscribe?.(selectedPlan.id);
+        }
+      })
     }
     .width('100%')
-    .height(AIRA_PRO_RESTORE_BUTTON_HEIGHT)
-    .type(ButtonType.Normal)
-    .buttonStyle(ButtonStyleMode.NORMAL)
-    .backgroundColor(AIRA_PRO_TRANSPARENT_COLOR)
-    .borderRadius(AIRA_PRO_RESTORE_BUTTON_HEIGHT / 2)
-    .enabled(this.state.proActionsEnabled)
-    .opacity(this.state.proActionsEnabled ? 1 : 0.52)
-    .stateEffect(this.state.proActionsEnabled)
-    .onClick(() => {
-      if (this.state.proActionsEnabled) {
-        const selectedPlan = this.resolveSelectedPlan();
-        if (selectedPlan !== undefined) {
-          this.onRestorePurchase?.(selectedPlan.id);
-        }
-      }
-    })
   }
 
   private resolveBenefitIconBackgroundColor(index: number): ResourceColor {
     const colors: ResourceColor[] = [
       this.settingsIconBackgrounds.sync,
-      this.settingsIconBackgrounds.userScripts,
-      this.settingsIconBackgrounds.adBlocker,
-      this.settingsIconBackgrounds.appearance,
+      this.settingsIconBackgrounds.crossDeviceLink,
+      this.settingsIconBackgrounds.bookmarks,
+      this.settingsIconBackgrounds.history,
       this.settingsIconBackgrounds.siteSettings,
-      this.settingsIconBackgrounds.search,
       this.settingsIconBackgrounds.experiments
     ];
     return colors[index % colors.length];
   }
 
-  private resolveBenefitIcon(id: string): AiraRenderableIconId {
-    switch (id) {
-      case 'cross_system_bookmark_sync':
-        return 'membership.benefit.sync';
-      case 'page_handoff':
-        return 'browser.toolbar.sendToDesktop';
-      case 'cross_device_tabs':
-        return 'browser.toolbar.tabs';
-      case 'aira_cloud_history':
-        return 'membership.benefit.sync';
-      case 'offline_page_save':
-        return 'membership.benefit.experiments';
-      case 'userscript_install':
-        return 'membership.benefit.userScripts';
-      case 'manual_element_hide':
-        return 'membership.benefit.adBlocker';
-      case 'local_theme_and_search':
-        return 'membership.benefit.appearance';
-      default:
-        return 'membership.benefit.experiments';
+  /**
+   * Selection is the border and nothing else. The unselected state keeps the
+   * same border width in a transparent colour so switching plans changes no
+   * geometry — a wider selected border would otherwise nudge the card's content
+   * by a pixel on every tap.
+   */
+  private resolvePlanCardBorder(plan: AiraProOverviewPlanState): BorderOptions {
+    const selected = this.selectedPlanId === plan.id;
+    return {
+      width: AIRA_PRO_PLAN_CARD_SELECTED_BORDER_WIDTH,
+      color: selected ? this.accentColor : AIRA_PRO_TRANSPARENT_COLOR
+    };
+  }
+
+  private isBrowserBrandDevice(glyph: AiraProReachableDeviceGlyph): boolean {
+    return glyph === 'chrome' || glyph === 'edge' || glyph === 'firefox';
+  }
+
+  private resolveBrowserBrandIcon(glyph: AiraProReachableDeviceGlyph): Resource {
+    if (glyph === 'edge') {
+      return $r('app.media.sync_browser_edge');
     }
+    if (glyph === 'firefox') {
+      return $r('app.media.sync_browser_firefox');
+    }
+    return $r('app.media.sync_browser_chrome');
   }
 
   private canSelectPlan(plan: AiraProOverviewPlanState): boolean {
@@ -567,10 +605,6 @@ export struct AiraProOverviewScreen {
     return this.resolveSelectedPlan()?.footerText ?? '';
   }
 
-  private resolveRestorePurchaseLabel(): string {
-    return this.resolveSelectedPlan()?.purchaseKind === 'one_time' ? '恢复一次购' : '恢复订阅';
-  }
-
   private shouldShowAutoRenewalNotice(): boolean {
     return this.resolveSelectedPlan()?.purchaseKind === 'subscription';
   }
@@ -585,51 +619,5 @@ export struct AiraProOverviewScreen {
       return selected;
     }
     return this.state.plans.length > 0 ? this.state.plans[0] : undefined;
-  }
-
-  private resolveRowPosition(index: number, count: number): 'single' | 'first' | 'middle' | 'last' {
-    if (count <= 1) {
-      return 'single';
-    }
-    if (index === 0) {
-      return 'first';
-    }
-    if (index === count - 1) {
-      return 'last';
-    }
-    return 'middle';
-  }
-
-  private resolveRowBorderRadius(position: 'single' | 'first' | 'middle' | 'last'): BorderRadiuses {
-    if (position === 'single') {
-      return {
-        topLeft: AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS,
-        topRight: AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS,
-        bottomLeft: AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS,
-        bottomRight: AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS
-      };
-    }
-    if (position === 'first') {
-      return {
-        topLeft: AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS,
-        topRight: AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS,
-        bottomLeft: 0,
-        bottomRight: 0
-      };
-    }
-    if (position === 'last') {
-      return {
-        topLeft: 0,
-        topRight: 0,
-        bottomLeft: AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS,
-        bottomRight: AIRA_PRO_BENEFIT_ROW_CORNER_RADIUS
-      };
-    }
-    return {
-      topLeft: 0,
-      topRight: 0,
-      bottomLeft: 0,
-      bottomRight: 0
-    };
   }
 }

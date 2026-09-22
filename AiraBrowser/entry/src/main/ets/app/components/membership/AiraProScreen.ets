@@ -1,5 +1,4 @@
 import { common } from '@kit.AbilityKit';
-import { showCenteredAlertDialog } from '../common/CenteredDialogSurface';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { loginComponentManager } from '@kit.AccountKit';
 import {
@@ -24,10 +23,6 @@ import { SettingsHdsScaffold } from '../settings/SettingsHdsScaffold';
 import { SettingsNavigationCoordinator } from '../../router/SettingsNavigationCoordinator';
 import { HuaweiLoginSheetContent } from '../account/HuaweiLoginSheetContent';
 import { BrowserAdaptiveModalOverlay } from '../browser/BrowserAdaptiveModalOverlay';
-import { SyncDesktopBookmarkGuideContent } from '../sync/SyncDesktopBookmarkGuideContent';
-import {
-  SYNC_DESKTOP_BOOKMARK_GUIDE_TITLE
-} from '../../../services/sync/SyncDesktopBookmarkGuideMarkdownService';
 import { AiraLegalWebDocumentContent } from '../legal/AiraLegalWebDocumentContent';
 import {
   AiraLegalDocumentId,
@@ -48,7 +43,7 @@ import {
 import { AppServiceModeGateService } from '../../../services/settings/AppServiceModeGateService';
 import { MEMBERSHIP_REFRESH_ACCOUNT_VISIBLE_FRESH_MS } from '../../../services/membership/MembershipRefreshPolicyService';
 
-type AiraProSheetKind = 'none' | 'login' | 'desktopGuide' | 'legalDocument';
+type AiraProSheetKind = 'none' | 'login' | 'legalDocument';
 export type AiraProPresentationMode = 'page' | 'workspace';
 export type AiraProPageLayoutMode = 'phone' | 'large_screen';
 
@@ -144,15 +139,19 @@ export struct AiraProScreen {
     Column() {
       SettingsHdsScaffold({
         title: this.state.title,
-        backIconKind: 'back',
+        backIconKind: 'close',
         pageBackground: this.theme.pageBackground,
         headerButtonBackground: this.theme.controlBackground,
         primaryTextColor: this.theme.textPrimary,
         dividerColor: this.theme.divider,
+        menuActionText: this.resolveRestorePurchaseActionLabel(),
         scrollers: [this.contentScroller],
         contentKind: 'standard',
         onBack: () => {
           this.navigationCoordinator.back();
+        },
+        onMenuAction: () => {
+          this.restorePurchase();
         }
       }) {
         this.buildAiraProContent()
@@ -225,6 +224,8 @@ export struct AiraProScreen {
       primaryTextColor: this.theme.textPrimary,
       secondaryTextColor: this.theme.textSecondary,
       dividerColor: this.theme.divider,
+      outlineStrokeColor: this.theme.outline,
+      settingsIconForeground: this.theme.settingsIconForeground,
       settingsIconBackgrounds: this.theme.settingsIconBackgrounds,
       scroller: this.contentScroller,
       onSubscribe: (planId: string) => {
@@ -237,15 +238,26 @@ export struct AiraProScreen {
         this.openAutoRenewalNotice();
       },
       onManageSubscription: () => {
-        this.confirmLifetimeUpgradeSubscriptionCancellation();
-      },
-      onRestorePurchase: (planId: string) => {
-        this.restorePurchase(planId);
-      },
-      onOpenDesktopGuide: () => {
-        this.openDesktopGuide();
+        this.openSubscriptionManagement();
       }
     })
+  }
+
+  /**
+   * The page's only title-bar action. “恢复购买” is low frequency but must stay
+   * findable, so it sits opposite the close action instead of in a footer link
+   * the user has to scroll to. It is hidden when there is nothing to restore.
+   */
+  private resolveRestorePurchaseActionLabel(): string {
+    if (!this.state.proActionsEnabled) {
+      return '';
+    }
+    return this.state.plans.length > 0 ? '恢复购买' : '';
+  }
+
+  private restorePurchase(): void {
+    const selectedPlan = this.state.plans.length > 0 ? this.state.plans[0].id : 'monthly';
+    this.restorePurchaseForPlan(selectedPlan);
   }
 
   private resolveDesktopContentMaxWidth(): Length {
@@ -254,11 +266,7 @@ export struct AiraProScreen {
 
   @Builder
   private buildActiveSheet() {
-    if (this.activeSheetKind === 'desktopGuide') {
-      SyncDesktopBookmarkGuideContent()
-        .width('100%')
-        .height('100%')
-    } else if (this.activeSheetKind === 'legalDocument') {
+    if (this.activeSheetKind === 'legalDocument') {
       AiraLegalWebDocumentContent({
         documentUrl: this.legalDocument.url,
         styleId: 'aira-pro-legal-document-style'
@@ -337,31 +345,21 @@ export struct AiraProScreen {
     );
   }
 
-  private confirmLifetimeUpgradeSubscriptionCancellation(): void {
-    const prompt = this.state.lifetimeUpgradePrompt;
-    showCenteredAlertDialog({
-      title: prompt.title,
-      message: prompt.message,
-      autoCancel: true,
-      primaryButton: {
-        value: prompt.cancelLabel,
-        action: () => {
-        }
-      },
-      secondaryButton: {
-        value: prompt.manageLabel,
-        action: () => {
-          this.purchaseCoordinator.openLifetimeUpgradeSubscriptionManagement(
-            getContext(this) as common.UIAbilityContext,
-            this.purchaseFlowHost,
-            this.buildAiraProDataBoundaryInput()
-          );
-        }
-      }
-    });
+  /**
+   * The active-member card's single action. An active subscription has exactly
+   * one thing left to do — open Huawei's subscription management — so the
+   * page goes straight there instead of routing through a confirmation dialog
+   * that only had one real outcome.
+   */
+  private openSubscriptionManagement(): void {
+    this.purchaseCoordinator.openLifetimeUpgradeSubscriptionManagement(
+      getContext(this) as common.UIAbilityContext,
+      this.purchaseFlowHost,
+      this.buildAiraProDataBoundaryInput()
+    );
   }
 
-  private restorePurchase(planId: string = 'monthly'): void {
+  private restorePurchaseForPlan(planId: string): void {
     this.purchaseCoordinator.restorePurchaseFlow(
       getContext(this) as common.UIAbilityContext,
       this.getHuaweiUid(),
@@ -369,14 +367,6 @@ export struct AiraProScreen {
       this.purchaseFlowHost,
       this.buildAiraProDataBoundaryInput()
     );
-  }
-
-  private openDesktopGuide(): void {
-    if (this.isDesktopPresentation()) {
-      this.openActiveSheet('desktopGuide');
-      return;
-    }
-    this.navigationCoordinator.openSyncDesktopBookmarkGuide(this.buildAiraProBoundaryState());
   }
 
   private openMembershipTerms(): void {
@@ -511,9 +501,6 @@ export struct AiraProScreen {
     if (this.activeSheetKind === 'login') {
       return '登录华为账号';
     }
-    if (this.activeSheetKind === 'desktopGuide') {
-      return SYNC_DESKTOP_BOOKMARK_GUIDE_TITLE;
-    }
     if (this.activeSheetKind === 'legalDocument') {
       return this.legalDocument.title;
     }
@@ -522,13 +509,11 @@ export struct AiraProScreen {
 
   private shouldShowDesktopDialogHeader(): boolean {
     return this.activeSheetKind === 'login' ||
-      this.activeSheetKind === 'desktopGuide' ||
       this.activeSheetKind === 'legalDocument';
   }
 
   private resolveDesktopDialogHeight(): Length {
-    if (this.activeSheetKind === 'desktopGuide' ||
-      this.activeSheetKind === 'legalDocument') {
+    if (this.activeSheetKind === 'legalDocument') {
       return '82%';
     }
     return 500;

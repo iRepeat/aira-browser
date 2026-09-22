@@ -18,8 +18,14 @@ import {
   BrowserPrivacyEffectPolicyService
 } from '../../services/privacy/BrowserPrivacyEffectPolicyService';
 import { AIRA_DISTRIBUTION_CAPABILITY_OWNER } from '../../common/config/AiraDistributionCapabilityOwner';
-import { AIRA_PRO_BENEFITS } from './AiraProBenefitCatalog';
-
+import {
+  AIRA_PRO_BENEFITS,
+  AIRA_PRO_REACHABLE_DEVICES,
+  AiraProBenefitDefinition,
+  AiraProReachableDeviceDefinition,
+  AiraProReachableDeviceGlyph
+} from './AiraProBenefitCatalog';
+import { AiraRenderableIconId } from '../resources/GeneratedAiraIconCatalog';
 const AIRA_PRO_SUBSCRIPTION_ACTION_TEXT: string = '立即订阅';
 const AIRA_PRO_SUBSCRIPTION_CONSENT_ACTION_TEXT: string = '同意协议后立即订阅';
 const AIRA_PRO_SUBSCRIPTION_FOOTER_TEXT: string =
@@ -30,14 +36,26 @@ export type AiraProOverviewPlanAction = AiraProPlanPurchaseAction;
 export interface AiraProOverviewBenefitState {
   id: string;
   title: string;
-  description: string;
-  tutorialText: string;
+  /**
+   * The benefit's own glyph, so the page draws a colourful icon per row instead
+   * of a generic check mark. The colour comes from the theme's settings icon
+   * background set, keyed by the same id.
+   */
+  iconId: AiraRenderableIconId;
+}
+
+/** One endpoint Aira Pro reaches, rendered as a chip in the header rail. */
+export interface AiraProOverviewReachableDeviceState {
+  id: string;
+  label: string;
+  glyph: AiraProReachableDeviceGlyph;
 }
 
 export interface AiraProOverviewViewState {
   title: string;
   subtitle: string;
   benefits: AiraProOverviewBenefitState[];
+  reachableDevices: AiraProOverviewReachableDeviceState[];
   plans: AiraProOverviewPlanState[];
   proValue: string;
   proActivatedActionText: string;
@@ -54,6 +72,12 @@ export interface AiraProOverviewPlanState {
   purchaseKind: 'subscription' | 'one_time';
   title: string;
   priceText: string;
+  /** Amount only, for the price card's large line: `¥7.89`. */
+  amountText: string;
+  /** Cadence only, for the price card's small suffix: `/ 年`. */
+  periodText: string;
+  /** Period-end discount badge; empty when the plan has no discount. */
+  discountBadgeText: string;
   originalPriceText: string;
   description: string;
   badgeText: string;
@@ -98,7 +122,8 @@ export class AiraProOverviewViewModel {
     return {
       title: this.resolveHeroTitle(membershipState),
       subtitle: this.resolveHeroSubtitle(membershipState),
-      benefits: AIRA_PRO_BENEFITS,
+      benefits: this.buildBenefitStates(),
+      reachableDevices: this.buildReachableDeviceStates(),
       plans: plans,
       proValue: this.resolveProValue(membershipState),
       proActivatedActionText: this.resolveActivatedActionText(membershipState),
@@ -119,29 +144,26 @@ export class AiraProOverviewViewModel {
         {
           id: 'offline_page_save',
           title: '离线页面',
-          description: '将网页保存到本机，随时离线阅读',
-          tutorialText: ''
+          iconId: 'browser.toolbar.offline'
         },
         {
           id: 'userscript_install',
           title: '用户脚本',
-          description: '安装并运行你自己的浏览器脚本',
-          tutorialText: ''
+          iconId: 'membership.benefit.userScripts'
         },
         {
           id: 'manual_element_hide',
           title: '网页元素隐藏',
-          description: '按需隐藏网页中的元素和干扰内容',
-          tutorialText: ''
+          iconId: 'browser.toolbar.manualElementHide'
         },
         {
           id: 'local_theme_and_search',
           title: '主题与搜索',
-          description: '主题配色和搜索设置保存在本机，全部开放使用',
-          tutorialText: ''
+          iconId: 'membership.benefit.appearance'
         }
       ],
       plans: [],
+      reachableDevices: this.buildReachableDeviceStates(),
       proValue: '本地功能已全部开启',
       proActivatedActionText: '无需会员',
       proLegalPromptText: '',
@@ -164,7 +186,7 @@ export class AiraProOverviewViewModel {
 
   private resolveHeroSubtitle(state: AiraMembershipState): string {
     if (!this.membershipPresentationService.isLongTermMember(state)) {
-      return '本地功能、WebDAV 和私有化部署功能免费。Pro 仅用于 Aira 官方托管云服务。';
+      return '本地功能永久免费，Pro 只用于 Aira 官方托管云服务。';
     }
     if (this.membershipPresentationService.hasInsiderRecognition(state)) {
       return 'INSIDER 长期会员权益已生效。感谢你帮助测试和改进 Aira。';
@@ -182,6 +204,9 @@ export class AiraProOverviewViewModel {
       purchaseKind: 'one_time',
       title: AIRA_PRO_ONE_TIME_PLAN.title,
       priceText: AIRA_PRO_ONE_TIME_PLAN.displayPrice,
+      amountText: AIRA_PRO_ONE_TIME_PLAN.displayPrice,
+      periodText: '',
+      discountBadgeText: '',
       originalPriceText: '',
       description: this.buildOneTimePlanDescription(state),
       badgeText: AIRA_PRO_ONE_TIME_PLAN.badgeText,
@@ -192,6 +217,27 @@ export class AiraProOverviewViewModel {
       footerText: this.buildOneTimePlanFooter(state),
       action: action
     };
+  }
+
+  private buildBenefitStates(): AiraProOverviewBenefitState[] {
+    return AIRA_PRO_BENEFITS.map((benefit: AiraProBenefitDefinition): AiraProOverviewBenefitState => {
+      return {
+        id: benefit.id,
+        title: benefit.title,
+        iconId: benefit.iconId
+      };
+    });
+  }
+
+  private buildReachableDeviceStates(): AiraProOverviewReachableDeviceState[] {
+    return AIRA_PRO_REACHABLE_DEVICES.map(
+      (device: AiraProReachableDeviceDefinition): AiraProOverviewReachableDeviceState => {
+        return {
+          id: device.id,
+          label: device.label,
+          glyph: device.glyph
+        };
+      });
   }
 
   private buildSubscriptionPlanState(
@@ -208,6 +254,9 @@ export class AiraProOverviewViewModel {
       purchaseKind: 'subscription',
       title: plan.title,
       priceText: plan.displayPrice,
+      amountText: plan.amountText,
+      periodText: plan.periodText,
+      discountBadgeText: plan.discountBadgeText,
       originalPriceText: '',
       description: plan.description,
       badgeText: plan.badgeText,

@@ -1,7 +1,8 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   AIRA_PRO_SELLABLE_IAP_PLANS,
-  isAiraProSellablePlanId
+  isAiraProSellablePlanId,
+  resolveAiraProPlanPeriodText
 } from '../main/ets/services/membership/HuaweiIapProductCatalog';
 
 export default function huaweiIapProductCatalogTest(): void {
@@ -18,6 +19,26 @@ export default function huaweiIapProductCatalogTest(): void {
       expect(isAiraProSellablePlanId('yearly')).assertTrue();
       expect(isAiraProSellablePlanId('quarterly')).assertFalse();
       expect(isAiraProSellablePlanId('one_time')).assertFalse();
+    });
+
+    // The membership page's price cards render the amount and the cadence as two
+    // separate runs, so the catalog has to own the split rather than let the page
+    // re-parse the single-line displayPrice.
+    it('splits each plan price into an amount and a cadence for the price cards', 0, () => {
+      expect(AIRA_PRO_SELLABLE_IAP_PLANS[0].amountText).assertEqual('¥1');
+      expect(AIRA_PRO_SELLABLE_IAP_PLANS[0].periodText).assertEqual('/ 月');
+      expect(AIRA_PRO_SELLABLE_IAP_PLANS[1].amountText).assertEqual('¥7.89');
+      expect(AIRA_PRO_SELLABLE_IAP_PLANS[1].periodText).assertEqual('/ 年');
+      expect(resolveAiraProPlanPeriodText('monthly')).assertEqual('/ 月');
+      expect(resolveAiraProPlanPeriodText('quarterly')).assertEqual('/ 季');
+      expect(resolveAiraProPlanPeriodText('yearly')).assertEqual('/ 年');
+    });
+
+    // Only the yearly plan carries a discount, and it is a period-end badge on
+    // the card rather than part of the price string.
+    it('carries the discount badge on the yearly plan only', 0, () => {
+      expect(AIRA_PRO_SELLABLE_IAP_PLANS[0].discountBadgeText).assertEqual('');
+      expect(AIRA_PRO_SELLABLE_IAP_PLANS[1].discountBadgeText).assertEqual('−34%');
     });
   });
 }
