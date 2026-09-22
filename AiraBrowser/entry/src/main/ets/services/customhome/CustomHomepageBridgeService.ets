@@ -18,6 +18,11 @@ import {
   resolveHomeSystemShortcutDefinitionByUrl
 } from '../shortcuts/HomeSystemShortcutCatalog';
 import {
+  resolveWebAppearancePolicy,
+  resolveDocumentStartScriptRule,
+  WebAppearancePolicy
+} from '../../core/web/WebAppearancePolicy';
+import {
   CustomHomepageEnvironmentService,
   CustomHomepageNativeEnvironmentState
 } from './CustomHomepageEnvironmentService';
@@ -151,6 +156,28 @@ export class CustomHomepageBridgeService {
     return {
       script: this.buildDocumentStartScript(state),
       scriptRules: ['.*']
+    };
+  }
+
+  /**
+   * Bridge bootstrap for a document loaded from a non-HTTP source.
+   *
+   * Same trap as the appearance bootstrap: a `.*` rule only matches HTTP(S) and
+   * `data:`, so an imported `file://` homepage never received `__airaHomeTheme`,
+   * `__airaHomeShortcuts`, or `AiraHome.getTheme()` before its own script ran. The rule
+   * must be the `scheme://` form ArkWeb accepts for a custom protocol.
+   */
+  buildDocumentStartScriptItemForUrl(
+    state: CustomHomepageDocumentStartState,
+    documentUrl: string
+  ): ScriptItem {
+    const rule = resolveDocumentStartScriptRule(documentUrl);
+    if (rule.length <= 0) {
+      return this.buildDocumentStartScriptItem(state);
+    }
+    return {
+      script: this.buildDocumentStartScript(state),
+      scriptRules: [rule]
     };
   }
 
@@ -383,6 +410,42 @@ window.__airaHomeSetHoldingHandStatus(${status});
 (function () {
   try {
     window.dispatchEvent(new CustomEvent('aira-home-back-requested'));
+  } catch (_error) {
+  }
+})();
+`;
+  }
+
+  /**
+   * Live appearance update for a document that is already loaded.
+   *
+   * `buildWebAppearanceDocumentStartScript` can only ever run at document start,
+   * so an appearance-only change (theme flip, forced-dark toggle) has no other way
+   * to reach the page. The payload mirrors that bootstrap exactly — same style id,
+   * same `html, body` rule, same `color-scheme` — so applying it is equivalent to
+   * having loaded the document with the new policy, which is what lets the runtime
+   * repaint in place instead of rebuilding the Web node.
+   */
+  buildAppearanceUpdateScript(policy: WebAppearancePolicy): string {
+    const resolvedPolicy = resolveWebAppearancePolicy(policy);
+    const backgroundLiteral = JSON.stringify(resolvedPolicy.backgroundColor);
+    const colorSchemeLiteral = JSON.stringify(resolvedPolicy.prefersDarkColorScheme ? 'dark' : 'light');
+    return `
+(function airaWebAppearanceUpdate() {
+  var background = ${backgroundLiteral};
+  var colorScheme = ${colorSchemeLiteral};
+  try {
+    var styleId = '__airaWebAppearanceBootstrapStyle';
+    if (document.documentElement && document.documentElement.style) {
+      document.documentElement.style.colorScheme = colorScheme;
+    }
+    var style = document.getElementById(styleId);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = styleId;
+      (document.head || document.documentElement).appendChild(style);
+    }
+    style.textContent = 'html, body { background-color: ' + background + '; color-scheme: ' + colorScheme + '; }';
   } catch (_error) {
   }
 })();

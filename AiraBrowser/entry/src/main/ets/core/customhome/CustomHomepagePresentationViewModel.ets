@@ -38,6 +38,12 @@ interface CustomHomepageRefreshInput {
 interface CustomHomepageRefreshPlan {
   state: CustomHomepagePresentationState;
   renderKey: string;
+  // The render identity is composed of independent dimensions. Only the document
+  // source or the engine-level pipeline (forced dark) needs a new ArkWeb
+  // generation; a plain appearance change repaints the mounted document.
+  sourceKey: string;
+  appearanceKey: string;
+  renderPipelineKey: string;
   renderKeyChanged: boolean;
 }
 
@@ -72,6 +78,59 @@ export class CustomHomepagePresentationViewModel {
     };
   }
 
+  /**
+   * Identity of the document itself: which homepage is selected and where its
+   * bytes come from. A change here means a different document has to be loaded,
+   * so it is the only dimension allowed to materialize a new ArkWeb generation.
+   */
+  buildSourceKey(settings: CustomHomepageSettings): string {
+    const selectedItem = this.resolveSelectedItem(settings);
+    const sourceIdentity = selectedItem?.identityKey.trim() || settings.selectedItemId.trim();
+    return [
+      settings.mode,
+      settings.selectedItemId,
+      sourceIdentity,
+      this.buildDocumentSourceKey(selectedItem),
+      this.resolveWebUrl(settings, selectedItem)
+    ].join('|');
+  }
+
+  /**
+   * Appearance painted onto that document: the resolved theme. None of it changes
+   * the document's bytes, so it must never cost a runtime rebuild.
+   */
+  buildAppearanceKey(
+    settings: CustomHomepageSettings,
+    resolvedThemeMode: BrowserResolvedThemeMode = 'light'
+  ): string {
+    void settings;
+    return resolvedThemeMode;
+  }
+
+  /**
+   * The dimensions ArkWeb applies at the engine level rather than in CSS: the
+   * forced-dark toggle and the Web node's own background. `darkMode` and
+   * `forceDarkAccess` cannot be changed by running script in the page, so a change
+   * here still has to rebuild the document instead of repainting it in place.
+   *
+   * For an imported local homepage this is constant (`shouldForceDarkWebContent`
+   * is only ever true for `remote_url`), which is precisely why the imported case
+   * gets the cheap path on a theme flip while a URL homepage keeps the correct
+   * forced-dark pipeline by rebuilding.
+   */
+  buildRenderPipelineKey(
+    settings: CustomHomepageSettings,
+    resolvedThemeMode: BrowserResolvedThemeMode = 'light'
+  ): string {
+    const selectedItem = this.resolveSelectedItem(settings);
+    return this.shouldApplyForcedDarkWebContent(settings, selectedItem, resolvedThemeMode) ?
+      'force-dark' :
+      'normal';
+  }
+
+  // The composed key keeps its historical field order on purpose: it is persisted
+  // inside the cold-start cover metadata, so changing its shape would invalidate
+  // every stored cover and put a flash back on the first launch after an update.
   buildRenderKey(settings: CustomHomepageSettings, resolvedThemeMode: BrowserResolvedThemeMode = 'light'): string {
     const selectedItem = this.resolveSelectedItem(settings);
     const sourceIdentity = selectedItem?.identityKey.trim() || settings.selectedItemId.trim();
@@ -117,17 +176,39 @@ export class CustomHomepagePresentationViewModel {
     return {
       state: state,
       renderKey: nextRenderKey,
+      sourceKey: this.buildSourceKey(input.settings),
+      appearanceKey: this.buildAppearanceKey(input.settings, input.resolvedThemeMode),
+      renderPipelineKey: this.buildRenderPipelineKey(input.settings, input.resolvedThemeMode),
       renderKeyChanged: renderKeyChanged
     };
   }
 
+  /**
+   * Appearance policy for the third-party home document.
+   *
+   * Two independent decisions live here and must not be conflated:
+   *
+   * 1. **Whether to invert the page** — `darkMode: On` + `forceDarkAccess: true`. Only
+   *    a URL-backed homepage ever asks for this (`shouldForceDarkWebContent` is false
+   *    for imported local packages).
+   * 2. **What colour scheme the document is told it is in** — this must follow the
+   *    system, always.
+   *
+   * The second one is what a dark-mode cold start actually depends on. `WebDarkMode.Off`
+   * is not neutral: it disables web dark mode for the node, overrides the system
+   * setting, and makes the document report `prefers-color-scheme: light` while the
+   * device is dark. An imported homepage whose dark theme sits behind that media query
+   * then paints its light theme on the first frame and flips once its own script runs —
+   * the flash. `WebDarkMode.Auto` is the value that means "do not invert, but keep the
+   * media query honest".
+   */
   buildWebAppearancePolicy(input: CustomHomepageWebAppearancePolicyInput): WebAppearancePolicy {
     const shouldForceDark = input.state.shouldForceDarkWebContent && input.resolvedThemeMode === 'dark';
     return resolveWebAppearancePolicy({
-      darkMode: shouldForceDark ? WebDarkMode.On : WebDarkMode.Off,
+      darkMode: shouldForceDark ? WebDarkMode.On : WebDarkMode.Auto,
       forceDarkAccess: shouldForceDark,
       backgroundColor: input.backgroundColor,
-      prefersDarkColorScheme: shouldForceDark
+      prefersDarkColorScheme: input.resolvedThemeMode === 'dark'
     });
   }
 

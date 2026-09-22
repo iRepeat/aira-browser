@@ -51,16 +51,6 @@ import {
 import {
   CustomHomepageHostedWebNodeController
 } from '../../core/customhome/CustomHomepageHostedWebNode';
-import {
-  CustomHomepageLaunchSnapshotCoordinator,
-  CustomHomepageLaunchSnapshotCaptureRequest
-} from '../../core/customhome/CustomHomepageLaunchSnapshotCoordinator';
-import {
-  CustomHomepageLaunchSnapshot
-} from '../../core/customhome/CustomHomepageLaunchSnapshotViewModel';
-import {
-  CustomHomepageLaunchSnapshotCaptureService
-} from '../../services/customhome/CustomHomepageLaunchSnapshotCaptureService';
 import { SearchEngineSelectionCoordinator } from '../../core/search/SearchEngineSelectionCoordinator';
 import {
   SITE_CUSTOMIZATION_REFRESH_REVISION_KEY,
@@ -2501,7 +2491,6 @@ struct BrowserShellPage {
     resolveFacts: (): BrowserHomePresentationSessionFacts => ({
       showHomePage: this.showHomePage,
       thirdPartyHomepageActive: this.customHomepageRuntimeState.presentation.kind === 'custom_web',
-      thirdPartyHomeCoverAvailable: this.customHomepageLaunchSnapshot !== undefined,
       showTabsSheet: this.showTabsSheet,
       homeSearchFocused: this.browserSearchSuggestionSnapshot.homeSearchFocused,
       rootBottomPanelDetent: this.rootBottomAddressPanelDetent,
@@ -4647,11 +4636,6 @@ struct BrowserShellPage {
     notifyDocumentCommitted: (): void => {
       this.browserHomePresentationSessionCoordinator.handleThirdPartyHomeDocumentCommitted();
     },
-    notifyContentChanged: (): void => {
-      // The homepage edited its own layout, so the persisted cover no longer
-      // matches what it looks like now.
-      this.customHomepageLaunchSnapshotCoordinator.requestContentChangeCapture();
-    },
     executeEffect: (effect: CustomHomepageRuntimeShellEffect): void => {
       this.executeCustomHomepageShellEffect(effect);
     }
@@ -4667,12 +4651,6 @@ struct BrowserShellPage {
       windowOpenApplicationCoordinator: this.browserWindowOpenApplicationCoordinator,
       webRuntimeBridge: this.webRuntimeBridge
     }, this.customHomepageRuntimeShellHost);
-  private customHomepageLaunchSnapshotCoordinator: CustomHomepageLaunchSnapshotCoordinator =
-    new CustomHomepageLaunchSnapshotCoordinator();
-  private customHomepageLaunchSnapshotCaptureService: CustomHomepageLaunchSnapshotCaptureService =
-    new CustomHomepageLaunchSnapshotCaptureService();
-  private customHomepageLaunchSnapshot?: CustomHomepageLaunchSnapshot = undefined;
-  private customHomepageLaunchSnapshotKey: string = '';
   private themePaletteService: BrowserThemePaletteService = new BrowserThemePaletteService();
   private homeWallpaperCoordinator: HomeWallpaperCoordinator =
     new HomeWallpaperCoordinator(sharedWallpaperRepository);
@@ -6375,10 +6353,6 @@ struct BrowserShellPage {
     this.browserAddressBarTabSwipeCoordinator.cancel();
     this.browserTabSwipePreviewCoordinator.suspend();
     this.browserWebBottomSafeAreaCoordinator.setVisible(false);
-    // Last reliable moment to persist the homepage frame before the process may
-    // be suspended or killed; the cover needs it for the next cold start. This
-    // path has no handoff to protect, so it may capture immediately.
-    this.customHomepageLaunchSnapshotCoordinator.requestImmediateCapture();
   }
 
   private checkClientUpdatePolicy(): Promise<void> {
@@ -8311,8 +8285,6 @@ struct BrowserShellPage {
       darkModeActive: this.resolveHomeWallpaperDarkModeActive(),
       themeBackgroundColor: this.resolveHomeRootBackgroundColor(),
       privateModeVisible: this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate(),
-      launchSnapshotUri: this.customHomepageLaunchSnapshot?.uri ?? '',
-      documentSettled: this.customHomepageRuntimeState.documentSettled,
       contentPresentation: this.buildHomeSurfaceContentPresentationState(),
       errorBottomInsetVp: this.browserTabHomeCoordinator.resolveCustomHomepageErrorBottomInset(
         this.buildHomeResponsiveLayoutState(),
@@ -8937,118 +8909,11 @@ struct BrowserShellPage {
       );
       this.browserTabHomeCoordinator.refreshBackdropAppearance('custom_homepage');
     }
-    this.syncCustomHomepageLaunchSnapshotState();
     if (state.activityState === 'active') {
       this.setCustomHomepageKeyboardOverlayMode();
       return;
     }
     this.restoreCustomHomepageKeyboardAvoidMode();
-  }
-
-  // Load the persisted cover frame for the current homepage identity. Called
-  // before the first presentation so the cold-start frame already has it, and
-  // again whenever the runtime publishes a new render identity.
-  // Reconcile the cover frame with the current homepage. Loads at most once per
-  // render identity; the store itself rejects a frame whose key or age no longer
-  // matches, so a replaced, re-imported, or theme-changed homepage never shows an
-  // old picture. Capture only runs while the committed homepage is on screen.
-  private syncCustomHomepageLaunchSnapshotState(): void {
-    const state = this.customHomepageRuntimeState;
-    const enabled = state.presentation.kind === 'custom_web' &&
-      !this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate();
-    if (!enabled) {
-      this.customHomepageLaunchSnapshot = undefined;
-      this.customHomepageLaunchSnapshotKey = '';
-      this.customHomepageLaunchSnapshotCoordinator.stopAutoCapture();
-      return;
-    }
-    let loadedFreshIdentity = false;
-    if (this.customHomepageLaunchSnapshotKey !== state.renderKey) {
-      this.customHomepageLaunchSnapshotKey = state.renderKey;
-      this.customHomepageLaunchSnapshot = this.customHomepageLaunchSnapshotCoordinator.load(
-        state.renderKey,
-        this.rootViewportWidth,
-        this.rootViewportHeight
-      );
-      loadedFreshIdentity = true;
-    }
-    // Establish the capture source before requesting a capture — `requestCapture`
-    // is a no-op until `startAutoCapture` has supplied one.
-    this.syncCustomHomepageLaunchSnapshotCapture();
-    // A new identity (theme switch, or a different/updated homepage) has its own
-    // cover slot. If that slot is empty, capture it as soon as the new document has
-    // settled rather than waiting for the periodic pass, so switching themes does
-    // not leave the next cold start in that theme uncovered.
-    if (loadedFreshIdentity && this.customHomepageLaunchSnapshot === undefined) {
-      this.customHomepageLaunchSnapshotCoordinator.requestCapture();
-    }
-  }
-
-  private syncCustomHomepageLaunchSnapshotCapture(): void {
-    if (this.customHomepageLaunchSnapshotCaptureActive()) {
-      this.customHomepageLaunchSnapshotCoordinator.startAutoCapture({
-        resolveRequest: (): CustomHomepageLaunchSnapshotCaptureRequest | undefined =>
-          this.buildCustomHomepageLaunchSnapshotCaptureRequest(),
-        capture: () => this.captureCustomHomepageLaunchSnapshot()
-      });
-      return;
-    }
-    this.customHomepageLaunchSnapshotCoordinator.stopAutoCapture();
-  }
-
-  private customHomepageLaunchSnapshotCaptureActive(): boolean {
-    const state = this.customHomepageRuntimeState;
-    return state.presentation.kind === 'custom_web' &&
-      state.documentCommitted &&
-      state.activityState === 'active' &&
-      this.showHomePage &&
-      !this.showTabsSheet &&
-      !this.tabScopedEventContextCoordinator.isCurrentBoundaryPrivate();
-  }
-
-  private buildCustomHomepageLaunchSnapshotCaptureRequest():
-    CustomHomepageLaunchSnapshotCaptureRequest | undefined {
-    const state = this.customHomepageRuntimeState;
-    if (!this.customHomepageLaunchSnapshotCaptureActive() || state.renderKey.trim().length <= 0) {
-      return undefined;
-    }
-    return {
-      renderKey: state.renderKey,
-      themeMode: state.themeMode
-    };
-  }
-
-  private async captureCustomHomepageLaunchSnapshot(): Promise<image.PixelMap | undefined> {
-    const controller = this.customHomepageRuntimeCoordinator.getCommittedWebController();
-    // Must be the Web node's own id, not the wrapper Stack's — `webPageSnapshot`
-    // fails with 17100001 on the container id, which left the cover permanently
-    // stale and flashed at handoff.
-    const snapshotId = this.customHomepageRuntimeCoordinator.getCommittedWebComponentSnapshotId();
-    if (controller === undefined || snapshotId.length <= 0) {
-      return undefined;
-    }
-    // Capture at the document's own measured viewport, not the shell's: the cover pipeline re-lays
-    // the page out at whatever size it is handed, so a height the document never had came back as
-    // a stretched cover. The shell viewport is only a fallback for the moment before the Web node
-    // has reported its first layout.
-    const documentViewport = this.customHomepageRuntimeCoordinator.getCommittedWebViewportSize();
-    return await this.customHomepageLaunchSnapshotCaptureService.capture(
-      controller,
-      snapshotId,
-      {
-        viewportWidth: documentViewport.width > 1 ? documentViewport.width : this.rootViewportWidth,
-        viewportHeight: documentViewport.height > 1 ? documentViewport.height : this.rootViewportHeight,
-        aspectRatio: this.resolveCustomHomepageLaunchSnapshotAspectRatio()
-      }
-    );
-  }
-
-  // The surface the cover is drawn on is the shell itself, so the frame is normalized to its shape.
-  private resolveCustomHomepageLaunchSnapshotAspectRatio(): number {
-    if (this.rootViewportWidth <= 1 || this.rootViewportHeight <= 1) {
-      return 0;
-    }
-    return this.rootViewportWidth / this.rootViewportHeight;
   }
 
   private executeCustomHomepageShellEffect(effect: CustomHomepageRuntimeShellEffect): void {
@@ -10608,8 +10473,6 @@ struct BrowserShellPage {
     this.browserTabHomeCoordinator.refreshAppearance();
     if (!wasShowingHomePage && state.showHomePage) {
       this.browserHomePresentationSessionCoordinator.handleHomeBecameVisible();
-      // Returning home may reveal content the homepage changed while hidden.
-      this.customHomepageLaunchSnapshotCoordinator.requestCapture();
     }
     const shouldForceErrorSurface = this.browserWebLoadFailureSurfaceCoordinator.shouldShow(this.activeTabId);
     this.showPageErrorSurface = state.showPageErrorSurface &&

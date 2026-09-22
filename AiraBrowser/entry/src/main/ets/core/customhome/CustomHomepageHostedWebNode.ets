@@ -1,4 +1,5 @@
 import { BuilderNode, FrameNode, NodeController, UIContext } from '@kit.ArkUI';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BrowserWebAttributeModifier } from '../web/WebDefaultContextMenuModifier';
@@ -8,6 +9,73 @@ const CUSTOM_HOME_HOSTED_WEB_LOG_DOMAIN: number = 0x0000;
 const CUSTOM_HOME_HOSTED_WEB_LOG_TAG: string = 'CustomHomeHostedWeb';
 const CUSTOM_HOME_HOSTED_WEB_IDEAL_WIDTH: number = 390;
 const CUSTOM_HOME_HOSTED_WEB_IDEAL_HEIGHT: number = 844;
+// `onFirstScreenPaint` reports the document's own first-screen paint, which is worth
+// recording but not worth gating on: on the measured cold start the report arrived
+// ~2.8 s after the cover had already lifted. It needs API 23, so it is attached
+// through an attribute lookup and skipped on devices whose ArkWeb is older.
+const CUSTOM_HOME_FIRST_SCREEN_PAINT_MIN_API_VERSION: number = 23;
+
+interface CustomHomepageFirstScreenPaintAttribute {
+  onFirstScreenPaint?: (callback: (event: FirstScreenPaint) => void) => WebAttribute;
+}
+
+interface CustomHomepageWebAttributeModifierOptions {
+  forceEnableWebZoom: boolean;
+  onFirstScreenPaint: (firstScreenPaintMs: number) => void;
+}
+
+/**
+ * Carries the one Web attribute the shared modifier cannot: `onFirstScreenPaint`
+ * is newer than the shared modifier's API gate, and it is also the attribute
+ * that replaced the cross-process reveal probe, so it has to be attached to both
+ * the light and the force-dark document the same way.
+ */
+class CustomHomepageWebAttributeModifier implements AttributeModifier<WebAttribute> {
+  private readonly base: BrowserWebAttributeModifier;
+  private readonly onFirstScreenPaint: (firstScreenPaintMs: number) => void;
+  private firstScreenPaintAttribute: WebAttribute | undefined = undefined;
+
+  constructor(options: CustomHomepageWebAttributeModifierOptions) {
+    this.base = new BrowserWebAttributeModifier({
+      forceEnableWebZoom: options.forceEnableWebZoom,
+      enableDefaultContextMenu: false
+    });
+    this.onFirstScreenPaint = options.onFirstScreenPaint;
+  }
+
+  applyNormalAttribute(instance: WebAttribute): void {
+    this.base.applyNormalAttribute(instance);
+    this.attachFirstScreenPaint(instance);
+  }
+
+  private attachFirstScreenPaint(instance: WebAttribute): void {
+    // Guarded by the `WebAttribute` instance, not by "this modifier was used
+    // before". A rebuild can hand this modifier a fresh attribute object, and a
+    // flag keyed to the modifier would then silently skip the new one — losing the
+    // reveal signal while the probe fallback hid the loss.
+    if (this.firstScreenPaintAttribute === instance ||
+      deviceInfo.sdkApiVersion < CUSTOM_HOME_FIRST_SCREEN_PAINT_MIN_API_VERSION) {
+      return;
+    }
+    const attribute = instance as object as CustomHomepageFirstScreenPaintAttribute;
+    if (attribute.onFirstScreenPaint === undefined) {
+      return;
+    }
+    try {
+      attribute.onFirstScreenPaint((event: FirstScreenPaint): void => {
+        const navigationStartMs = Number(event.navigationStartTime);
+        const firstScreenPaintTimeMs = Number(event.firstScreenPaintTime);
+        this.onFirstScreenPaint(
+          Number.isFinite(navigationStartMs) && Number.isFinite(firstScreenPaintTimeMs) ?
+            Math.max(0, firstScreenPaintTimeMs - navigationStartMs) :
+            0
+        );
+      });
+      this.firstScreenPaintAttribute = instance;
+    } catch (_error) {
+    }
+  }
+}
 const CUSTOM_HOMEPAGE_EMPTY_EDIT_MENU_OPTIONS: EditMenuOptions = {
   onCreateMenu: (_menuItems: Array<TextMenuItem>): Array<TextMenuItem> => [],
   onMenuItemClick: (_menuItem: TextMenuItem, _range: TextRange): boolean => true
@@ -15,12 +83,16 @@ const CUSTOM_HOMEPAGE_EMPTY_EDIT_MENU_OPTIONS: EditMenuOptions = {
 
 type CustomHomepageHostedWebDocumentSignalKind =
   'first_meaningful_paint' |
+  'first_screen_paint' |
   'page_end' |
   'load_finished';
 
 export interface CustomHomepageHostedWebDocumentSignal {
   kind: CustomHomepageHostedWebDocumentSignalKind;
   generation: number;
+  // Document-relative first-screen paint timing, in ms, when the platform
+  // reported it. `0` means "not measured", never "instant".
+  firstScreenPaintMs: number;
 }
 
 interface CustomHomepageHostedWebCallbacks {
@@ -30,12 +102,8 @@ interface CustomHomepageHostedWebCallbacks {
   onPageBegin: (event: OnPageBeginEvent, generation: number) => void;
   onPageEnd: (event: OnPageEndEvent, signal: CustomHomepageHostedWebDocumentSignal) => void;
   onFirstMeaningfulPaint: (signal: CustomHomepageHostedWebDocumentSignal) => void;
+  onFirstScreenPaint: (signal: CustomHomepageHostedWebDocumentSignal) => void;
   onScroll: (event: OnScrollEvent, generation: number) => void;
-  // The document's own measured viewport, in vp. The cold-start cover has to be captured at
-  // this size rather than at the shell viewport: `webPageSnapshot` and the surface region both
-  // re-lay the page out at the size they are given, so a size the document never had produces a
-  // frame that no longer matches what the user sees.
-  onViewportMeasured: (width: number, height: number, generation: number) => void;
   onLoadFinished: (signal: CustomHomepageHostedWebDocumentSignal) => void;
   onWindowNew: (event: OnWindowNewEvent, generation: number) => void;
   onErrorReceive: (event: OnErrorReceiveEvent, generation: number) => void;
@@ -53,6 +121,7 @@ export interface CustomHomepageHostedWebConfig {
 
 interface CustomHomepageHostedWebResolvedConfig extends CustomHomepageHostedWebConfig {
   controller: webview.WebviewController;
+  attributeModifier: AttributeModifier<WebAttribute>;
   interactionAllowed: () => boolean;
 }
 
@@ -71,19 +140,14 @@ function logRejectedCustomHomepageInteraction(kind: string): void {
 
 function buildCustomHomepageDocumentSignal(
   config: CustomHomepageHostedWebConfig,
-  kind: CustomHomepageHostedWebDocumentSignalKind
+  kind: CustomHomepageHostedWebDocumentSignalKind,
+  firstScreenPaintMs: number = 0
 ): CustomHomepageHostedWebDocumentSignal {
   return {
     kind: kind,
-    generation: Math.max(0, Math.floor(config.documentGeneration))
+    generation: Math.max(0, Math.floor(config.documentGeneration)),
+    firstScreenPaintMs: Number.isFinite(firstScreenPaintMs) ? Math.max(0, Math.floor(firstScreenPaintMs)) : 0
   };
-}
-
-// `Area` dimensions arrive as `Length`; the Web node is always laid out at a plain number of vp.
-function resolveCustomHomepageAreaVp(value: Length): number {
-  const rawValue = `${value}`.replace('vp', '').replace('px', '');
-  const parsedValue = Number(rawValue);
-  return Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
 }
 
 function rejectCustomHomepageWindowNew(event: OnWindowNewEvent): void {
@@ -137,6 +201,14 @@ function resolveCustomHomepageHostedWebConfig(
 ): CustomHomepageHostedWebResolvedConfig {
   return {
     controller: controller,
+    attributeModifier: new CustomHomepageWebAttributeModifier({
+      forceEnableWebZoom: config.forceEnableWebZoom,
+      onFirstScreenPaint: (firstScreenPaintMs: number): void => {
+        config.callbacks.onFirstScreenPaint(
+          buildCustomHomepageDocumentSignal(config, 'first_screen_paint', firstScreenPaintMs)
+        );
+      }
+    }),
     documentGeneration: config.documentGeneration,
     componentSnapshotId: config.componentSnapshotId,
     appearancePolicy: config.appearancePolicy,
@@ -154,8 +226,8 @@ function resolveCustomHomepageHostedWebConfig(
       onPageBegin: config.callbacks.onPageBegin,
       onPageEnd: config.callbacks.onPageEnd,
       onFirstMeaningfulPaint: config.callbacks.onFirstMeaningfulPaint,
+      onFirstScreenPaint: config.callbacks.onFirstScreenPaint,
       onScroll: config.callbacks.onScroll,
-      onViewportMeasured: config.callbacks.onViewportMeasured,
       onLoadFinished: config.callbacks.onLoadFinished,
       onWindowNew: config.callbacks.onWindowNew,
       onErrorReceive: config.callbacks.onErrorReceive
@@ -165,12 +237,11 @@ function resolveCustomHomepageHostedWebConfig(
 
 @Builder
 function CustomHomepageHostedWebBuilder(config: CustomHomepageHostedWebResolvedConfig) {
-  Stack({ alignContent: Alignment.Top }) {
-    Web({
-      src: '',
-      controller: config.controller,
-      incognitoMode: false
-    })
+  Web({
+    src: '',
+    controller: config.controller,
+    incognitoMode: false
+  })
       .id(config.componentSnapshotId)
       .width('100%')
       .height('100%')
@@ -183,10 +254,7 @@ function CustomHomepageHostedWebBuilder(config: CustomHomepageHostedWebResolvedC
       .domStorageAccess(true)
       .databaseAccess(true)
       .zoomAccess(true)
-      .attributeModifier(new BrowserWebAttributeModifier({
-        forceEnableWebZoom: config.forceEnableWebZoom,
-        enableDefaultContextMenu: false
-      }))
+      .attributeModifier(config.attributeModifier)
       .editMenuOptions(CUSTOM_HOMEPAGE_EMPTY_EDIT_MENU_OPTIONS)
       .imageAccess(true)
       .onlineImageAccess(true)
@@ -256,17 +324,6 @@ function CustomHomepageHostedWebBuilder(config: CustomHomepageHostedWebResolvedC
       .onErrorReceive((event: OnErrorReceiveEvent): void => {
         config.callbacks.onErrorReceive(event, config.documentGeneration);
       })
-      .onAreaChange((_oldArea: Area, newArea: Area): void => {
-        config.callbacks.onViewportMeasured(
-          resolveCustomHomepageAreaVp(newArea.width),
-          resolveCustomHomepageAreaVp(newArea.height),
-          config.documentGeneration
-        );
-      })
-  }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(config.appearancePolicy.backgroundColor)
 }
 
 export class CustomHomepageHostedWebNodeController extends NodeController {
