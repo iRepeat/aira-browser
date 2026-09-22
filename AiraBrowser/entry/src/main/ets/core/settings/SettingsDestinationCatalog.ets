@@ -165,7 +165,7 @@ const ACCOUNT_TARGETS: SettingsDestinationCatalogTarget[] = [
     true,
     'desktop_embedded'
   ),
-  target('sync', 'sync', 'sync', '同步',
+  target('sync', 'sync', 'sync', '数据同步',
     AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity() ? '同步与备份' : '账号与同步', 'root', '', '',
     ['WebDAV', '华为云'], ['书签同步', '同步方式', '远端', '恢复同步']),
   // Phone and touch two-pane keep the routed page, but the PC shell embeds it as a

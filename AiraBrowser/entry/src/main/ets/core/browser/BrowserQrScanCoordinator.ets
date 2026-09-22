@@ -33,6 +33,12 @@ export interface BrowserQrScanShell {
   showToast: (message: string) => void;
   openNavigation: (target: BrowserQrScanNavigationTarget, value: string) => void;
   setSurfaceVisible: (surface: BrowserQrScanSurface, visible: boolean) => void;
+  /**
+   * Optional in-place Huawei login. Returning true means the shell kept the staged
+   * desktop-login payload and will resume it after sign-in, so the coordinator must not
+   * navigate away or toast over that sheet.
+   */
+  requestAccountSignIn?: () => boolean;
 }
 
 export const DEFAULT_BROWSER_QR_SCAN_SESSION_SNAPSHOT: BrowserQrScanSessionSnapshot = {
@@ -108,10 +114,9 @@ export class BrowserQrScanCoordinator {
         if (!this.isCurrentDesktopLoginGeneration(generation)) {
           return;
         }
-        this.clearDesktopLoginSession();
+        this.setDesktopLoginConfirming(false);
         this.shell.setSurfaceVisible('desktop_login_confirm', false);
-        this.shell.showToast('请先登录华为账号');
-        this.shell.openNavigation('account_settings', '');
+        this.requestAccountSignInOrLeave();
         return;
       }
       const result = await this.desktopLoginService.confirm(
@@ -214,13 +219,29 @@ export class BrowserQrScanCoordinator {
     this.shell.openNavigation('scanned_url', result.value);
   }
 
-  private applyDesktopLoginPayload(value: string): void {
+  /**
+   * After an in-place sign-in, show the confirm sheet for the payload staged by the scan.
+   * Returns false when there is nothing left to confirm.
+   */
+  resumeDesktopLoginAfterSignIn(): boolean {
+    if (this.pendingDesktopLoginSessionId.trim().length <= 0 ||
+      this.pendingDesktopLoginSecret.trim().length <= 0) {
+      return false;
+    }
     const account = this.syncConfigStore.getSettings().huaweiCloud;
     if (account.uid.trim().length <= 0) {
-      this.shell.showToast('请先登录华为账号');
-      this.shell.openNavigation('account_settings', '');
-      return;
+      return false;
     }
+    this.presentStagedDesktopLogin(account.uid, account.displayName, account.photoUrl);
+    return true;
+  }
+
+  /** Drop a staged handshake when the user dismisses the login sheet without signing in. */
+  cancelPendingDesktopLogin(): void {
+    this.clearDesktopLoginSession();
+  }
+
+  private applyDesktopLoginPayload(value: string): void {
     let payload: DesktopLoginQrPayload;
     try {
       payload = this.desktopLoginQrScanService.parsePayload(value);
@@ -234,16 +255,33 @@ export class BrowserQrScanCoordinator {
     this.desktopLoginGeneration += 1;
     this.pendingDesktopLoginSessionId = payload.sessionId;
     this.pendingDesktopLoginSecret = payload.secret;
+    const account = this.syncConfigStore.getSettings().huaweiCloud;
+    if (account.uid.trim().length <= 0) {
+      this.requestAccountSignInOrLeave();
+      return;
+    }
+    this.presentStagedDesktopLogin(account.uid, account.displayName, account.photoUrl);
+  }
+
+  private presentStagedDesktopLogin(uid: string, displayName: string, avatarUri: string): void {
     this.desktopLoginSurfaceVisible = true;
     this.snapshot = {
       desktopLoginConfirming: false,
-      desktopLoginUid: account.uid,
-      desktopLoginDisplayName: account.displayName,
-      desktopLoginAvatarUri: account.photoUrl,
+      desktopLoginUid: uid,
+      desktopLoginDisplayName: displayName,
+      desktopLoginAvatarUri: avatarUri,
       wifiCredentials: undefined
     };
     this.publishSnapshot();
     this.shell.setSurfaceVisible('desktop_login_confirm', true);
+  }
+
+  private requestAccountSignInOrLeave(): void {
+    if (this.shell.requestAccountSignIn?.() === true) {
+      return;
+    }
+    this.shell.showToast('请先登录华为账号');
+    this.shell.openNavigation('account_settings', '');
   }
 
   private applyWifiPayload(value: string): void {

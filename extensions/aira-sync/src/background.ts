@@ -21,6 +21,7 @@ import {
 import {
   AIRA_DESKTOP_CONNECTION_STORAGE_KEY,
   postAiraDesktopJson,
+  readAiraDesktopAuthorizedSession,
   recordAiraDesktopConnectionFailure,
 } from '@/features/desktop-connection/desktopConnectionRuntime';
 import {
@@ -41,6 +42,7 @@ import {
 } from '@/features/personal-server/PersonalServerConnection';
 import { LEAFTAB_SELECTED_SYNC_SOURCE_KEY } from '@/features/sync/app/leafTabSyncStorageKeys';
 import { parseLeafTabSyncRemoteKind } from '@/sync/leaftab/source';
+import { resolveCrossDeviceTransportKind } from '@/features/device-tabs/crossDeviceTransport';
 
 const WEBDAV_PROXY_MESSAGE_TYPE = 'LEAFTAB_WEBDAV_PROXY';
 const AIRA_OPEN_HISTORY_COMMAND = 'open-aira-history';
@@ -294,10 +296,16 @@ async function resolvePhonePagePushPollContext(): Promise<PhonePagePushPollConte
     readPersonalServerConnection(),
   ]);
   const selectedSource = parseLeafTabSyncRemoteKind(selectedRecord[LEAFTAB_SELECTED_SYNC_SOURCE_KEY]);
-  if (selectedSource === 'personal-server' && personalServer?.capabilities.pagePush) {
+  const session = await readAiraDesktopAuthorizedSession();
+  const transport = resolveCrossDeviceTransportKind({
+    selectedSyncSource: selectedSource,
+    personalServerReady: Boolean(personalServer?.capabilities.pagePush),
+    accountSignedIn: Boolean(session?.uid && session.deviceCredential),
+  });
+  if (transport === 'personal-server' && personalServer) {
     return { kind: 'personal-server', connection: personalServer };
   }
-  if (selectedSource !== 'aira-cloud') return null;
+  if (transport !== 'account') return null;
 
   const profile = await readAiraDesktopConnectionProfile();
   if (!profile?.uid || !profile.deviceCredential) {

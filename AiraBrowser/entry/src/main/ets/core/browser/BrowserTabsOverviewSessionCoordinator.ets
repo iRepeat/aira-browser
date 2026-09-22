@@ -25,6 +25,7 @@ import { BrowserTabHomeCoordinator } from './BrowserTabHomeCoordinator';
 import { BrowserTabSwitchCoordinator } from './BrowserTabSwitchCoordinator';
 import {
   BrowserPrivateModeTogglePlan,
+  BrowserPrivateModeToggleSection,
   BrowserPrivateTabCoordinator
 } from './BrowserPrivateTabCoordinator';
 import {
@@ -86,7 +87,7 @@ import { BrowserHostedRuntimeSurfacePort } from '../../services/web/BrowserHoste
 import { BrowserWebTopImmersionSessionCoordinator } from './BrowserWebTopImmersionSessionCoordinator';
 import { BrowserBackgroundOpenPromptCoordinator } from './BrowserBackgroundOpenPromptCoordinator';
 
-export type BrowserTabsOverviewSessionSection = 'tabs' | 'privacy';
+export type BrowserTabsOverviewSessionSection = 'tabs' | 'privacy' | 'devices';
 export type BrowserTabsOverviewSessionPlanKind = 'ignore' | 'open_now' | 'collapse_then_open';
 
 export interface BrowserTabsOverviewSessionOpenRequestInput {
@@ -2721,6 +2722,12 @@ export class BrowserTabsOverviewSessionCoordinator {
       return;
     }
     this.updatePresentationState({ activeSection: normalizedSection }, host);
+    // Only the two tab-collection sections carry a browse boundary. The cross-device page
+    // has no local session to switch, so entering it must not move the active tab's profile
+    // or announce a mode change.
+    if (normalizedSection === 'devices') {
+      return;
+    }
     host.executeEffect({
       type: 'apply_section_change',
       options: normalizedSection === 'privacy' ? this.buildPrivateOptions() : this.buildRegularOptions(),
@@ -2738,9 +2745,20 @@ export class BrowserTabsOverviewSessionCoordinator {
     }
     const plan = this.privateTabCoordinator.buildPrivateModeTogglePlan({
       surface: 'tabs_overview_mode_button',
-      requestedTabsOverviewSection: this.normalizeSection(section)
+      requestedTabsOverviewSection: this.resolvePrivateModeToggleSection(section)
     });
     host.executeEffect({ type: 'confirm_private_mode_switch', plan: plan });
+  }
+
+  /**
+   * The private-mode toggle only understands the two tab collections. The cross-device
+   * section has no browse boundary of its own, so it can only be resolved as a request to
+   * be in ordinary mode — which is what it effectively is.
+   */
+  private resolvePrivateModeToggleSection(
+    section: BrowserTabsOverviewSessionSection
+  ): BrowserPrivateModeToggleSection {
+    return section === 'privacy' ? 'privacy' : 'tabs';
   }
 
   private requestCloseAllTabs(
@@ -3160,7 +3178,10 @@ export class BrowserTabsOverviewSessionCoordinator {
   }
 
   private normalizeSection(section: BrowserTabsOverviewSessionSection): BrowserTabsOverviewSessionSection {
-    return section === 'privacy' ? 'privacy' : 'tabs';
+    if (section === 'privacy') {
+      return 'privacy';
+    }
+    return section === 'devices' ? 'devices' : 'tabs';
   }
 
   private buildPlan(

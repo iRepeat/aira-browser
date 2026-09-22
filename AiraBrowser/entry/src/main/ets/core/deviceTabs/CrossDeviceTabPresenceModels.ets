@@ -1,3 +1,5 @@
+import { CrossDeviceTabsEmptyPresentation } from './CrossDeviceTabsEmptyPresentation';
+
 export interface CrossDeviceTabPresenceTab {
   title: string;
   url: string;
@@ -46,14 +48,8 @@ export interface CrossDeviceTabPresencePanelState {
   message: string;
   serverTime: number;
   onlineWindowMs: number;
-}
-
-export interface CrossDeviceTabPresencePanelAccessDecision {
-  allowed: boolean;
-  title: string;
-  message: string;
-  openPro: boolean;
-  openSyncSettings?: boolean;
+  /** In-place empty page for the cross-device tab. `none` means the device list is the content. */
+  empty: CrossDeviceTabsEmptyPresentation;
 }
 
 export interface CrossDeviceTabPresenceListResult {

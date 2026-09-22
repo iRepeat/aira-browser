@@ -40,6 +40,8 @@ UA_RUNTIME_SERVICE="${SOURCE_ROOT}/services/web/BrowserUserAgentRuntimeService.e
 UA_IDENTITY_DECISION_SERVICE="${SOURCE_ROOT}/services/web/BrowserBrowsingIdentityDecisionService.ets"
 WEB_LOAD_RUNTIME="${SOURCE_ROOT}/services/web/BrowserWebLoadRuntimeCoordinator.ets"
 HTTPS_FIRST_NAVIGATION_SERVICE="${SOURCE_ROOT}/services/web/BrowserHttpsFirstNavigationService.ets"
+WEB_NAVIGATION_INTERCEPTION_COORDINATOR="${SOURCE_ROOT}/core/browser/BrowserWebNavigationInterceptionCoordinator.ets"
+WEB_NAVIGATION_GUARD_SERVICE="${SOURCE_ROOT}/services/web/BrowserWebNavigationGuardService.ets"
 RUNTIME_LIFECYCLE_PORT="${SOURCE_ROOT}/services/web/BrowserRuntimeLifecyclePort.ets"
 UA_POLICY_SERVICE="${SOURCE_ROOT}/services/web/BrowserUserAgentService.ets"
 UA_HOST_POLICY_SERVICE="${SOURCE_ROOT}/services/web/BrowserUserAgentHostPolicyService.ets"
@@ -569,6 +571,41 @@ require_order_after "${WEB_LOAD_RUNTIME}" \
 require_literal "${UA_RUNTIME_SERVICE}" \
   'this.activeNavigationPlanByTabId[tabId] !== undefined' \
   'must distinguish an active navigation transaction from a stable committed Controller binding.'
+# Opening an http:// link raises HTTPS First, which rewrites the main-frame navigation from inside
+# `onLoadIntercept`. That callback used to issue the replacement `loadUrl()` synchronously, and the identity
+# preparation that load performs called `setCustomUserAgent()` while ArkWeb was still deciding the navigation it
+# replaced: the engine walks the frame tree, asks the navigation controller to reload, and its pending-entry
+# reentrancy guard aborts the process with SIGTRAP. Both halves of that are now held apart from the callback.
+require_literal "${WEB_NAVIGATION_GUARD_SERVICE}" \
+  'isTabNavigationInProgress(tabId: string): boolean' \
+  'must expose the in-navigation scope the Web callbacks and the identity owner share.'
+require_literal "${UA_RUNTIME_SERVICE}" \
+  'if (this.navigationGuard.isTabNavigationInProgress(tabId)) {' \
+  'must refuse a Controller identity mutation while a navigation callback is running.'
+require_order "${UA_RUNTIME_SERVICE}" \
+  'this.navigationGuard.isTabNavigationInProgress(tabId)' \
+  'this.platformAdapter.applyCustomUserAgent(controller, targetUserAgent);' \
+  'must check the in-navigation scope before it reaches the ArkWeb UA setter.'
+require_order_after "${UA_RUNTIME_SERVICE}" \
+  'private applyToController(' \
+  'this.navigationGuard.isTabNavigationInProgress(tabId)' \
+  'this.platformAdapter.applyClientHints(controller, resolution);' \
+  'must keep Client Hints Controller mutations out of a running navigation callback too.'
+require_literal "${WEB_EVENT_HOST_COORDINATOR}" \
+  'this.navigationGuard.openTabNavigationScope(tabId)' \
+  'must open the in-navigation scope around the ArkWeb navigation callbacks.'
+require_literal "${WEB_EVENT_HOST_COORDINATOR}" \
+  'this.runNavigationBoolean('\''load_intercept'\''' \
+  'must run the load-intercept callback inside the in-navigation scope.'
+require_literal "${WEB_EVENT_HOST_COORDINATOR}" \
+  'this.runNavigationBoolean('\''override_url_loading'\''' \
+  'must run the override-url-loading callback inside the in-navigation scope.'
+require_literal "${WEB_NAVIGATION_INTERCEPTION_COORDINATOR}" \
+  'this.scheduleSameWebNavigationRewrite(tabId, url);' \
+  'must defer the replacement navigation instead of issuing it from inside the callback.'
+forbid_regex "${WEB_NAVIGATION_INTERCEPTION_COORDINATOR}" \
+  'return this\.webLoadRuntimeCoordinator\.loadUrlForTab\(' \
+  'must never issue the rewrite load synchronously from a navigation callback.'
 require_order "${UA_RUNTIME_POLICY_COORDINATOR}" \
   'userAgentRuntimeService.hasEffectiveIdentityChange(' \
   'runtimeTransitionCoordinator.transitionToNative(' \

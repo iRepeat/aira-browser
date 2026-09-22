@@ -3,9 +3,13 @@ import {
   BrowserSearchBackdropPresentationChannel,
   BrowserSearchBackdropPresentationListener
 } from '../../../core/browser/BrowserSearchBackdropPresentationChannel';
+import { BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY } from '../../../core/theme/BrowserThemeStorageKeys';
+import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 
 @Component
 export struct BrowserRootBottomPanelExpandedScrim {
+  @StorageProp(BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY)
+  private storedPageBackgroundColor: string = DEFAULT_THEME_PALETTE.light.pageBackground;
   @State private liveScrimOpacity: number = 0;
   @State private surfaceSuppressed: boolean = false;
   private activePresentationRunId: number = 0;
@@ -18,6 +22,7 @@ export struct BrowserRootBottomPanelExpandedScrim {
   @Prop blockHitTest: boolean = false;
   @Prop surfaceEligible: boolean = true;
   @Prop settledVisible: boolean = false;
+  @Prop pageBackgroundVisible: boolean = false;
   presentationChannel?: BrowserSearchBackdropPresentationChannel = undefined;
   onDismiss: () => void = () => {};
 
@@ -36,14 +41,15 @@ export struct BrowserRootBottomPanelExpandedScrim {
 
   build() {
     Stack() {
-      if (this.shouldMountScrimSurface()) {
+      if (this.shouldPaintExpandedPageBackground()) {
+        // Full-screen page background for the committed search interface. It does not follow drag
+        // progress: a partial page colour behind a capsule that is still moving reads as a veil.
+        // Suggestion rows stay transparent and sit on this surface, so the background is the
+        // screen, not a plate behind the history block.
         Stack()
           .width('100%')
           .height('100%')
-          // Keep the expanded backdrop interactive without painting a light veil over the page
-          // while the middle address capsule follows an upward drag.
-          .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
-          .opacity(this.resolveEffectiveScrimOpacity())
+          .backgroundColor(this.storedPageBackgroundColor)
           .hitTestBehavior(HitTestMode.None)
       }
     }
@@ -84,6 +90,10 @@ export struct BrowserRootBottomPanelExpandedScrim {
   private shouldMountScrimSurface(): boolean {
     return !this.surfaceSuppressed && this.surfaceEligible &&
       (this.settledVisible || this.resolveEffectiveScrimOpacity() > 0.01);
+  }
+
+  private shouldPaintExpandedPageBackground(): boolean {
+    return !this.surfaceSuppressed && this.surfaceEligible && this.pageBackgroundVisible;
   }
 
   private shouldBlockHitTest(): boolean {

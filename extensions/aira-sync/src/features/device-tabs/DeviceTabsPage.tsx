@@ -6,23 +6,33 @@ import {
   RefreshCw,
   Smartphone,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { RiArrowLeftSLine } from '@/icons/ri-compat';
 import type { CrossDeviceTabDevice } from './deviceTabsModels';
+import {
+  buildDeviceTabsEntryCopy,
+  type DeviceTabsEntryAction,
+  type DeviceTabsEntryKind,
+} from './deviceTabsEntryPresentation';
 
 export function DeviceTabsPage({
+  entry,
   enabled,
   devices,
   loading,
   error,
   onRefresh,
   onBack,
+  onAction,
 }: {
+  entry: DeviceTabsEntryKind;
   enabled: boolean;
   devices: CrossDeviceTabDevice[];
   loading: boolean;
   error: unknown | null;
   onRefresh: () => Promise<void>;
   onBack: () => void;
+  onAction: (action: DeviceTabsEntryAction) => void;
 }) {
   const { t } = useTranslation();
   const errorMessage = error
@@ -50,7 +60,7 @@ export function DeviceTabsPage({
           type="button"
           className="flex h-9 w-9 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
           onClick={() => void onRefresh()}
-          disabled={!enabled || loading}
+          disabled={entry !== 'ready' || !enabled || loading}
           aria-label={t('deviceTabs.actions.refresh', { defaultValue: '刷新' })}
           title={t('deviceTabs.actions.refresh', { defaultValue: '刷新' })}
         >
@@ -59,7 +69,9 @@ export function DeviceTabsPage({
       </header>
 
       <div className="space-y-4 px-3 py-3">
-        {!enabled ? (
+        {entry !== 'ready' ? (
+          <EntryGate entry={entry} onAction={onAction} />
+        ) : !enabled ? (
           <EmptyState
             icon={<Laptop className="size-5" />}
             title={t('deviceTabs.states.disabled', { defaultValue: '跨设备标签页尚未开启' })}
@@ -149,6 +161,48 @@ function WebsiteIcon({ url }: { url: string }) {
         <Globe2 className="size-4" aria-hidden="true" />
       )}
     </span>
+  );
+}
+
+function EntryGate({
+  entry,
+  onAction,
+}: {
+  entry: Exclude<DeviceTabsEntryKind, 'ready'>;
+  onAction: (action: DeviceTabsEntryAction) => void;
+}) {
+  const { t } = useTranslation();
+  const copy = buildDeviceTabsEntryCopy(entry);
+  return (
+    <div className="flex min-h-64 flex-col items-center justify-center gap-3 px-6 text-center">
+      <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-muted text-muted-foreground">
+        <Smartphone className="size-5" />
+      </span>
+      <p className="text-sm font-medium leading-5 text-foreground">
+        {t(copy.titleKey, { defaultValue: copy.title })}
+      </p>
+      <p className="text-xs leading-5 text-muted-foreground">
+        {t(copy.messageKey, { defaultValue: copy.message })}
+      </p>
+      {copy.primaryAction !== 'none' ? (
+        <Button
+          type="button"
+          className="mt-1 h-10 w-full rounded-[8px]"
+          onClick={() => onAction(copy.primaryAction)}
+        >
+          {t(copy.primaryLabelKey, { defaultValue: copy.primaryLabel })}
+        </Button>
+      ) : null}
+      {copy.secondaryAction !== 'none' ? (
+        <button
+          type="button"
+          className="text-xs leading-5 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          onClick={() => onAction(copy.secondaryAction)}
+        >
+          {t(copy.secondaryLabelKey, { defaultValue: copy.secondaryLabel })}
+        </button>
+      ) : null}
+    </div>
   );
 }
 

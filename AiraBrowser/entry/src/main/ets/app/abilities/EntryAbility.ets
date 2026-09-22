@@ -72,6 +72,7 @@ import {
 import { BrowserShellPresentationRefreshSignal } from '../../core/browser/BrowserShellPresentationRefreshSignal';
 import { BrowserSystemMemoryPressureLevel } from '../../core/browser/BrowserTabBackgroundTypes';
 import { SiteDataControlService } from '../../services/web/SiteDataControlService';
+import { sharedAiraHttpRequestGate } from '../../services/network/AiraHttpRequestGate';
 import { BROWSER_STATUS_BAR_DARK_CONTENT_COLOR } from '../../services/browser/BrowserStatusBarStyleService';
 import { normalizeAiraSearchCardWant } from '../../features/desktopcard/AiraSearchCardLaunchAdapter';
 import { AiraIconFontRuntime } from '../../core/resources/AiraIconFontRuntime';
@@ -473,6 +474,7 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     this.appInForeground = true;
+    sharedAiraHttpRequestGate.resumeBackgroundWork();
     const windowId = BrowserWindowRuntime.resolveWindowIdFromStorage(this.pageStorage);
     AiraNavForensicsProbe.markForeground('entry-ability', windowId);
     BrowserWindowRuntime.markWindowForeground(windowId);
@@ -513,6 +515,13 @@ export default class EntryAbility extends UIAbility {
     if (!BrowserWindowRuntime.hasForegroundWindows()) {
       this.pauseArkWebTimersForProcessBackground();
       sharedSyncExperienceCoordinator.notifyAppBackground();
+      // Speculative traffic would otherwise keep the NetStack multi handle busy across the whole background
+      // window, and every handle still alive here is one more that can be torn down while its socket callback is
+      // in flight. Reader-initiated requests are deliberately left running.
+      const abandoned = sharedAiraHttpRequestGate.suspendBackgroundWork();
+      if (abandoned > 0) {
+        hilog.info(DOMAIN, TAG, 'Suspended background HTTP work, abandoned queued=%{public}d', abandoned);
+      }
     }
     sharedBrowserRuntimeMaintenanceCoordinator.notifyBackground();
     BrowserTabPreviewLifecycleSignal.requestCapture();

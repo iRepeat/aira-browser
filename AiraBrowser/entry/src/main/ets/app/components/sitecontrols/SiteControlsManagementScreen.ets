@@ -689,19 +689,19 @@ export struct SiteControlsManagementScreen {
 
   private resolveCapabilityIconBackgroundColor(filterId: SiteControlsFilterId): ResourceColor {
     if (filterId === 'location') {
-      return this.settingsIconBackgrounds.siteSettings;
+      return this.settingsIconBackgrounds.siteLocation;
     }
     if (filterId === 'camera') {
       return this.settingsIconBackgrounds.experiments;
     }
     if (filterId === 'microphone') {
-      return this.settingsIconBackgrounds.siteSettings;
+      return this.settingsIconBackgrounds.siteMicrophone;
     }
     if (filterId === 'open_app') {
       return this.settingsIconBackgrounds.userAgent;
     }
     if (filterId === 'clipboard') {
-      return this.settingsIconBackgrounds.siteCustomization;
+      return this.settingsIconBackgrounds.siteClipboard;
     }
     return this.settingsIconBackgrounds.experiments;
   }
@@ -716,7 +716,7 @@ export struct SiteControlsManagementScreen {
     if (filterId === 'javascript') {
       return this.settingsIconBackgrounds.userScripts;
     }
-    return this.settingsIconBackgrounds.siteCustomization;
+    return this.settingsIconBackgrounds.siteExternalActions;
   }
 
   private isSearchingSites(): boolean {

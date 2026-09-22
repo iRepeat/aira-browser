@@ -13,10 +13,11 @@ export type PersonalizationSyncItemIconKey =
   | 'bookshelf';
 
 type PersonalizationSyncItemBackgroundRole =
-  | 'sync'
+  | 'homeShortcuts'
   | 'appearance'
-  | 'about'
+  | 'activityHeatmap'
   | 'search'
+  | 'novelBookshelf'
   | 'general';
 
 interface PersonalizationSyncItemPresentationDescriptor {
@@ -116,20 +117,20 @@ export class PersonalizationSyncSettingsViewModel {
     tokens: BrowserSettingsIconBackgroundTokenSet
   ): string {
     const role = this.resolveItemPresentation(id).backgroundRole;
-    if (role === 'sync') {
-      return tokens.sync;
+    if (role === 'homeShortcuts') {
+      return tokens.homeShortcuts;
     }
     if (role === 'appearance') {
       return tokens.appearance;
     }
-    if (role === 'about') {
-      return tokens.about;
+    if (role === 'activityHeatmap') {
+      return tokens.activityHeatmap;
     }
     if (role === 'search') {
       return tokens.search;
     }
-    if (role === 'general') {
-      return tokens.general;
+    if (role === 'novelBookshelf') {
+      return tokens.novelBookshelf;
     }
     return tokens.general;
   }
@@ -154,19 +155,19 @@ export class PersonalizationSyncSettingsViewModel {
 
   private resolveItemPresentation(id: PersonalizationSyncContentId): PersonalizationSyncItemPresentationDescriptor {
     if (id === 'home_shortcuts') {
-      return { iconKey: 'custom_homepage', backgroundRole: 'sync' };
+      return { iconKey: 'custom_homepage', backgroundRole: 'homeShortcuts' };
     }
     if (id === 'core_preferences') {
       return { iconKey: 'appearance', backgroundRole: 'appearance' };
     }
     if (id === 'activity_heatmap') {
-      return { iconKey: 'activity_heatmap', backgroundRole: 'about' };
+      return { iconKey: 'activity_heatmap', backgroundRole: 'activityHeatmap' };
     }
     if (id === 'search') {
       return { iconKey: 'search', backgroundRole: 'search' };
     }
     if (id === 'novel_bookshelf') {
-      return { iconKey: 'bookshelf', backgroundRole: 'general' };
+      return { iconKey: 'bookshelf', backgroundRole: 'novelBookshelf' };
     }
     return { iconKey: 'custom_homepage', backgroundRole: 'general' };
   }

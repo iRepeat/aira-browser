@@ -8,7 +8,7 @@ import {
 } from '../markdown/MarkdownDocumentViewerService';
 
 const SYNC_DESKTOP_BOOKMARK_GUIDE_RAW_FILE_NAME: string = 'sync_desktop_bookmark_guide.md';
-export const SYNC_DESKTOP_BOOKMARK_GUIDE_TITLE: string = 'Aira 跨设备使用指南';
+export const SYNC_DESKTOP_BOOKMARK_GUIDE_TITLE: string = '私有化部署教程';
 const SYNC_DESKTOP_BOOKMARK_GUIDE_SOURCE_URL: string = 'https://aira.local/settings/sync-desktop-bookmark-guide.md';
 const SYNC_DESKTOP_BOOKMARK_GUIDE_BASE_URL: string = 'https://aira.local/settings/';
 const SYNC_DESKTOP_BOOKMARK_GUIDE_LOCAL_PACKAGE_URL: string = 'https://wwbgv.lanzoul.com/b00oe0qfcd';

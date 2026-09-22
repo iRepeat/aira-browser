@@ -145,7 +145,29 @@ export class BrowserThemePaletteService {
       appearance: resolvedTokens.appearance,
       experiments: resolvedTokens.experiments,
       sync: resolvedTokens.sync,
-      about: resolvedTokens.about
+      about: resolvedTokens.about,
+      crossDeviceLink: resolvedTokens.crossDeviceLink,
+      customHomepage: resolvedTokens.customHomepage,
+      toolbar: resolvedTokens.toolbar,
+      privateMode: resolvedTokens.privateMode,
+      webFeatures: resolvedTokens.webFeatures,
+      webApps: resolvedTokens.webApps,
+      advancedSettings: resolvedTokens.advancedSettings,
+      bookmarks: resolvedTokens.bookmarks,
+      history: resolvedTokens.history,
+      homeShortcuts: resolvedTokens.homeShortcuts,
+      activityHeatmap: resolvedTokens.activityHeatmap,
+      novelBookshelf: resolvedTokens.novelBookshelf,
+      syncMethod: resolvedTokens.syncMethod,
+      syncPageCrossDevice: resolvedTokens.syncPageCrossDevice,
+      syncPageAdvanced: resolvedTokens.syncPageAdvanced,
+      backupFrequency: resolvedTokens.backupFrequency,
+      backupLocation: resolvedTokens.backupLocation,
+      addDevice: resolvedTokens.addDevice,
+      siteLocation: resolvedTokens.siteLocation,
+      siteMicrophone: resolvedTokens.siteMicrophone,
+      siteClipboard: resolvedTokens.siteClipboard,
+      siteExternalActions: resolvedTokens.siteExternalActions
     };
   }
 }

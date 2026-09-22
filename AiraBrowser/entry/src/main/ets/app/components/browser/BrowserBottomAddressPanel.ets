@@ -604,6 +604,8 @@ export struct BrowserBottomAddressPanel {
         floatingTopContentVisible: this.shouldReserveFloatingSuggestionPanelHeight(),
         floatingTopContentHeight: this.resolveFloatingSuggestionPanelHeight(),
         floatingContentRenderKey: this.liveBottomChromePresentation.contentPresentation,
+        // Suggestion rows sit on the full-screen search page background. A plate here would make
+        // the background look like it belongs only to the history block.
         floatingTopSurfaceChromeVisible: false,
         floatingHeaderChromeVisible: !this.shouldUseThreeBlockBottomChrome(),
         floatingHeaderPresentationOpacity: this.resolveFloatingHeaderPresentationOpacity(),

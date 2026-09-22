@@ -22,7 +22,11 @@ import {
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
-import { sharedSyncExperienceCoordinator } from '../../bootstrap/BrowserAppRuntime';
+import {
+  sharedPreferencesRepository,
+  sharedSyncExperienceCoordinator
+} from '../../bootstrap/BrowserAppRuntime';
+import { BrowserThemeViewStateFactory } from '../../../core/theme/BrowserThemeViewState';
 import {
   SettingsFooterText,
   SettingsGroupCard,
@@ -104,6 +108,12 @@ export struct SyncMasterControlSection {
     this.refreshState();
   }
 
+  private resolveMasterIconBackgroundColor(): ResourceColor {
+    return new BrowserThemeViewStateFactory().build(
+      sharedPreferencesRepository.getPreferences()
+    ).settingsIconBackgrounds.syncMethod;
+  }
+
   aboutToDisappear(): void {
     this.progressController.dispose();
   }
@@ -119,7 +129,7 @@ export struct SyncMasterControlSection {
           checked: this.state.masterEnabled,
           icon: $r('sys.symbol.arrow_clockwise'),
           imageIcon: SettingsColoredTileIconResources.foregroundIcon('sync'),
-          iconBackgroundColor: this.storedAccentColor,
+          iconBackgroundColor: this.resolveMasterIconBackgroundColor(),
           iconColor: this.storedSettingsIconForegroundColor,
           rowPosition: 'single',
           isEnabled: this.state.hasConfiguredSync && !this.isPrivateSession && !this.pageBusy && !this.isBusy,

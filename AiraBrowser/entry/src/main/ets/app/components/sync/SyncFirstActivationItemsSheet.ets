@@ -137,19 +137,25 @@ export struct SyncFirstActivationItemsSheet {
 
   private resolveItemIconBackground(item: SyncFirstActivationItemState): ResourceColor {
     if (item.kind === 'bookmarks') {
-      return this.settingsIconBackgrounds.sync;
+      return this.settingsIconBackgrounds.bookmarks;
+    }
+    if (item.kind === 'history') {
+      return this.settingsIconBackgrounds.history;
     }
     if (item.id === 'home_shortcuts') {
-      return this.settingsIconBackgrounds.sync;
+      return this.settingsIconBackgrounds.homeShortcuts;
     }
     if (item.id === 'core_preferences') {
       return this.settingsIconBackgrounds.appearance;
     }
     if (item.id === 'activity_heatmap') {
-      return this.settingsIconBackgrounds.about;
+      return this.settingsIconBackgrounds.activityHeatmap;
     }
     if (item.id === 'search') {
       return this.settingsIconBackgrounds.search;
+    }
+    if (item.id === 'novel_bookshelf') {
+      return this.settingsIconBackgrounds.novelBookshelf;
     }
     return this.settingsIconBackgrounds.general;
   }

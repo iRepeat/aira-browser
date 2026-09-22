@@ -20,15 +20,41 @@ on phone and touch two-pane where there is no pane. The page is deliberately a *
   availability is the existing `aira_cloud` distribution capability. The page never activates sync, never toggles a
   provider, and never keeps its own copy of sync state — `SyncExperienceCoordinator` remains the single state-transition
   owner (ADR 0048), and the frozen Aira-sync contract is untouched.
-- Capability rows report on/off only. 书签同步 and 历史记录同步 mirror the real switches, which the user can turn off;
-  网页接力 and 跨设备标签页 have no off switch, so where the chosen mode can deliver them they read 已开启 forever.
+- 数据同步 and 跨设备互联 are two channels with two owners, and the page keeps them apart. This page owns the
+  跨设备互联 switch (tab handoff and page push) through `CrossDeviceTabPresenceCoordinator`, whose preference is scoped
+  to the paired account or server instance; turning it off stops publishing, stops the heartbeat and withdraws this
+  phone's snapshot without touching any sync state. Data sync is only a 同步设置 row that carries the sync owner's own
+  goal label and deep-links into 同步设置. The page deliberately carries no second data-sync master switch: pausing
+  bookmarks and history must not look like it also stopped devices from talking, and one switch that means one thing
+  cannot be explained to a user twice. The per-capability rows are gone for the same reason: they reported the same
+  on/off twice and could not be acted on.
+- The data-sync master switch stays in 同步设置, where it already has a confirmation dialog, a progress dialog and the
+  owner's failure handling. It is a pause, not an erase: `suspendExperience` keeps the user's content selection so
+  resuming restores it, which is why the content switches stay editable while the master switch is off. They report
+  已暂停 instead of 已开启 in that state, and the section says the choice applies once sync resumes, so the row is
+  neither lying nor pretending to be disabled configuration.
+- The device list always begins with this phone and always ends with 添加设备. This phone is the one device the page can
+  never be wrong about (the user is holding it), so it is read from the presence owner's own installation record and
+  rendered as a static row marked 当前设备; the computers follow, and 添加设备 — the QR pairing handshake — is appended
+  last in every state so pairing is never hidden behind an empty list.
+- The page opens on the account itself rather than on a status block: this phone on the left, the account avatar in the
+  middle, the computers on the right, with the nickname over the account id underneath. The identity is the sync owner's
+  own `resolveAiraHuaweiAccountIdentity` (`displayName`, `uid`, `photoUrl`), falling back to the locally picked avatar
+  when the account has none, so the header reports who is signed in without keeping a second copy of account state. The
+  computer side and its connector light up only while the presence owner reports at least one online computer; a signed
+  out header says 未登录 and guides instead of printing an id, and an account that never returned a nickname falls back to
+  a plain label instead of inventing one.
 - The page is provider-aware, because the desktop link is not the same thing on every mode. Aira Cloud and a self-hosted
   server carry the whole link; WebDAV carries bookmarks only; Huawei Space has no desktop browser side at all. The active
-  mode is read from the sync owner's own goal options (plus its `historySupported`), never guessed, and a capability the
-  mode cannot deliver is greyed to 不可用 rather than hidden, so the page keeps one layout in every state.
-- Every state that cannot reach a desktop exits through exactly one primary action: pair the chosen mode (scan for Aira
-  Cloud, the pairing code page for a self-hosted server) or switch to a mode that can reach a desktop. Configuration
-  stays in the sync owner; this page only deep-links into it.
+  mode is read from the sync owner's own goal options, never guessed, and a mode that cannot carry everything the page
+  needs says so in one notice line under the header instead of hiding a row.
+
+Amended 2026-09-22: a signed-in account carries tab handoff and page push even when data sync is off or the active
+provider is WebDAV or Huawei Space. The notice that those providers cannot carry the link remains only on a build that
+cannot sign in. Personal Server is unchanged: it is still its own paired channel, and selecting it does not also open
+the account channel.
+- The page carries no self-built action bar: it reports state and offers real rows. 添加设备 is what the device list
+  already ends with, and 同步设置 is what the sync row already opens, so a button would only repeat them.
 - Every row jumps to the owner: both sync rows to 同步设置, 网页接力 to the existing help document (which already
   documents the menu 推送 action), and 跨设备标签页 to a sheet that mounts the existing
   `BrowserCrossDeviceTabsSheet`, so the cross-device tab list has exactly one implementation.

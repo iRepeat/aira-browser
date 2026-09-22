@@ -13,6 +13,17 @@ import {
   sharedBrowserHttpsFirstNavigationService
 } from '../../services/web/BrowserHttpsFirstNavigationService';
 
+/**
+ * How long a rewritten main-frame navigation waits before it is issued.
+ *
+ * `onLoadIntercept` runs while ArkWeb is deciding that navigation, and the decision is only finished once the
+ * callback returns. Issuing the replacement load from inside the callback put both the replacement `loadUrl()`
+ * and the Browsing Identity setter it triggers on ArkWeb's pending-entry guard: the custom-UA setter walks the
+ * frame tree and reloads, and the reentrancy guard aborts the process with SIGTRAP. Deferring by one task lets
+ * the original decision finish first, so the rewrite is an ordinary pre-navigation load again.
+ */
+const SAME_WEB_NAVIGATION_REWRITE_DEFERRAL_MS: number = 0;
+
 export interface BrowserWebNavigationInterceptionCoordinatorDependencies {
   adBlockCoordinator: BrowserAdBlockCoordinator;
   telegramWebCompatibilityService: TelegramWebCompatibilityService;
@@ -39,6 +50,8 @@ export class BrowserWebNavigationInterceptionCoordinator {
   private readonly telegramWebCompatibilityService: TelegramWebCompatibilityService;
   private readonly webLoadRuntimeCoordinator: BrowserWebLoadRuntimeCoordinator;
   private readonly tabScopedEventContextCoordinator: BrowserTabScopedEventContextCoordinator;
+  /** One deferred rewrite per tab: a second decision must not race the replacement the first one scheduled. */
+  private pendingRewriteTimerByTabId: Record<string, number | undefined> = {};
 
   constructor(dependencies: BrowserWebNavigationInterceptionCoordinatorDependencies) {
     this.adBlockCoordinator = dependencies.adBlockCoordinator;
@@ -119,14 +132,37 @@ export class BrowserWebNavigationInterceptionCoordinator {
       sharedBrowserHttpsFirstNavigationService.attachFallbackExecutor(
         tabId,
         (fallbackTabId: string, fallbackUrl: string): boolean =>
-          this.webLoadRuntimeCoordinator.loadUrlForTab(fallbackTabId, fallbackUrl, true, false, true, 'InterceptionHttpsFallback')
+          this.webLoadRuntimeCoordinator.loadUrlForTab(fallbackTabId, fallbackUrl, true, false, true,
+            'InterceptionHttpsFallback')
       );
     }
-    return this.webLoadRuntimeCoordinator.loadUrlForTab(
-      tabId,
-      url,
-      true
-    );
+    // The callback has to return before the replacement navigation is issued: ArkWeb is still deciding the
+    // navigation this rewrite replaces, and anything that reaches the Controller from here — the load itself,
+    // and the identity preparation the load performs — reenters that decision. The caller consumes the original
+    // navigation, so returning true is what stops it.
+    this.scheduleSameWebNavigationRewrite(tabId, url);
+    return true;
+  }
+
+  /**
+   * Returns immediately: the CALLER must consume the original navigation (`true`) and let this callback return,
+   * because ArkWeb is still deciding that navigation until it does.
+   */
+  scheduleSameWebNavigationRewrite(tabId: string, url: string): void {
+    this.cancelSameWebNavigationRewrite(tabId);
+    this.pendingRewriteTimerByTabId[tabId] = setTimeout((): void => {
+      this.pendingRewriteTimerByTabId[tabId] = undefined;
+      this.webLoadRuntimeCoordinator.loadUrlForTab(tabId, url, true);
+    }, SAME_WEB_NAVIGATION_REWRITE_DEFERRAL_MS);
+  }
+
+  cancelSameWebNavigationRewrite(tabId: string): void {
+    const timerId = this.pendingRewriteTimerByTabId[tabId];
+    if (timerId === undefined) {
+      return;
+    }
+    this.pendingRewriteTimerByTabId[tabId] = undefined;
+    clearTimeout(timerId);
   }
 
   private buildAdBlockRequestContext(

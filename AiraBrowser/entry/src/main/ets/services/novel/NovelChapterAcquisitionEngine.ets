@@ -1,6 +1,7 @@
 import { util } from '@kit.ArkTS';
 import { webview } from '@kit.ArkWeb';
 import { http } from '@kit.NetworkKit';
+import { AiraHttpRequestCancelledError, sharedAiraHttpRequestGate } from '../network/AiraHttpRequestGate';
 import { NovelChapterExtract } from '../../features/novel/NovelReaderModels';
 import { NovelChapterSourceRule } from '../../features/novel/NovelSiteRules';
 
@@ -200,31 +201,44 @@ export class NovelChapterAcquisitionEngine {
   }
 
   private async fetchHtmlSource(url: string): Promise<string> {
-    const request = http.createHttp();
-    try {
-      const response = await request.request(url, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.STRING,
-        connectTimeout: NOVEL_SOURCE_CONNECT_TIMEOUT_MS,
-        readTimeout: NOVEL_SOURCE_READ_TIMEOUT_MS,
-        usingCache: false,
-        maxLimit: NOVEL_SOURCE_MAX_BYTES,
-        header: {
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'zh-CN,zh;q=0.9',
-          'Referer': this.stripFragment(url),
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 ' +
-            '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+    // Novel acquisition fans out over catalogs and chapters, which is exactly the unbounded shape that used to
+    // keep many NetStack handles alive at once. The gate caps this class at two and drops the queued remainder
+    // when the app leaves the foreground; a dropped fetch reports the same empty result as an HTTP failure.
+    return await sharedAiraHttpRequestGate.run('novel', 'background', async (): Promise<string> => {
+      const request = http.createHttp();
+      try {
+        const response = await request.request(url, {
+          method: http.RequestMethod.GET,
+          expectDataType: http.HttpDataType.STRING,
+          connectTimeout: NOVEL_SOURCE_CONNECT_TIMEOUT_MS,
+          readTimeout: NOVEL_SOURCE_READ_TIMEOUT_MS,
+          usingCache: false,
+          maxLimit: NOVEL_SOURCE_MAX_BYTES,
+          header: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Referer': this.stripFragment(url),
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 ' +
+              '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+          }
+        });
+        if (response.responseCode < 200 || response.responseCode >= 300 || typeof response.result !== 'string') {
+          return '';
         }
-      });
-      if (response.responseCode < 200 || response.responseCode >= 300 || typeof response.result !== 'string') {
+        const html: string = response.result;
+        return html.length > 0 && html.length <= NOVEL_SOURCE_MAX_BYTES ? html : '';
+      } finally {
+        request.destroy();
+      }
+    }).catch((error: Error): string => {
+      // A gate rejection is this browser abandoning speculative work, which each caller already handles as an
+      // empty fetch. Anything else is a real network failure and must keep propagating, as it did before the
+      // gate existed.
+      if (error instanceof AiraHttpRequestCancelledError) {
         return '';
       }
-      const html: string = response.result;
-      return html.length > 0 && html.length <= NOVEL_SOURCE_MAX_BYTES ? html : '';
-    } finally {
-      request.destroy();
-    }
+      throw error;
+    });
   }
 
   private async normalizeDirectHtmlPage(
@@ -552,29 +566,41 @@ export class NovelChapterAcquisitionEngine {
   }
 
   private async fetchScriptSource(resourceUrl: string, refererUrl: string): Promise<string> {
-    const request = http.createHttp();
-    try {
-      const response = await request.request(resourceUrl, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.STRING,
-        connectTimeout: NOVEL_SOURCE_CONNECT_TIMEOUT_MS,
-        readTimeout: NOVEL_SOURCE_READ_TIMEOUT_MS,
-        usingCache: false,
-        maxLimit: NOVEL_SOURCE_MAX_BYTES,
-        header: {
-          'Accept': 'text/javascript,application/javascript,text/plain,*/*;q=0.8',
-          'Referer': this.stripFragment(refererUrl),
-          'User-Agent': 'Mozilla/5.0 (Mobile; HarmonyOS) AppleWebKit/537.36 Safari/537.36 AiraBrowser/1.0'
+    // Same class as the chapter fetch above: script payloads are speculative prefetch, so a queued one may be
+    // dropped when the app leaves the foreground and then reports as an empty result.
+    return await sharedAiraHttpRequestGate.run('novel', 'background', async (): Promise<string> => {
+      const request = http.createHttp();
+      try {
+        const response = await request.request(resourceUrl, {
+          method: http.RequestMethod.GET,
+          expectDataType: http.HttpDataType.STRING,
+          connectTimeout: NOVEL_SOURCE_CONNECT_TIMEOUT_MS,
+          readTimeout: NOVEL_SOURCE_READ_TIMEOUT_MS,
+          usingCache: false,
+          maxLimit: NOVEL_SOURCE_MAX_BYTES,
+          header: {
+            'Accept': 'text/javascript,application/javascript,text/plain,*/*;q=0.8',
+            'Referer': this.stripFragment(refererUrl),
+            'User-Agent': 'Mozilla/5.0 (Mobile; HarmonyOS) AppleWebKit/537.36 Safari/537.36 AiraBrowser/1.0'
+          }
+        });
+        if (response.responseCode < 200 || response.responseCode >= 300 || typeof response.result !== 'string') {
+          return '';
         }
-      });
-      if (response.responseCode < 200 || response.responseCode >= 300 || typeof response.result !== 'string') {
+        const source: string = response.result;
+        return source.length > 0 && source.length <= NOVEL_SOURCE_MAX_BYTES ? source : '';
+      } finally {
+        request.destroy();
+      }
+    }).catch((error: Error): string => {
+      // A gate rejection is this browser abandoning speculative work, which each caller already handles as an
+      // empty fetch. Anything else is a real network failure and must keep propagating, as it did before the
+      // gate existed.
+      if (error instanceof AiraHttpRequestCancelledError) {
         return '';
       }
-      const source: string = response.result;
-      return source.length > 0 && source.length <= NOVEL_SOURCE_MAX_BYTES ? source : '';
-    } finally {
-      request.destroy();
-    }
+      throw error;
+    });
   }
 
   private extractAssignedString(source: string, variableName: string): string {

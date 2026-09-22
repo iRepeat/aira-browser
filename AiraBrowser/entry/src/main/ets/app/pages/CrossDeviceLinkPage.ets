@@ -8,14 +8,23 @@ import { CrossDeviceLinkHost } from '../components/sync/CrossDeviceLinkHost';
 @Component
 struct CrossDeviceLinkPage {
   @State private refreshToken: number = 0;
+  @State private pageVisible: boolean = false;
 
   onPageShow(): void {
+    this.pageVisible = true;
     this.refreshToken += 1;
+  }
+
+  onPageHide(): void {
+    this.pageVisible = false;
   }
 
   build() {
     Column() {
-      CrossDeviceLinkHost({ refreshToken: this.refreshToken })
+      CrossDeviceLinkHost({
+        refreshToken: this.refreshToken,
+        pageVisible: this.pageVisible
+      })
         .width('100%')
         .height('100%')
     }

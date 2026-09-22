@@ -1,5 +1,6 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
+import { AiraHttpRequestCancellation, sharedAiraHttpRequestGate } from '../network/AiraHttpRequestGate';
 import { webview } from '@kit.ArkWeb';
 import { AIRA_COMPAT_MOBILE_USER_AGENT } from '../web/BrowserUserAgentService';
 
@@ -31,30 +32,37 @@ export class NovelComicImageService {
     if (!this.isRemoteUrl(imageUrl)) {
       throw new Error('comic-image-url');
     }
-    const request = http.createHttp();
-    try {
-      const response = await request.request(imageUrl, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        connectTimeout: NOVEL_COMIC_IMAGE_REQUEST_TIMEOUT_MS,
-        readTimeout: NOVEL_COMIC_IMAGE_REQUEST_TIMEOUT_MS,
-        usingCache: true,
-        maxLimit: NOVEL_COMIC_IMAGE_MAX_BYTES,
-        header: this.buildRequestHeaders(imageUrl, pageUrl)
-      });
-      if (response.responseCode < 200 || response.responseCode >= 300 ||
-        !(response.result instanceof ArrayBuffer)) {
-        throw new Error(`comic-image-http-${response.responseCode}`);
+    // One image per comic page. The gate bounds how many of them NetStack holds at once and abandons the queue
+    // when the app leaves the foreground.
+    return await sharedAiraHttpRequestGate.run('novel', 'background', async (
+      cancellation: AiraHttpRequestCancellation
+    ): Promise<ArrayBuffer> => {
+      cancellation.throwIfCancelled();
+      const request = http.createHttp();
+      try {
+        const response = await request.request(imageUrl, {
+          method: http.RequestMethod.GET,
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          connectTimeout: NOVEL_COMIC_IMAGE_REQUEST_TIMEOUT_MS,
+          readTimeout: NOVEL_COMIC_IMAGE_REQUEST_TIMEOUT_MS,
+          usingCache: true,
+          maxLimit: NOVEL_COMIC_IMAGE_MAX_BYTES,
+          header: this.buildRequestHeaders(imageUrl, pageUrl)
+        });
+        if (response.responseCode < 200 || response.responseCode >= 300 ||
+          !(response.result instanceof ArrayBuffer)) {
+          throw new Error(`comic-image-http-${response.responseCode}`);
+        }
+        const payload: ArrayBuffer = response.result;
+        if (payload.byteLength <= 0 || payload.byteLength > NOVEL_COMIC_IMAGE_MAX_BYTES ||
+          !this.isLikelyImagePayload(payload)) {
+          throw new Error('comic-image-payload');
+        }
+        return payload;
+      } finally {
+        request.destroy();
       }
-      const payload: ArrayBuffer = response.result;
-      if (payload.byteLength <= 0 || payload.byteLength > NOVEL_COMIC_IMAGE_MAX_BYTES ||
-        !this.isLikelyImagePayload(payload)) {
-        throw new Error('comic-image-payload');
-      }
-      return payload;
-    } finally {
-      request.destroy();
-    }
+    });
   }
 
   private buildRequestHeaders(imageUrl: string, pageUrl: string): Record<string, string> {

@@ -13,8 +13,12 @@ import { BrowserUserAgentClientHintsService } from
 import {
   BrowserUserAgentNativeHistorySnapshot,
   BrowserUserAgentRuntimePlatformAdapter,
-  BrowserUserAgentRuntimeService
+  BrowserUserAgentRuntimeService,
+  BrowserUserAgentApplicationStatus
 } from '../main/ets/services/web/BrowserUserAgentRuntimeService';
+import {
+  BrowserWebNavigationGuardService
+} from '../main/ets/services/web/BrowserWebNavigationGuardService';
 import {
   AIRA_DEFAULT_BROWSER_IDENTITY_ID,
   BrowserUserAgentResolution,
@@ -73,19 +77,23 @@ interface UserAgentRuntimeFixture {
   controller: webview.WebviewController;
   controllerResolver: BrowserRuntimeControllerResolver;
   platformAdapter: InMemoryUserAgentRuntimePlatformAdapter;
+  navigationGuard: BrowserWebNavigationGuardService;
   runtime: BrowserUserAgentRuntimeService;
 }
 
 function createRuntimeFixture(): UserAgentRuntimeFixture {
   const controller = new webview.WebviewController();
   const platformAdapter = new InMemoryUserAgentRuntimePlatformAdapter();
+  const navigationGuard = new BrowserWebNavigationGuardService();
   return {
     controller: controller,
     controllerResolver: new FixedRuntimeControllerResolver(controller),
     platformAdapter: platformAdapter,
+    navigationGuard: navigationGuard,
     runtime: new BrowserUserAgentRuntimeService(
       new BrowserUserAgentClientHintsService(),
-      platformAdapter
+      platformAdapter,
+      navigationGuard
     )
   };
 }
@@ -304,6 +312,69 @@ export default function browserUserAgentRuntimeServiceTest(): void {
       expect(transition.transitionNoticeRequired).assertTrue();
       expect(fixture.platformAdapter.appliedCustomUserAgents.length).assertEqual(1);
       expect(fixture.runtime.requiresControllerTransition('tab-runtime', nativeDecision)).assertTrue();
+    });
+
+    it('a navigation callback never mutates the Controller identity', 0, () => {
+      // ArkWeb answers an in-navigation Controller mutation with its pending-entry reentrancy guard, and the guard
+      // aborts the process. An http:// link rewritten from inside onLoadIntercept used to reach the ArkWeb UA
+      // setter this way, which is the reported crash.
+      const fixture = createRuntimeFixture();
+      const firstDecision = buildDecision('mobile_chrome_android', 'snapshot-mobile');
+      const rewriteDecision = buildDecision('desktop_chrome_windows', 'snapshot-desktop');
+      fixture.runtime.prepareNavigation(
+        fixture.controllerResolver,
+        'tab-runtime',
+        'http://developer.huawei.com/consumer/cn/service/josp/agc/index.html',
+        firstDecision
+      );
+      expect(fixture.platformAdapter.appliedCustomUserAgents.length).assertEqual(1);
+
+      const scope = fixture.navigationGuard.openTabNavigationScope('tab-runtime');
+      let duringCallback: BrowserUserAgentApplicationStatus = 'native_untouched';
+      try {
+        duringCallback = fixture.runtime.prepareNavigation(
+          fixture.controllerResolver,
+          'tab-runtime',
+          'https://developer.huawei.com/consumer/cn/service/josp/agc/index.html',
+          rewriteDecision
+        ).applicationStatus;
+      } finally {
+        scope.close();
+      }
+
+      // The rewrite is allowed to proceed, but only as intent: the Controller keeps the identity it already has.
+      expect(duringCallback).assertEqual('identity_transition_required');
+      expect(fixture.platformAdapter.appliedCustomUserAgents.length).assertEqual(1);
+      expect(fixture.navigationGuard.isTabNavigationInProgress('tab-runtime')).assertFalse();
+
+      const afterCallback = fixture.runtime.prepareNavigation(
+        fixture.controllerResolver,
+        'tab-runtime',
+        'https://developer.huawei.com/consumer/cn/service/josp/agc/index.html',
+        rewriteDecision
+      );
+      expect(afterCallback.applicationStatus).assertEqual('custom_applied');
+      expect(fixture.platformAdapter.appliedCustomUserAgents.length).assertEqual(2);
+    });
+
+    it('an in-navigation scope never reaches the ArkWeb UA setter', 0, () => {
+      const fixture = createRuntimeFixture();
+      const decision = buildDecision('mobile_chrome_android', 'snapshot-mobile');
+      const scope = fixture.navigationGuard.openTabNavigationScope('tab-runtime');
+      let status: BrowserUserAgentApplicationStatus = 'failed';
+      try {
+        status = fixture.runtime.prepareNavigation(
+          fixture.controllerResolver,
+          'tab-runtime',
+          'http://example.com/insecure',
+          decision
+        ).applicationStatus;
+      } finally {
+        scope.close();
+      }
+
+      expect(status).assertEqual('identity_transition_required');
+      expect(fixture.platformAdapter.appliedCustomUserAgents.length).assertEqual(0);
     });
 
     it('ArkWeb Original leaves a fresh Controller untouched', 0, () => {

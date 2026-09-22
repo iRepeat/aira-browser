@@ -242,6 +242,7 @@ export interface BrowserRootBottomPanelExpandedScrimState {
   surfaceEligible: boolean;
   blockHitTest: boolean;
   backdropProgress: number;
+  pageBackgroundVisible: boolean;
 }
 
 export interface BrowserRootBottomPanelGestureInput {
@@ -886,14 +887,19 @@ export class BrowserRootBottomPanelSessionCoordinator {
     const surfaceEligible = !input.readerModeVisible && !input.novelReaderVisible && surfaceVisible &&
       !input.tabsSheetVisible &&
       input.bottomPanelHostVisible;
-    const visible = surfaceEligible && input.detent === 'middle';
+    const pageBackgroundVisible = this.searchBackdropPresentationViewModel.resolveExpandedPageBackgroundVisible({
+      surfaceEligible: surfaceEligible,
+      detent: input.detent
+    });
+    const visible = pageBackgroundVisible;
     const progressVisible = input.backdropProgress > 0.01;
     return {
       visible,
       mounted: surfaceEligible && (visible || progressVisible),
       surfaceEligible: surfaceEligible,
       blockHitTest: surfaceEligible && (visible || progressVisible),
-      backdropProgress: input.backdropProgress
+      backdropProgress: input.backdropProgress,
+      pageBackgroundVisible: pageBackgroundVisible
     };
   }
 

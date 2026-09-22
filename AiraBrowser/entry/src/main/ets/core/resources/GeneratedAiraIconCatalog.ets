@@ -165,7 +165,10 @@ export type AiraIconId =
   | "videoAssistant.gesture.volumeHigh"
   | "search.suggestion.fillArrow"
   | "sync.firstActivation.activityHeatmap"
-  | "browser.toolbar.expandHint";
+  | "browser.toolbar.expandHint"
+  | "crossDeviceLink.localDevice"
+  | "crossDeviceLink.peerComputer"
+  | "crossDeviceLink.help";
 
 export type AiraRenderableIconId =
   | "bookmarks.folder"
@@ -332,7 +335,10 @@ export type AiraRenderableIconId =
   | "videoAssistant.gesture.volumeHigh"
   | "search.suggestion.fillArrow"
   | "sync.firstActivation.activityHeatmap"
-  | "browser.toolbar.expandHint";
+  | "browser.toolbar.expandHint"
+  | "crossDeviceLink.localDevice"
+  | "crossDeviceLink.peerComputer"
+  | "crossDeviceLink.help";
 
 export const AIRA_ICON_FONT_FAMILY: string = "AiraOperationalIcons";
 export const AIRA_ICON_FONT_RAWFILE_PATH: string = "fonts/aira/aira-operational-icons.ttf";
@@ -504,6 +510,9 @@ export class GeneratedAiraIconCatalog {
       case "search.suggestion.fillArrow":
       case "sync.firstActivation.activityHeatmap":
       case "browser.toolbar.expandHint":
+      case "crossDeviceLink.localDevice":
+      case "crossDeviceLink.peerComputer":
+      case "crossDeviceLink.help":
         return true;
       default:
         return false;
@@ -832,6 +841,12 @@ export class GeneratedAiraIconCatalog {
         return '\uE000';
       case "browser.toolbar.expandHint":
         return '\uEE06';
+      case "crossDeviceLink.localDevice":
+        return '\uE1E0';
+      case "crossDeviceLink.peerComputer":
+        return '\uE560';
+      case "crossDeviceLink.help":
+        return '\uE2CE';
       default:
         return '';
     }

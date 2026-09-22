@@ -15,6 +15,10 @@ import {
   BrowserHostedRuntimeReleaseSink,
   BrowserRuntimeControllerResolver
 } from './BrowserRuntimeLifecyclePort';
+import {
+  BrowserWebNavigationGuardService,
+  sharedBrowserWebNavigationGuardService
+} from './BrowserWebNavigationGuardService';
 
 const BROWSING_IDENTITY_RUNTIME_LOG_DOMAIN: number = 0x0000;
 const BROWSING_IDENTITY_RUNTIME_LOG_TAG: string = 'BrowsingIdentity';
@@ -142,6 +146,7 @@ interface BrowserBrowsingIdentityRuntimeAffinity {
 
 export class BrowserUserAgentRuntimeService implements BrowserHostedRuntimeReleaseSink {
   private readonly platformAdapter: BrowserUserAgentRuntimePlatformAdapter;
+  private readonly navigationGuard: BrowserWebNavigationGuardService;
   private readonly controllerBindings: WeakMap<webview.WebviewController, BrowserUserAgentControllerBinding> =
     new WeakMap<webview.WebviewController, BrowserUserAgentControllerBinding>();
   private bindingByTabId: Record<string, BrowserUserAgentControllerBinding | undefined> = {};
@@ -154,9 +159,11 @@ export class BrowserUserAgentRuntimeService implements BrowserHostedRuntimeRelea
 
   constructor(
     clientHintsService: BrowserUserAgentClientHintsService,
-    platformAdapter?: BrowserUserAgentRuntimePlatformAdapter
+    platformAdapter?: BrowserUserAgentRuntimePlatformAdapter,
+    navigationGuard: BrowserWebNavigationGuardService = sharedBrowserWebNavigationGuardService
   ) {
     this.platformAdapter = platformAdapter ?? new ArkWebUserAgentRuntimePlatformAdapter(clientHintsService);
+    this.navigationGuard = navigationGuard;
   }
 
   prepareNavigation(
@@ -457,6 +464,18 @@ export class BrowserUserAgentRuntimeService implements BrowserHostedRuntimeRelea
       };
     }
     const requestsNativeIdentity = resolution.profile.uaStringMode === 'system_untouched';
+    if (this.navigationGuard.isTabNavigationInProgress(tabId)) {
+      // ArkWeb aborts the process when a Controller is mutated while it is deciding this navigation, and both
+      // the UA setter and the Client Hints setter are Controller mutations. A request that arrives from inside
+      // a navigation callback is therefore intent only: the navigation proceeds under the identity the
+      // Controller already carries and the pending change lands on the next explicit navigation, which is the
+      // same terminal a custom-to-native transition already uses.
+      if (binding === undefined ||
+        buildBrowserBrowsingIdentityExecutionFingerprint(binding.resolution) !== resolution.executionFingerprint) {
+        return 'identity_transition_required';
+      }
+      return 'unchanged';
+    }
     if (requestsNativeIdentity) {
       if (binding !== undefined && binding.kind === 'custom') {
         // ArkWeb exposes no clear-to-native operation. Writing the default text

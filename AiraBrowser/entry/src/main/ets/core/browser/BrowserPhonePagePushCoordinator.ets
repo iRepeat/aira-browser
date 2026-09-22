@@ -1,13 +1,18 @@
 import { webview } from '@kit.ArkWeb';
 import { AIRA_DISTRIBUTION_CAPABILITY_OWNER } from '../../common/config/AiraDistributionCapabilityOwner';
 import { AIRA_FEATURE_PHONE_PAGE_PUSH } from '../../common/constants/MembershipFeatureKeys';
-import { AiraPersonalServerConfig } from '../../common/models/AiraSyncModels';
+import {
+  AiraPersonalServerConfig,
+  AiraSyncSettings,
+  resolveAiraHuaweiAccountIdentity
+} from '../../common/models/AiraSyncModels';
 import { EntitlementContext } from '../../services/membership/EntitlementService';
 import {
   AiraPhonePagePushFunctionService,
   AiraPhonePagePushResponseBody
 } from '../../services/push/AiraPhonePagePushFunctionService';
 import { AiraSyncConfigStore } from '../../services/sync/AiraSyncConfigStore';
+import { HuaweiAccountSyncAuthService } from '../../services/sync/HuaweiAccountSyncAuthService';
 import { AIRA_PERSONAL_SERVER_INSTANCE_SERVICE } from '../../services/sync/AiraPersonalServerInstanceService';
 import { FeatureGateCoordinator } from '../membership/FeatureGateCoordinator';
 
@@ -40,15 +45,18 @@ export class BrowserPhonePagePushCoordinator {
   private readonly featureGateCoordinator: FeatureGateCoordinator;
   private readonly syncConfigStore: AiraSyncConfigStore;
   private service: AiraPhonePagePushFunctionService;
+  private authService: HuaweiAccountSyncAuthService;
 
   constructor(
     featureGateCoordinator: FeatureGateCoordinator,
     syncConfigStore: AiraSyncConfigStore,
-    service: AiraPhonePagePushFunctionService = new AiraPhonePagePushFunctionService()
+    service: AiraPhonePagePushFunctionService = new AiraPhonePagePushFunctionService(),
+    authService: HuaweiAccountSyncAuthService = new HuaweiAccountSyncAuthService()
   ) {
     this.featureGateCoordinator = featureGateCoordinator;
     this.syncConfigStore = syncConfigStore;
     this.service = service;
+    this.authService = authService;
   }
 
   async sendCurrentPageFromHost(host: BrowserPhonePagePushHost): Promise<void> {
@@ -70,31 +78,52 @@ export class BrowserPhonePagePushCoordinator {
       }
       return;
     }
-    if (settings.remoteKind !== 'aira_cloud') {
-      host.showToast('当前同步服务不支持网页推送，请选择私有化部署或 Aira 云同步。');
-      return;
-    }
     if (!AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
       host.showToast(AIRA_DISTRIBUTION_CAPABILITY_OWNER.resolveUnavailableReason('aira_cloud'));
       return;
     }
     const accessSnapshot = host.resolveSnapshot();
+    const uid = await this.resolveAccountUid(settings, accessSnapshot.uid);
+    if (uid.length === 0) {
+      host.showToast('请先使用华为账号登录后再推送网页。不必先开启数据同步。');
+      return;
+    }
     if (!await this.featureGateCoordinator.ensureAccess(
       AIRA_FEATURE_PHONE_PAGE_PUSH,
       accessSnapshot.entitlementContext
     )) {
       return;
     }
-    const snapshot = host.resolveSnapshot();
-    const url = snapshot.url.trim();
-    const desktopUrl = await this.resolveDesktopUrl(snapshot.controller, url);
+    const url = accessSnapshot.url.trim();
+    const desktopUrl = await this.resolveDesktopUrl(accessSnapshot.controller, url);
     const request: BrowserPhonePagePushRequest = {
-      uid: snapshot.uid.trim(),
+      uid: uid,
       url: url,
       desktopUrl: desktopUrl,
-      title: this.resolveTitle(snapshot.title, url)
+      title: this.resolveTitle(accessSnapshot.title, url)
     };
     await this.enqueueCurrentPage(request, host);
+  }
+
+  /**
+   * Page push follows the signed-in account, not the active sync provider. Settings win,
+   * then the live Huawei session, then whatever the shell already resolved.
+   */
+  private async resolveAccountUid(settings: AiraSyncSettings, snapshotUid: string): Promise<string> {
+    const storedUid = resolveAiraHuaweiAccountIdentity(settings.huaweiCloud, settings.huaweiSpace).uid.trim();
+    if (storedUid.length > 0) {
+      return storedUid;
+    }
+    try {
+      const identity = await this.authService.getCurrentIdentity();
+      const liveUid = identity === undefined ? '' : identity.uid.trim();
+      if (liveUid.length > 0) {
+        return liveUid;
+      }
+    } catch (_error) {
+      // A missing session is the same as not being signed in.
+    }
+    return snapshotUid.trim();
   }
 
   private async enqueueCurrentPage(

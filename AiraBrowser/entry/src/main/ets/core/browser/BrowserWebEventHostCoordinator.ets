@@ -1,6 +1,10 @@
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HostedWebNodeCallbacks } from '../web/HostedWebNode';
+import {
+  BrowserWebNavigationGuardService,
+  sharedBrowserWebNavigationGuardService
+} from '../../services/web/BrowserWebNavigationGuardService';
 
 const WEB_EVENT_HOST_LOG_DOMAIN: number = 0x0000;
 const WEB_EVENT_HOST_LOG_TAG: string = 'BrowserWebEventHost';
@@ -50,6 +54,12 @@ export interface BrowserWebEventHostHandlers {
 }
 
 export class BrowserWebEventHostCoordinator {
+  private readonly navigationGuard: BrowserWebNavigationGuardService;
+
+  constructor(navigationGuard: BrowserWebNavigationGuardService = sharedBrowserWebNavigationGuardService) {
+    this.navigationGuard = navigationGuard;
+  }
+
   buildCallbacks(handlers: BrowserWebEventHostHandlers): HostedWebNodeCallbacks {
     return {
       onControllerAttached: (tabId: string) =>
@@ -114,11 +124,11 @@ export class BrowserWebEventHostCoordinator {
       onSslErrorEvent: (tabId: string, event: SslErrorEvent) =>
         this.runVoid('ssl_error_event', tabId, () => handlers.onSslErrorEvent(tabId, event)),
       onLoadIntercept: (tabId: string, event: OnLoadInterceptEvent) =>
-        this.runBoolean('load_intercept', tabId, false, false, () => handlers.onLoadIntercept(tabId, event)),
+        this.runNavigationBoolean('load_intercept', tabId, () => handlers.onLoadIntercept(tabId, event)),
       onInterceptRequest: (tabId: string, event: OnInterceptRequestEvent) =>
         this.runResponse('intercept_request', tabId, () => handlers.onInterceptRequest(tabId, event)),
       onOverrideUrlLoading: (tabId: string, request: WebResourceRequest) =>
-        this.runBoolean('override_url_loading', tabId, false, false,
+        this.runNavigationBoolean('override_url_loading', tabId,
           () => handlers.onOverrideUrlLoading(tabId, request)),
       onDownloadStart: (tabId: string, event: OnDownloadStartEvent) =>
         this.runVoid('download_start', tabId, () => handlers.onDownloadStart(tabId, event)),
@@ -154,6 +164,20 @@ export class BrowserWebEventHostCoordinator {
       action();
     } catch (error) {
       this.logHandlerFailure(eventName, tabId, error);
+    }
+  }
+
+  /**
+   * A navigation callback runs while ArkWeb is deciding a main-frame navigation. Mutating the Controller or
+   * issuing another load from inside it is what the kernel's pending-entry reentrancy guard aborts, so the
+   * scope has to cover the whole handler, not just the branch that decides to rewrite.
+   */
+  private runNavigationBoolean(eventName: string, tabId: string, action: () => boolean): boolean {
+    const scope = this.navigationGuard.openTabNavigationScope(tabId);
+    try {
+      return this.runBoolean(eventName, tabId, false, false, action);
+    } finally {
+      scope.close();
     }
   }
 

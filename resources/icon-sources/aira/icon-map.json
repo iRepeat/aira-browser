@@ -234,18 +234,20 @@
     "originalSource": "Lucide 1.38.0 / monitor",
     "primaryResourceFamily": "app_theme_mode_system",
     "resourceFamilies": [
-      "app_theme_mode_system"
+      "app_theme_mode_system",
+      "app_cross_device_link_peer_computer"
     ],
-    "note": "Lucide Operational font source"
+    "note": "one font glyph serves multiple app resource families"
   },
   {
     "exportedFile": "vendor/lucide/aira-operational-icons/svg/device-mobile.svg",
     "originalSource": "Lucide 1.38.0 / smartphone",
     "primaryResourceFamily": "app_toolbar_add_to_desktop",
     "resourceFamilies": [
-      "app_toolbar_add_to_desktop"
+      "app_toolbar_add_to_desktop",
+      "app_cross_device_link_local_device"
     ],
-    "note": "Lucide Operational font source"
+    "note": "one font glyph serves multiple app resource families"
   },
   {
     "exportedFile": "vendor/lucide/aira-operational-icons/svg/device-rotate.svg",
@@ -396,9 +398,10 @@
     "originalSource": "Lucide 1.38.0 / info",
     "primaryResourceFamily": "app_settings_about",
     "resourceFamilies": [
-      "app_settings_about"
+      "app_settings_about",
+      "app_cross_device_link_help"
     ],
-    "note": "Lucide Operational font source"
+    "note": "one font glyph serves multiple app resource families"
   },
   {
     "exportedFile": "vendor/lucide/aira-operational-icons/svg/link-simple.svg",

@@ -1,5 +1,6 @@
 import { http } from '@kit.NetworkKit';
 import urlUtils from '@ohos.url';
+import { AiraHttpRequestCancelledError, sharedAiraHttpRequestGate } from '../network/AiraHttpRequestGate';
 import {
   NovelBookOverview,
   NovelCatalogEntry,
@@ -204,31 +205,41 @@ export class ComicBookOverviewAcquisitionEngine {
     const endpoint: string = identity.comicId.length > 0
       ? `${identity.origin}/api/app/v1/comic/detail/${identity.comicId}`
       : `${identity.origin}/api/v1/comic1/comic/detail?${query}`;
-    const request = http.createHttp();
-    try {
-      const response = await request.request(endpoint, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.STRING,
-        connectTimeout: COMIC_BOOK_CONNECT_TIMEOUT_MS,
-        readTimeout: COMIC_BOOK_READ_TIMEOUT_MS,
-        usingCache: false,
-        maxLimit: COMIC_BOOK_MAX_BYTES,
-        header: {
-          'Accept': 'application/json,text/plain,*/*',
-          'Referer': identity.pageUrl,
-          'Platform': 'pc'
+    // Detail lookups accompany shelf browsing, so they share the novel ceiling and may be abandoned on background.
+    return await sharedAiraHttpRequestGate.run('novel', 'background', async (): Promise<string> => {
+      const request = http.createHttp();
+      try {
+        const response = await request.request(endpoint, {
+          method: http.RequestMethod.GET,
+          expectDataType: http.HttpDataType.STRING,
+          connectTimeout: COMIC_BOOK_CONNECT_TIMEOUT_MS,
+          readTimeout: COMIC_BOOK_READ_TIMEOUT_MS,
+          usingCache: false,
+          maxLimit: COMIC_BOOK_MAX_BYTES,
+          header: {
+            'Accept': 'application/json,text/plain,*/*',
+            'Referer': identity.pageUrl,
+            'Platform': 'pc'
+          }
+        });
+        if (response.responseCode < 200 || response.responseCode >= 300 || typeof response.result !== 'string') {
+          return '';
         }
-      });
-      if (response.responseCode < 200 || response.responseCode >= 300 || typeof response.result !== 'string') {
+        const payload: string = response.result;
+        return payload.length > 0 && payload.length <= COMIC_BOOK_MAX_BYTES ? payload : '';
+      } catch (_error) {
+        return '';
+      } finally {
+        request.destroy();
+      }
+    }).catch((error: Error): string => {
+      // The body already turns a failed lookup into an empty result. This only covers the gate refusing or
+      // abandoning the request, which must read the same way.
+      if (error instanceof AiraHttpRequestCancelledError) {
         return '';
       }
-      const payload: string = response.result;
-      return payload.length > 0 && payload.length <= COMIC_BOOK_MAX_BYTES ? payload : '';
-    } catch (_error) {
-      return '';
-    } finally {
-      request.destroy();
-    }
+      throw error;
+    });
   }
 
   private parseZaimanDetail(

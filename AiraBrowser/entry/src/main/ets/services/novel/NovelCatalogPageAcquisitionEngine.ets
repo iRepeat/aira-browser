@@ -1,5 +1,6 @@
 import { http } from '@kit.NetworkKit';
 import { webview } from '@kit.ArkWeb';
+import { AiraHttpRequestCancelledError, sharedAiraHttpRequestGate } from '../network/AiraHttpRequestGate';
 import {
   NovelCatalogEntry,
   NovelCatalogPageCursor,
@@ -130,28 +131,39 @@ export class NovelCatalogPageAcquisitionEngine {
   }
 
   private async fetchJson(url: string, referer: string): Promise<string> {
-    const request = http.createHttp();
-    try {
-      const response = await request.request(url, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.STRING,
-        connectTimeout: NOVEL_CATALOG_PAGE_CONNECT_TIMEOUT_MS,
-        readTimeout: NOVEL_CATALOG_PAGE_READ_TIMEOUT_MS,
-        usingCache: false,
-        maxLimit: NOVEL_CATALOG_PAGE_MAX_BYTES,
-        header: {
-          'Accept': 'application/json,text/plain,*/*',
-          'Referer': referer
+    // Catalog paging is speculative prefetch, so it shares the novel ceiling and may be abandoned on background.
+    return await sharedAiraHttpRequestGate.run('novel', 'background', async (): Promise<string> => {
+      const request = http.createHttp();
+      try {
+        const response = await request.request(url, {
+          method: http.RequestMethod.GET,
+          expectDataType: http.HttpDataType.STRING,
+          connectTimeout: NOVEL_CATALOG_PAGE_CONNECT_TIMEOUT_MS,
+          readTimeout: NOVEL_CATALOG_PAGE_READ_TIMEOUT_MS,
+          usingCache: false,
+          maxLimit: NOVEL_CATALOG_PAGE_MAX_BYTES,
+          header: {
+            'Accept': 'application/json,text/plain,*/*',
+            'Referer': referer
+          }
+        });
+        if (response.responseCode < 200 || response.responseCode >= 300 || typeof response.result !== 'string') {
+          return '';
         }
-      });
-      if (response.responseCode < 200 || response.responseCode >= 300 || typeof response.result !== 'string') {
+        const payload: string = response.result;
+        return payload.length > 0 && payload.length <= NOVEL_CATALOG_PAGE_MAX_BYTES ? payload : '';
+      } finally {
+        request.destroy();
+      }
+    }).catch((error: Error): string => {
+      // A gate rejection is this browser abandoning speculative work, which each caller already handles as an
+      // empty fetch. Anything else is a real network failure and must keep propagating, as it did before the
+      // gate existed.
+      if (error instanceof AiraHttpRequestCancelledError) {
         return '';
       }
-      const payload: string = response.result;
-      return payload.length > 0 && payload.length <= NOVEL_CATALOG_PAGE_MAX_BYTES ? payload : '';
-    } finally {
-      request.destroy();
-    }
+      throw error;
+    });
   }
 
   private buildRequestUrl(

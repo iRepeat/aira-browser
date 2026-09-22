@@ -54,6 +54,10 @@ import {
 } from '@/features/desktop-connection/desktopConnectionRuntime';
 import { useAiraDesktopConnectionProfile } from '@/features/desktop-connection/useAiraDesktopConnectionProfile';
 import { DeviceTabsPage } from '@/features/device-tabs/DeviceTabsPage';
+import {
+  resolveDeviceTabsEntry,
+  type DeviceTabsEntryAction,
+} from '@/features/device-tabs/deviceTabsEntryPresentation';
 import { useDeviceTabsList } from '@/features/device-tabs/useDeviceTabsList';
 import {
   readCrossDeviceTabsEnabledFromLocalStorage,
@@ -67,6 +71,7 @@ import {
   type PersonalServerConnection,
 } from '@/features/personal-server/PersonalServerConnection';
 import { AIRATAB_CAPABILITIES } from '@/config/AiratabDistribution';
+import { resolveCrossDeviceTransportKind } from '@/features/device-tabs/crossDeviceTransport';
 import { resolveCloudFeatureEntryView } from './featureEntryRouting';
 
 type PopupView =
@@ -237,7 +242,12 @@ function readCrossDeviceFeatureState(
   profile: ConfiguredHomeState | null,
   personalServer: PersonalServerConnection | null,
 ): CrossDeviceFeatureState | null {
-  if (selectedSource === 'personal-server' && personalServer) {
+  const transport = resolveCrossDeviceTransportKind({
+    selectedSyncSource: selectedSource,
+    personalServerReady: personalServer !== null,
+    accountSignedIn: profile?.isDesktopLoggedIn === true,
+  });
+  if (transport === 'personal-server' && personalServer) {
     const scope = personalServerAccountScope(personalServer);
     return {
       provider: 'personal-server',
@@ -253,7 +263,7 @@ function readCrossDeviceFeatureState(
       entitled: true,
     };
   }
-  if (selectedSource === 'aira-cloud' && profile) {
+  if (transport === 'account' && profile) {
     return {
       provider: 'aira-cloud',
       identityKey: profile.userId,
@@ -2069,11 +2079,9 @@ export function PopupApp() {
   };
 
   const openHistoryForActiveProvider = () => {
-    if (crossDeviceFeatureState?.provider === 'personal-server') {
-      openHistory();
-      return;
-    }
-    if (crossDeviceFeatureState?.provider === 'aira-cloud') {
+    // History stays a sync domain. Cross-device login must not open it for WebDAV or an unset source.
+    const selectedSource = syncRuntime.state.leafTabSelectedSyncSource;
+    if (selectedSource === 'personal-server' || selectedSource === 'aira-cloud') {
       openHistory();
       return;
     }
@@ -2083,15 +2091,60 @@ export function PopupApp() {
     }));
   };
 
+  const deviceTabsEntry = useMemo(() => {
+    void localVersion;
+    const selectedSource = syncRuntime.state.leafTabSelectedSyncSource;
+    const personalServerReady = personalServerConnection !== null;
+    const scope = selectedSource === 'personal-server' && personalServerConnection
+      ? personalServerAccountScope(personalServerConnection)
+      : desktopConnectionProfile?.uid || '';
+    return resolveDeviceTabsEntry({
+      airaCloudAvailable: AIRATAB_CAPABILITIES.airaCloud,
+      selectedSyncSource: selectedSource,
+      personalServerReady,
+      personalServerTabsCapable: personalServerConnection?.capabilities.crossDeviceTabs === true,
+      signedIn: configuredHomeState?.isDesktopLoggedIn === true,
+      membershipPlan: desktopConnectionProfile?.membershipPlan || '',
+      membershipStatus: desktopConnectionProfile?.membershipStatus || '',
+      membershipExpiresAt: Number(desktopConnectionProfile?.membershipExpiresAt || 0),
+      membershipDegraded: desktopConnectionProfile?.connectionStatus === 'degraded',
+      linkEnabled: scope ? readCrossDeviceTabsEnabledFromLocalStorage(scope) : false,
+    });
+  }, [
+    configuredHomeState?.isDesktopLoggedIn,
+    desktopConnectionProfile,
+    localVersion,
+    personalServerConnection,
+    syncRuntime.state.leafTabSelectedSyncSource,
+  ]);
+
   const openDeviceTabsForActiveProvider = () => {
-    if (crossDeviceFeatureState?.crossDeviceTabsAvailable) {
-      setView('device-tabs');
+    setView('device-tabs');
+  };
+
+  const handleDeviceTabsEntryAction = (action: DeviceTabsEntryAction) => {
+    if (action === 'sign_in') {
+      setView('login');
       return;
     }
-    setView(resolveCloudFeatureEntryView({
-      hasAiraDesktopSession: configuredHomeState?.isDesktopLoggedIn === true,
-      airaCloudAvailable: AIRATAB_CAPABILITIES.airaCloud,
-    }));
+    if (action === 'open_personal_server') {
+      setView('personal-server');
+      return;
+    }
+    if (action === 'retry_membership') {
+      void refreshAiraDesktopConnectionProfileMembership({ force: true })
+        .then(() => setLocalVersion((value) => value + 1))
+        .catch(() => undefined);
+      return;
+    }
+    if (action !== 'enable_link') return;
+    const selectedSource = syncRuntime.state.leafTabSelectedSyncSource;
+    const scope = selectedSource === 'personal-server' && personalServerConnection
+      ? personalServerAccountScope(personalServerConnection)
+      : desktopConnectionProfile?.uid || '';
+    if (!scope) return;
+    writeCrossDeviceTabsEnabled(scope, true);
+    window.dispatchEvent(new CustomEvent('cross-device-tabs-setting-changed'));
   };
 
   return (
@@ -2176,13 +2229,14 @@ export function PopupApp() {
       )}
       {view === 'device-tabs' && (
         <DeviceTabsPage
-          enabled={crossDeviceFeatureState?.crossDeviceTabsAvailable === true
-            && crossDeviceFeatureState.crossDeviceTabsEnabled}
+          entry={deviceTabsEntry}
+          enabled={deviceTabsEntry === 'ready'}
           devices={deviceTabsList.devices}
           loading={deviceTabsList.loading}
           error={deviceTabsList.error}
           onRefresh={deviceTabsList.refresh}
           onBack={() => setView('home')}
+          onAction={handleDeviceTabsEntryAction}
         />
       )}
       <SyncProgressDialog syncRuntime={syncRuntime} />

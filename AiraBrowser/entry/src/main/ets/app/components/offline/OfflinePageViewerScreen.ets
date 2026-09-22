@@ -1442,6 +1442,8 @@ export struct OfflinePageViewerScreen {
       BrowserRootBottomPanelExpandedScrim({
         scrimOpacity: this.resolveBottomBackdropProgress(),
         blockHitTest: this.shouldBlockExpandedScrimHitTest(),
+        settledVisible: this.shouldShowExpandedScrim(),
+        pageBackgroundVisible: this.shouldShowExpandedScrim(),
         onDismiss: () => {
           this.collapseBottomPanelFromScrim();
         }

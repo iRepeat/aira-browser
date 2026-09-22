@@ -177,7 +177,7 @@ export struct SyncExperienceScreen {
   build() {
     Column() {
       SettingsHdsScaffold({
-        title: '同步',
+        title: '数据同步',
         backIconKind: 'back',
         pageBackground: this.storedPageBackgroundColor,
         headerButtonBackground: this.storedPressedBackgroundColor,
@@ -416,7 +416,7 @@ export struct SyncExperienceScreen {
           value: this.state.goalLabel,
           icon: $r('sys.symbol.icloud_fill'),
           imageIcon: SettingsColoredTileIconResources.foregroundIcon('sync'),
-          iconBackgroundColor: this.storedAccentColor,
+          iconBackgroundColor: this.settingsIconBackgrounds.syncMethod,
           iconColor: this.storedSettingsIconForegroundColor,
           rowPosition: 'first',
           isEnabled: !this.isPrivateSession && !this.isBusy,
@@ -433,7 +433,7 @@ export struct SyncExperienceScreen {
           desktopPresentation: this.desktopPresentation,
           value: '查看教程',
           icon: $r('sys.symbol.link'),
-          iconBackgroundColor: this.storedAccentColor,
+          iconBackgroundColor: this.settingsIconBackgrounds.syncPageCrossDevice,
           iconColor: this.storedSettingsIconForegroundColor,
           rowPosition: 'last',
           isEnabled: !this.isPrivateSession && !this.isBusy,
@@ -446,6 +446,27 @@ export struct SyncExperienceScreen {
         })
       }
     }
+  }
+
+  /**
+   * A content switch is the user's own selection, not a readout of whether sync is running, so
+   * it stays editable while the master switch is off: that is exactly when the user configures
+   * what should sync once it is turned back on. The row says 已暂停 instead of lying about the
+   * selection, and the section explains that the choice applies once sync resumes.
+   */
+  private canEditContentSwitch(): boolean {
+    return !this.isPrivateSession && !this.isBusy;
+  }
+
+  /** How a content row describes itself; a paused master outranks the per-item switch. */
+  private resolveContentSwitchStatus(selected: boolean, unsupported: boolean): string {
+    if (unsupported) {
+      return '当前方式不支持';
+    }
+    if (!this.state.masterEnabled) {
+      return '已暂停';
+    }
+    return selected ? '已开启' : '未开启';
   }
 
   @Builder
@@ -461,10 +482,10 @@ export struct SyncExperienceScreen {
               ? '需要重新开启'
               : (this.state.huaweiBookmarkInitializing
                 ? '初始化中'
-                : (this.state.bookmarkSelected ? '已开启' : '未开启')),
+                : this.resolveContentSwitchStatus(this.state.bookmarkSelected, false)),
             icon: $r('sys.symbol.bookmark_fill'),
-            iconBackgroundColor: this.settingsIconBackgrounds.sync,
-            isEnabled: !this.isPrivateSession && !this.isBusy,
+            iconBackgroundColor: this.settingsIconBackgrounds.bookmarks,
+            isEnabled: this.canEditContentSwitch(),
             onChange: (enabled: boolean) => {
               this.onBookmarkSelected(enabled);
             }
@@ -474,13 +495,11 @@ export struct SyncExperienceScreen {
           SyncContentSwitchCard({
             desktopPresentation: this.desktopPresentation,
             title: '历史记录',
-            checked: this.state.historySelected,
-            status: !this.state.historySupported
-              ? '当前方式不支持'
-              : (this.state.historySelected ? '已开启' : '未开启'),
+            checked: this.state.historySupported && this.state.historySelected,
+            status: this.resolveContentSwitchStatus(this.state.historySelected, !this.state.historySupported),
             airaIconId: 'browser.shortcut.history',
-            iconBackgroundColor: this.settingsIconBackgrounds.sync,
-            isEnabled: this.state.historySupported && !this.isPrivateSession && !this.isBusy,
+            iconBackgroundColor: this.settingsIconBackgrounds.history,
+            isEnabled: this.state.historySupported && this.canEditContentSwitch(),
             onChange: (enabled: boolean) => {
               this.onHistorySelected(enabled);
             }
@@ -492,12 +511,12 @@ export struct SyncExperienceScreen {
               desktopPresentation: this.desktopPresentation,
               title: item.title,
               checked: item.enabled,
-              status: item.enabled ? '已开启' : '未开启',
+              status: this.resolveContentSwitchStatus(item.enabled, false),
               icon: $r('sys.symbol.gearshape_fill'),
               imageIcon: this.resolveItemIcon(item.id),
               airaIconId: this.resolveItemAiraIcon(item.id),
               iconBackgroundColor: this.resolveItemIconBackgroundColor(item.id),
-              isEnabled: !this.isPrivateSession && !this.isBusy,
+              isEnabled: this.canEditContentSwitch(),
               onChange: (enabled: boolean) => {
                 this.onPersonalizationItemSelected(item.id, enabled);
               }
@@ -577,7 +596,7 @@ export struct SyncExperienceScreen {
           value: '',
           icon: $r('sys.symbol.gearshape_fill'),
           imageIcon: SettingsColoredTileIconResources.foregroundIcon('general'),
-          iconBackgroundColor: this.storedAccentColor,
+          iconBackgroundColor: this.settingsIconBackgrounds.syncPageAdvanced,
           iconColor: this.storedSettingsIconForegroundColor,
           rowPosition: 'last',
           isEnabled: !this.isPrivateSession && !this.isBusy,
@@ -612,6 +631,10 @@ export struct SyncExperienceScreen {
     }
     if (this.state.huaweiBookmarkInitializing) {
       return '正在从华为云空间拉取并确认完整书签，可离开此页面；稍后会自动重试，也可点“立即同步”。';
+    }
+    // A paused master does not erase the selection, so say what the rows below actually do.
+    if (!this.state.masterEnabled) {
+      return '同步总开关已关闭，这里的选择会在重新开启后生效；关闭某项只会暂停该项同步，不会删除已有数据。';
     }
     return '关闭某项只会暂停该项同步，不会删除本机或云端已有数据。';
   }

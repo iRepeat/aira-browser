@@ -2,7 +2,6 @@ import {
   BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_BOTTOM_GAP,
   BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_HORIZONTAL_INSET,
   BROWSER_BOTTOM_ADDRESS_PANEL_FLOATING_VERTICAL_PADDING,
-  BROWSER_BOTTOM_CHROME_TEXT_SIZE,
   BROWSER_FLOATING_CHROME_PRESSED_SCALE,
   BROWSER_FLOATING_CHROME_PRESS_DURATION_MS,
   BROWSER_FLOATING_CHROME_RELEASE_CURVE,
@@ -12,13 +11,9 @@ import { BrowserBottomPanelResponsiveViewModel } from '../../../core/browser/Bro
 import { BrowserTabsOverviewSection } from '../../../core/browser/tabsOverview/BrowserTabsOverviewSectionPolicy';
 import { AppChromeIconTone } from '../../../core/resources/AppIconResources';
 import { AiraRenderableIconId } from '../../../core/resources/GeneratedAiraIconCatalog';
-import { SegmentedTabs } from '../common/SegmentedTabs';
-import {
-  BROWSER_THEME_STORAGE_ACCENT_KEY,
-  BROWSER_THEME_STORAGE_ON_ACCENT_KEY
-} from '../../../core/theme/BrowserThemeStorageKeys';
 import {
   resolveBrowserTabsOverviewFloatingMaterialShadowColor,
+  resolveBrowserBottomNeutralPressedColor,
   resolveBrowserBottomNeutralPrimaryColor,
   resolveBrowserBottomNeutralSecondaryColor
 } from '../../../core/theme/BrowserBottomPanelNeutralTheme';
@@ -39,13 +34,25 @@ const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_ICON_SIZE: number = 22;
 const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_INSET: number = 4;
 const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SHADOW_RADIUS: number = 40;
 const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SHADOW_OFFSET_Y: number = 0;
+// The ordinary-tabs segment draws its own icon: a framed tab count instead of a glyph.
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_FRAME_WIDTH: number = 24;
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_FRAME_HEIGHT: number = 20;
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_FRAME_RADIUS: number = 6;
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_FRAME_BORDER: number = 1.8;
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_OVERFLOW: number = 99;
+// The selected segment keeps the neutral family: a grey plate, never the accent colour.
+// It is lighter than the neighbouring pressed feedback so a selected segment still reads
+// as selected while the finger is down on another one.
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_SELECTED_LIGHT: string = '#E6FFFFFF';
+const BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_SELECTED_DARK: string = '#47FFFFFF';
 
 @Component
 export struct BrowserTabsOverviewBottomChrome {
-  @StorageProp(BROWSER_THEME_STORAGE_ACCENT_KEY) private storedAccentColor: string = '#0A59F7';
-  @StorageProp(BROWSER_THEME_STORAGE_ON_ACCENT_KEY) private storedOnAccentColor: string = '#FFFFFF';
   @Prop selectedSection: BrowserTabsOverviewSection = 'tabs';
+  @Prop regularTabCount: number = 0;
   @Prop regularTabsLabel: string = '0 个标签页';
+  @Prop privacyTabsLabel: string = '隐私标签页';
+  @Prop crossDeviceTabsLabel: string = '跨设备标签页';
   @Prop viewportWidth: number = 390;
   @Prop viewportHeight: number = 844;
   @Prop surfaceOpacity: number = 1;
@@ -54,16 +61,19 @@ export struct BrowserTabsOverviewBottomChrome {
   @Prop adaptiveForeground: boolean = true;
   @State private pressedOuterScaleTarget: string = '';
   @State private pressedOuterScale: number = 1;
+  @State private pressedSegment: string = '';
 
   onReturn: () => void = () => {};
   onCreateHome: () => void = () => {};
   onSwitchToTabs: () => void = () => {};
   onSwitchToPrivacy: () => void = () => {};
+  onOpenDeviceTabs: () => void = () => {};
 
   private responsiveViewModel: BrowserBottomPanelResponsiveViewModel = new BrowserBottomPanelResponsiveViewModel();
 
   aboutToDisappear(): void {
     this.resetOuterPressScale();
+    this.pressedSegment = '';
   }
 
   build() {
@@ -155,29 +165,17 @@ export struct BrowserTabsOverviewBottomChrome {
         fallbackColor: $r('app.color.browser_bottom_toolbar_glass_background'),
         hostMaterialActive: this.shouldUseHdsMaterialPlate()
       }) {
-        SegmentedTabs({
-          options: [
-            { id: 'tabs', title: this.regularTabsLabel },
-            { id: 'privacy', title: '隐私模式' }
-          ],
-          selectedId: this.selectedSection,
-          barHeight: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT,
-          itemHeight: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT -
-            BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_INSET * 2,
-          fontSize: BROWSER_BOTTOM_CHROME_TEXT_SIZE,
-          barPadding: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_INSET,
-          indicatorBackgroundColor: this.storedAccentColor,
-          selectedTextColor: this.storedOnAccentColor,
-          secondaryTextColor: this.adaptiveForeground ? $r('sys.color.font_secondary') :
-            resolveBrowserBottomNeutralSecondaryColor(this.resolveMaterialMode()),
-          fallbackColor: $r('sys.color.ohos_id_color_background_transparent'),
-          barMaterialEnabled: false,
-          onSelect: (id: string): void => {
-            this.dispatchSectionAction(id as BrowserTabsOverviewSection);
-          }
-        })
-          .width('100%')
-          .height(BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT)
+        Row() {
+          // Privacy, then the ordinary-tab count, then cross-device: the same three
+          // sibling views the bottom bar carries, so the framed count stays the pivot.
+          this.buildSegment('privacy', 'browser.toolbar.privacyMode')
+          this.buildTabCountSegment()
+          this.buildSegment('device', 'settings.themeMode.system')
+        }
+        .width('100%')
+        .height(BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT)
+        .padding(BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_INSET)
+        .alignItems(VerticalAlign.Center)
       }
     }
     .layoutWeight(1)
@@ -185,6 +183,190 @@ export struct BrowserTabsOverviewBottomChrome {
     .height(BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT)
     .borderRadius(BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT / 2)
     .shadow(this.resolveMaterialShadow())
+  }
+
+  /**
+   * Both arguments are constants at every call site, so the builder's by-value parameters cannot
+   * go stale; everything that changes — selection, press state, colours, labels — is read from
+   * `this` inside the builder.
+   *
+   * The segment is a `layoutWeight(1)` cell inside the capsule's padded row. Every segment
+   * therefore takes exactly one third of what the inset leaves, so the three plates are equal
+   * width, and a selected plate lands at the same inset on every side — the capsule is fully
+   * packed by whichever segment is selected.
+   */
+  @Builder
+  private buildSegment(target: string, iconId: AiraRenderableIconId) {
+    Stack({ alignContent: Alignment.Center }) {
+      AiraIcon({
+        airaIconId: iconId,
+        iconSize: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_ICON_SIZE,
+        iconColor: this.resolveSegmentContentColor(target)
+      })
+        .hitTestBehavior(HitTestMode.None)
+    }
+    .layoutWeight(1)
+    .constraintSize({ minWidth: 1 })
+    .height(this.resolveSegmentHeight())
+    .backgroundColor(this.resolveSegmentBackground(target))
+    .borderRadius(this.resolveSegmentHeight() / 2)
+    .accessibilityText(this.resolveSegmentAccessibilityText(target))
+    .onTouch((event: TouchEvent) => {
+      this.updatePressedSegment(target, event.type);
+    })
+    .onClick(() => {
+      this.dispatchSegmentAction(target);
+    })
+  }
+
+  /**
+   * The ordinary-tabs segment is its own icon: a rounded frame that carries the live tab
+   * count, so the bar reports a number where the neighbouring segments show a glyph.
+   */
+  @Builder
+  private buildTabCountSegment() {
+    Stack({ alignContent: Alignment.Center }) {
+      Stack({ alignContent: Alignment.Center }) {
+        Text(this.resolveTabCountText())
+          .fontSize(this.resolveTabCountFontSize())
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.resolveSegmentContentColor('tabs'))
+          .minFontScale(1)
+          .maxFontScale(1)
+          .maxLines(1)
+          .textAlign(TextAlign.Center)
+          .hitTestBehavior(HitTestMode.None)
+      }
+      .width(BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_FRAME_WIDTH)
+      .height(BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_FRAME_HEIGHT)
+      .borderRadius(BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_FRAME_RADIUS)
+      .border({
+        width: BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_FRAME_BORDER,
+        color: this.resolveSegmentContentColor('tabs')
+      })
+    }
+    .layoutWeight(1)
+    .constraintSize({ minWidth: 1 })
+    .height(this.resolveSegmentHeight())
+    .backgroundColor(this.resolveSegmentBackground('tabs'))
+    .borderRadius(this.resolveSegmentHeight() / 2)
+    .accessibilityText(this.regularTabsLabel)
+    .onTouch((event: TouchEvent) => {
+      this.updatePressedSegment('tabs', event.type);
+    })
+    .onClick(() => {
+      this.dispatchSegmentAction('tabs');
+    })
+  }
+
+  private dispatchSegmentAction(target: string): void {
+    if (!this.chromeInteractionEnabled) {
+      return;
+    }
+    if (target === 'device') {
+      // The cross-device segment is a section tab like its neighbours, but entering it is
+      // gated: the shell resolves entitlement and sign-in before the section may be shown,
+      // so the segment reports the request instead of switching on its own.
+      if (this.selectedSection === 'devices') {
+        return;
+      }
+      this.onOpenDeviceTabs();
+      return;
+    }
+    this.dispatchSectionAction(target as BrowserTabsOverviewSection);
+  }
+
+  private updatePressedSegment(target: string, touchType: TouchType): void {
+    if (!this.chromeInteractionEnabled) {
+      this.pressedSegment = '';
+      return;
+    }
+    if (touchType === TouchType.Down) {
+      this.pressedSegment = target;
+      return;
+    }
+    if (touchType === TouchType.Up || touchType === TouchType.Cancel) {
+      if (this.pressedSegment === target) {
+        this.pressedSegment = '';
+      }
+    }
+  }
+
+  private isSegmentSelected(target: string): boolean {
+    if (target === 'tabs') {
+      return this.selectedSection === 'tabs';
+    }
+    if (target === 'privacy') {
+      return this.selectedSection === 'privacy';
+    }
+    return this.selectedSection === 'devices';
+  }
+
+  private resolveSegmentHeight(): number {
+    return BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT -
+      BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_INSET * 2;
+  }
+
+  private resolveSegmentBackground(target: string): ResourceColor {
+    if (this.isSegmentSelected(target)) {
+      return this.resolveSelectedSegmentColor();
+    }
+    if (this.pressedSegment === target) {
+      return resolveBrowserBottomNeutralPressedColor(this.resolveMaterialMode());
+    }
+    return $r('sys.color.ohos_id_color_background_transparent');
+  }
+
+  /**
+   * Selection is a grey plate on both the active and the pressed segment, so the label colour
+   * never has to change with the theme: the accent colour is not part of this cluster.
+   */
+  private resolveSelectedSegmentColor(): ResourceColor {
+    return this.resolveMaterialMode() === 'dark' ? BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_SELECTED_DARK :
+      BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_SEGMENT_SELECTED_LIGHT;
+  }
+
+  private resolveSegmentContentColor(target: string): ResourceColor {
+    if (this.isSegmentSelected(target)) {
+      return this.resolvePrimaryColor();
+    }
+    return this.resolveSecondaryColor();
+  }
+
+  private resolveSegmentAccessibilityText(target: string): string {
+    if (target === 'privacy') {
+      return this.privacyTabsLabel;
+    }
+    if (target === 'device') {
+      return this.crossDeviceTabsLabel;
+    }
+    return this.regularTabsLabel;
+  }
+
+  private resolveTabCountText(): string {
+    const count = this.resolveNormalizedTabCount();
+    return count > BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_OVERFLOW ?
+      `${BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_COUNT_OVERFLOW}+` : `${count}`;
+  }
+
+  private resolveTabCountFontSize(): number {
+    const digits = this.resolveTabCountText().length;
+    if (digits <= 1) {
+      return 13;
+    }
+    return digits === 2 ? 11 : 8;
+  }
+
+  private resolveNormalizedTabCount(): number {
+    if (!Number.isFinite(this.regularTabCount)) {
+      return 0;
+    }
+    return Math.max(0, Math.floor(this.regularTabCount));
+  }
+
+  private resolveSecondaryColor(): ResourceColor {
+    return this.adaptiveForeground ? $r('sys.color.font_secondary') :
+      resolveBrowserBottomNeutralSecondaryColor(this.resolveMaterialMode());
   }
 
   private dispatchOuterAction(target: string): void {

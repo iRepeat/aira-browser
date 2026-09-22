@@ -79,6 +79,7 @@ import {
 } from '../../../core/userscripts/BrowserUserScriptApplicationCoordinator';
 import { UserScriptPageActionsSheet } from '../userscripts/UserScriptPageActionsSheet';
 import { BrowserCrossDeviceTabsSheet } from './BrowserCrossDeviceTabsOverlay';
+import { CrossDeviceTabsEmptyAction } from '../../../core/deviceTabs/CrossDeviceTabsEmptyPresentation';
 import { AppWindowModalLayoutService } from '../../../services/layout/AppWindowModalLayoutService';
 
 const LARGE_SCREEN_NAVIGATION_TOOLBAR_HEIGHT_VP: number = 48;
@@ -508,6 +509,9 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
 
       Column() {
         BrowserCrossDeviceTabsSheet({
+          privacyMode: this.activeTabChrome.privateMode ? 'private' : 'regular',
+          dataScope: this.activeTabChrome.privateMode ? 'session_ephemeral' : 'profile_persistent',
+          onNavigate: (action: CrossDeviceTabsEmptyAction): boolean => this.handleCrossDeviceEmptyNavigate(action),
           onOpenRemoteTab: (url: string, title: string): void => {
             this.crossDeviceTabsPopupVisible = false;
             this.onIntent({ kind: 'open_external_url', text: '', url: url, title: title });
@@ -521,6 +525,26 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
     .height(this.resolvePopupHeight(LARGE_SCREEN_CROSS_DEVICE_TABS_POPUP_HEIGHT_VP))
     .borderRadius(BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP)
     .clip(true)
+  }
+
+  private handleCrossDeviceEmptyNavigate(action: CrossDeviceTabsEmptyAction): boolean {
+    if (action === 'sign_in' || action === 'enable_link' || action === 'refresh' || action === 'none') {
+      return false;
+    }
+    this.crossDeviceTabsPopupVisible = false;
+    if (action === 'open_pro') {
+      this.onIntent({ kind: 'open_settings_target', text: '', settingsDestination: 'aira_pro' });
+      return true;
+    }
+    if (action === 'open_sync_settings') {
+      this.onIntent({ kind: 'open_settings_target', text: '', settingsDestination: 'sync' });
+      return true;
+    }
+    if (action === 'open_setup') {
+      this.onIntent({ kind: 'open_settings_target', text: '', settingsDestination: 'cross_device_link' });
+      return true;
+    }
+    return false;
   }
 
   @Builder

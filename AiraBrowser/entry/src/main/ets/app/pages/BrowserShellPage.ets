@@ -787,10 +787,8 @@ import {
   BottomToolbarGuideSurface,
   createHiddenBottomToolbarGuideSnapshot
 } from '../../core/onboarding/BottomToolbarGuideCoordinator';
-import {
-  CrossDeviceTabPresenceEntryHost,
-  sharedCrossDeviceTabPresenceCoordinator
-} from '../../core/deviceTabs/CrossDeviceTabPresenceCoordinator';
+import { CrossDeviceTabsEmptyAction } from '../../core/deviceTabs/CrossDeviceTabsEmptyPresentation';
+import { CROSS_DEVICE_LINK_SETUP_ROUTE, SYNC_DESKTOP_BOOKMARK_GUIDE_ROUTE } from '../router/AppRoutes';
 import { FeatureGateOverlay } from '../components/browser/FeatureGateOverlay';
 import { NewUserGiftOverlay } from '../components/browser/NewUserGiftOverlay';
 import { BottomToolbarGuideOverlay } from '../components/onboarding/BottomToolbarGuideOverlay';
@@ -1273,25 +1271,6 @@ struct BrowserShellPage {
   private externalAppSearchDisclosurePresenter: ExternalAppSearchDisclosurePresenter = new ExternalAppSearchDisclosurePresenter();
   private browserNativeAlertDialogPresenter: BrowserNativeAlertDialogPresenter =
     new BrowserNativeAlertDialogPresenter();
-  private crossDeviceTabPresenceEntryHost: CrossDeviceTabPresenceEntryHost =
-    new CrossDeviceTabPresenceEntryHost(
-      (): void => {
-        this.browserTransientSurfaceCoordinator.openSystemSheet('crossDeviceTabs');
-      },
-      (): void => {
-        this.browserShellRouteCoordinator.openAiraProPage();
-      },
-      (): void => {
-        this.browserShellRouteCoordinator.openSyncSettingsPage();
-      },
-      (title: string, message: string): void => {
-        this.browserNativeAlertDialogPresenter.inform({
-          title: title,
-          message: message,
-          confirmLabel: '知道了'
-        });
-      }
-    );
   private browserAddressSubmissionShell: BrowserAddressSubmissionShell = {
       resolveSessionFacts: () => ({
         availableSearchEngines: this.availableSearchEngines,
@@ -5152,6 +5131,7 @@ struct BrowserShellPage {
       loadFailureSurfaceCoordinator: this.browserWebLoadFailureSurfaceCoordinator,
       offlineFastFailureCoordinator: this.browserOfflineFastFailureCoordinator,
       webLoadRuntimeCoordinator: this.browserWebLoadRuntimeCoordinator,
+      webNavigationInterceptionCoordinator: this.browserWebNavigationInterceptionCoordinator,
       activeTabRuntimeRestoreCoordinator: this.browserActiveTabRuntimeRestoreCoordinator,
       addressSubmissionCoordinator: this.addressSubmissionCoordinator,
       appUrlOpenCoordinator: this.browserAppUrlOpenCoordinator,
@@ -8004,10 +7984,12 @@ struct BrowserShellPage {
         this.dispatchTabsOverviewSession({ type: 'interrupt_entry_selection', tabId: tabId });
       },
       onOpenDeviceTabs: () => {
-        sharedCrossDeviceTabPresenceCoordinator.requestOpenPanel(
-          this.featureGateCoordinator,
-          this.crossDeviceTabPresenceEntryHost
-        );
+        this.requestCrossDeviceTabsSection();
+      },
+      crossDeviceDataScope: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().dataScope,
+      crossDevicePrivacyMode: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().privacyMode,
+      onCrossDeviceNavigate: (action: CrossDeviceTabsEmptyAction): boolean => {
+        return this.handleCrossDeviceEmptyNavigate(action);
       }
     })
   }
@@ -8083,6 +8065,7 @@ struct BrowserShellPage {
       blockHitTest: this.buildRootBottomPanelExpandedScrimState().blockHitTest,
       surfaceEligible: this.buildRootBottomPanelExpandedScrimState().surfaceEligible,
       settledVisible: this.buildRootBottomPanelExpandedScrimState().visible,
+      pageBackgroundVisible: this.buildRootBottomPanelExpandedScrimState().pageBackgroundVisible,
       presentationChannel:
         this.browserRootBottomPanelSessionCoordinator.getSearchBackdropPresentationChannel(),
       onDismiss: () => {
@@ -9391,6 +9374,37 @@ struct BrowserShellPage {
     return this.tabsOverviewPresentationState.activeSection;
   }
 
+  /**
+   * The cross-device segment always enters the section. Sign-in, Pro, the link switch, and an
+   * empty device list are empty pages inside it; their buttons navigate, the tap itself does not.
+   */
+  private requestCrossDeviceTabsSection(): void {
+    this.dispatchTabsOverviewSession({ type: 'change_section', section: 'devices' });
+  }
+
+  private handleCrossDeviceEmptyNavigate(action: CrossDeviceTabsEmptyAction): boolean {
+    if (action === 'open_pro') {
+      this.browserShellRouteCoordinator.openAiraProPage();
+      return true;
+    }
+    if (action === 'open_sync_settings') {
+      this.browserShellRouteCoordinator.openSyncSettingsPage();
+      return true;
+    }
+    if (action === 'open_setup') {
+      this.browserShellRouteCoordinator.openSimpleRoute(CROSS_DEVICE_LINK_SETUP_ROUTE, '打开互联教程失败');
+      return true;
+    }
+    if (action === 'open_guide') {
+      this.browserShellRouteCoordinator.openSimpleRoute(
+        SYNC_DESKTOP_BOOKMARK_GUIDE_ROUTE,
+        '打开跨设备使用指南失败'
+      );
+      return true;
+    }
+    return false;
+  }
+
   private exportTabsOverviewDebugSnapshot(tabId: string): void {
     if (!TABS_OVERVIEW_DEBUG_SNAPSHOT_EXPORT_ENABLED) {
       return;
@@ -9710,6 +9724,9 @@ struct BrowserShellPage {
       this.buildDesktopLoginConfirmSheet()
     } else if (this.browserTransientSurfaceSnapshot.systemSheet.type === 'crossDeviceTabs') {
       BrowserCrossDeviceTabsSheet({
+        dataScope: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().dataScope,
+        privacyMode: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().privacyMode,
+        onNavigate: (action: CrossDeviceTabsEmptyAction): boolean => this.handleCrossDeviceEmptyNavigate(action),
         onOpenRemoteTab: (url: string, title: string) => {
           this.closeSystemSheet();
           this.browserAppUrlOpenCoordinator.open({

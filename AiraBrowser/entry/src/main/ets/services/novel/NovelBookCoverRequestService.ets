@@ -1,4 +1,5 @@
 import { http } from '@kit.NetworkKit';
+import { AiraHttpRequestCancellation, sharedAiraHttpRequestGate } from '../network/AiraHttpRequestGate';
 import urlUtils from '@ohos.url';
 import { NovelSiteRule } from '../../features/novel/NovelSiteRules';
 import { NovelRuleCatalog, sharedNovelRuleCatalog } from './NovelRuleCatalog';
@@ -18,36 +19,43 @@ export class NovelBookCoverRequestService {
     if (!this.isRemoteImageUrl(normalizedUrl)) {
       throw new Error('novel-cover-url');
     }
-    const request = http.createHttp();
-    try {
-      const headers: Record<string, string> = {
-        'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.4',
-        'User-Agent': 'Mozilla/5.0 (Mobile; HarmonyOS) AppleWebKit/537.36 Safari/537.36 AiraBrowser/1.0'
-      };
-      const safeReferer: string = this.resolveSafeReferer(refererUrl);
-      if (safeReferer.length > 0) {
-        headers['Referer'] = safeReferer;
-      }
-      const response = await request.request(normalizedUrl, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        connectTimeout: COVER_REQUEST_TIMEOUT_MS,
-        readTimeout: COVER_REQUEST_TIMEOUT_MS,
-        usingCache: false,
-        maxLimit: COVER_MAX_BYTES,
-        header: headers
-      });
-      if (response.responseCode < 200 || response.responseCode >= 300 ||
-        !(response.result instanceof ArrayBuffer)) {
-        throw new Error(`novel-cover-http-${response.responseCode}`);
-      }
-      if (response.result.byteLength <= 0 || response.result.byteLength > COVER_MAX_BYTES) {
-        throw new Error(`novel-cover-size-${response.result.byteLength}`);
-      }
-      return response.result;
-    } finally {
-      request.destroy();
+    const headers: Record<string, string> = {
+      'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.4',
+      'User-Agent': 'Mozilla/5.0 (Mobile; HarmonyOS) AppleWebKit/537.36 Safari/537.36 AiraBrowser/1.0'
+    };
+    const safeReferer: string = this.resolveSafeReferer(refererUrl);
+    if (safeReferer.length > 0) {
+      headers['Referer'] = safeReferer;
     }
+    // A shelf requests one cover per book. Without a ceiling a large shelf holds many NetStack handles open at
+    // once; the gate keeps two in flight and abandons the queue when the app leaves the foreground.
+    return await sharedAiraHttpRequestGate.run('novel', 'background', async (
+      cancellation: AiraHttpRequestCancellation
+    ): Promise<ArrayBuffer> => {
+      cancellation.throwIfCancelled();
+      const request = http.createHttp();
+      try {
+        const response = await request.request(normalizedUrl, {
+          method: http.RequestMethod.GET,
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          connectTimeout: COVER_REQUEST_TIMEOUT_MS,
+          readTimeout: COVER_REQUEST_TIMEOUT_MS,
+          usingCache: false,
+          maxLimit: COVER_MAX_BYTES,
+          header: headers
+        });
+        if (response.responseCode < 200 || response.responseCode >= 300 ||
+          !(response.result instanceof ArrayBuffer)) {
+          throw new Error(`novel-cover-http-${response.responseCode}`);
+        }
+        if (response.result.byteLength <= 0 || response.result.byteLength > COVER_MAX_BYTES) {
+          throw new Error(`novel-cover-size-${response.result.byteLength}`);
+        }
+        return response.result;
+      } finally {
+        request.destroy();
+      }
+    });
   }
 
   private isRemoteImageUrl(value: string): boolean {

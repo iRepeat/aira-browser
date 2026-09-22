@@ -122,7 +122,29 @@ function buildSettingsIconBackgroundTokens(accent: string): BrowserSettingsIconB
     appearance: blendHexColor(accent, '#B3A52B', 0.5),
     experiments: blendHexColor(accent, '#A55BE0', 0.5),
     sync: blendHexColor(accent, '#5368FF', 0.34),
-    about: blendHexColor(accent, '#5E687D', 0.48)
+    about: blendHexColor(accent, '#5E687D', 0.48),
+    crossDeviceLink: accent,
+    customHomepage: accent,
+    toolbar: accent,
+    privateMode: blendHexColor(accent, '#7158F6', 0.46),
+    webFeatures: blendHexColor(accent, '#8C58D6', 0.5),
+    webApps: accent,
+    advancedSettings: accent,
+    bookmarks: blendHexColor(accent, '#5368FF', 0.34),
+    history: blendHexColor(accent, '#5368FF', 0.34),
+    homeShortcuts: blendHexColor(accent, '#5368FF', 0.34),
+    activityHeatmap: blendHexColor(accent, '#5E687D', 0.48),
+    novelBookshelf: accent,
+    syncMethod: accent,
+    syncPageCrossDevice: accent,
+    syncPageAdvanced: accent,
+    backupFrequency: accent,
+    backupLocation: blendHexColor(accent, '#5368FF', 0.34),
+    addDevice: accent,
+    siteLocation: blendHexColor(accent, '#24A184', 0.48),
+    siteMicrophone: blendHexColor(accent, '#24A184', 0.48),
+    siteClipboard: blendHexColor(accent, '#4F79F0', 0.38),
+    siteExternalActions: blendHexColor(accent, '#4F79F0', 0.38)
   };
 }
 

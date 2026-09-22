@@ -36,6 +36,11 @@ export interface BrowserSearchBackdropDirectToneInput {
   progress: number;
 }
 
+export interface BrowserSearchBackdropPageBackgroundInput {
+  surfaceEligible: boolean;
+  detent: HomeSearchPanelDetent;
+}
+
 export interface BrowserSearchBackdropSettlePlan {
   runId: number;
   targetProgress: number;
@@ -108,6 +113,13 @@ export class BrowserSearchBackdropPresentationViewModel {
 
   shouldUseDirectToneEffect(input: BrowserSearchBackdropDirectToneInput): boolean {
     return input.surfaceEligible && this.clampProgress(input.progress) > 0.01;
+  }
+
+  // The expanded search interface owns a full-screen page background. Drag progress must not
+  // paint it: a partial page colour behind a capsule that is still following the finger reads
+  // as a veil. The background appears only once that interface is the committed middle surface.
+  resolveExpandedPageBackgroundVisible(input: BrowserSearchBackdropPageBackgroundInput): boolean {
+    return input.surfaceEligible && input.detent === 'middle';
   }
 
   clearExpandedHeight(): void {

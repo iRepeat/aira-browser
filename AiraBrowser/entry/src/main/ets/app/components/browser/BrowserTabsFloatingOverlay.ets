@@ -39,8 +39,9 @@ import {
   BROWSER_TABS_OVERVIEW_BOTTOM_CHROME_HEIGHT
 } from './BrowserTabsOverviewBottomChrome';
 import { BrowserTabsOverviewClearButton } from './BrowserTabsOverviewClearButton';
-import { BrowserTabsOverviewDeviceButton } from './BrowserTabsOverviewDeviceButton';
 import { BrowserTabsOverviewEmptyState } from './BrowserTabsOverviewEmptyState';
+import { BrowserCrossDeviceTabsSheet } from './BrowserCrossDeviceTabsOverlay';
+import { CrossDeviceTabsEmptyAction } from '../../../core/deviceTabs/CrossDeviceTabsEmptyPresentation';
 import {
   BrowserTabsOverviewBottomChromeState,
   BrowserTabsOverviewBottomChromeViewModel
@@ -100,7 +101,7 @@ const FLOATING_TABS_SHARED_SNAPSHOT_Z_INDEX: number = 20;
 const FLOATING_TABS_SHARED_SNAPSHOT_DECORATION_Z_INDEX: number = 25;
 const FLOATING_TABS_BOTTOM_CHROME_Z_INDEX: number = 31;
 const FLOATING_TABS_CLEAR_BUTTON_Z_INDEX: number = 32;
-const FLOATING_TABS_DEVICE_BUTTON_Z_INDEX: number = 32;
+const FLOATING_TABS_CROSS_DEVICE_LAYER_Z_INDEX: number = 30;
 const HORIZONTAL_DECK_DRAG_START_DISTANCE: number = 6;
 
 class BrowserTabsStackFrameCallback extends FrameCallback {
@@ -144,6 +145,7 @@ export struct BrowserTabsFloatingOverlay {
   @Watch('refreshDeckPresentation')
   @Prop previewStates: BrowserTabPreviewState[] = [];
   @Prop activeTabId: string = '';
+  @Watch('syncSelectedSectionFromProps')
   @Prop activeSection: BrowserTabsOverviewSection = 'tabs';
   @Prop morphCoveredTabId: string = '';
   @Prop selectionDisplacementTabId: string = '';
@@ -200,6 +202,7 @@ export struct BrowserTabsFloatingOverlay {
   @Watch('refreshDeckPresentation')
   @State private siteIconStates: SiteIconListRenderState[] = [];
   @State private chromeMounted: boolean = false;
+  @State private bottomChromeRegularTabCount: number = 0;
   /**
    * Continuous deck position, in card units: 2 means the third card is focused, 2.4 means 40% of
    * the way to the fourth.
@@ -314,6 +317,11 @@ export struct BrowserTabsFloatingOverlay {
   onEntrySharedSnapshotRectChange: (rect: BrowserTabsOverlayRect) => void = (_rect: BrowserTabsOverlayRect) => {};
   onEntrySharedSnapshotTap: (tabId: string) => void = (_tabId: string) => {};
   onOpenDeviceTabs: () => void = () => {};
+  onOpenRemoteTab: (url: string, title: string) => void = (_url: string, _title: string) => {};
+  onCrossDeviceNavigate: (action: CrossDeviceTabsEmptyAction) => boolean =
+    (_action: CrossDeviceTabsEmptyAction): boolean => false;
+  @Prop crossDeviceDataScope: string = 'profile_persistent';
+  @Prop crossDevicePrivacyMode: string = 'regular';
 
   aboutToAppear(): void {
     // Subscribe once for the lifetime of the component; the identity-icon binding is
@@ -373,6 +381,7 @@ export struct BrowserTabsFloatingOverlay {
     this.ensureDeckPositionForCurrentSection();
     this.syncEntryDisplacementFromProps();
     this.prepareBottomEntryAnimation();
+    this.refreshBottomChromeCounts();
     // Resolve identity icons before the grid is first built. The grid is keyed by tab
     // id, so a later @State update would not repaint already-built cards and every
     // favicon would stay on its letter fallback.
@@ -399,11 +408,11 @@ export struct BrowserTabsFloatingOverlay {
     Stack({ alignContent: Alignment.TopStart }) {
       this.buildBackgroundDismissLayer()
 
-      this.buildCardsLayer()
-
-      if (this.isSelectedSectionEmpty()) {
-        this.buildEmptyStateLayer()
-        this.buildEmptyDismissLayer()
+      if (this.isCrossDeviceSectionSelected()) {
+        // The cross-device page owns the whole content area.
+        this.buildCrossDeviceSectionLayer()
+      } else {
+        this.buildTabCollectionLayers()
       }
 
       // The entering morph is stacked inside the deck instead of above the cards layer, so the
@@ -414,37 +423,28 @@ export struct BrowserTabsFloatingOverlay {
       }
 
       if (this.chromeMounted) {
-        BrowserTabsOverviewClearButton({
-          selectedSection: this.selectedSection,
-          viewportWidth: this.resolveRootWidth(),
-          topSafeInsetVp: this.topSafeInsetVp,
-          surfaceOpacity: this.resolveClearButtonOpacity(),
-          interactionEnabled: this.interactionEnabled && !this.exiting && !this.closeAllExitActive,
-          regularChromeIconTone: this.regularChromeIconTone,
-          adaptiveForeground: true,
-          onClearAll: () => {
-            this.onRequestCloseAll();
-          }
-        })
-        .zIndex(FLOATING_TABS_CLEAR_BUTTON_Z_INDEX)
-
-        if (this.selectedSection === 'tabs') {
-          BrowserTabsOverviewDeviceButton({
+        // Closing tabs is local-only: the cross-device page lists tabs owned by other
+        // installations, which this surface may open but never close.
+        if (!this.isCrossDeviceSectionSelected()) {
+          BrowserTabsOverviewClearButton({
+            selectedSection: this.selectedSection,
+            viewportWidth: this.resolveRootWidth(),
             topSafeInsetVp: this.topSafeInsetVp,
             surfaceOpacity: this.resolveClearButtonOpacity(),
             interactionEnabled: this.interactionEnabled && !this.exiting && !this.closeAllExitActive,
             regularChromeIconTone: this.regularChromeIconTone,
             adaptiveForeground: true,
-            onOpenDeviceTabs: () => {
-              this.onOpenDeviceTabs();
+            onClearAll: () => {
+              this.onRequestCloseAll();
             }
           })
-          .zIndex(FLOATING_TABS_DEVICE_BUTTON_Z_INDEX)
+          .zIndex(FLOATING_TABS_CLEAR_BUTTON_Z_INDEX)
         }
 
         if (this.shouldShowBottomChrome()) {
           BrowserTabsOverviewBottomChrome({
             selectedSection: this.selectedSection,
+            regularTabCount: this.bottomChromeRegularTabCount,
             regularTabsLabel: this.buildBottomChromeState().regularTabsLabel,
             viewportWidth: this.resolveRootWidth(),
             viewportHeight: this.resolveRootHeight(),
@@ -463,6 +463,9 @@ export struct BrowserTabsFloatingOverlay {
             },
             onSwitchToPrivacy: () => {
               this.switchSection('privacy');
+            },
+            onOpenDeviceTabs: () => {
+              this.onOpenDeviceTabs();
             }
           })
           .zIndex(FLOATING_TABS_BOTTOM_CHROME_Z_INDEX)
@@ -567,6 +570,64 @@ export struct BrowserTabsFloatingOverlay {
         this.onEntrySharedSnapshotTap(tabId);
       }
     })
+  }
+
+  /**
+   * The two tab collections share one content branch. It is a builder of its own because an
+   * `else` arm inside the overlay's `Stack` may hold exactly one component call.
+   */
+  @Builder
+  private buildTabCollectionLayers() {
+    if (this.isSelectedSectionEmpty()) {
+      this.buildEmptyStateLayer()
+      this.buildEmptyDismissLayer()
+    }
+
+    this.buildCardsLayer()
+  }
+
+  /**
+   * The cross-device page owns the whole content area and is never driven by the local tab
+   * count: it lists tabs that live on other installations, so "no local tabs" must not
+   * turn it into the ordinary empty state.
+   */
+  @Builder
+  private buildCrossDeviceSectionLayer() {
+    BrowserCrossDeviceTabsSheet({
+      // The page must clear the status bar and the floating bottom chrome, and both of those
+      // are this surface's own live geometry. The component only draws the list, so the
+      // insets come from here instead of a constant baked into it.
+      contentTopInset: this.resolveCrossDeviceContentTopInset(),
+      contentBottomInset: this.resolveCrossDeviceContentBottomInset(),
+      dataScope: this.crossDeviceDataScope,
+      privacyMode: this.crossDevicePrivacyMode,
+      onNavigate: (action: CrossDeviceTabsEmptyAction): boolean => this.onCrossDeviceNavigate(action),
+      onOpenRemoteTab: (url: string, title: string): void => {
+        this.onOpenRemoteTab(url, title);
+      }
+    })
+      .width('100%')
+      .height('100%')
+      .opacity(this.resolveSurfaceProgress())
+      .hitTestBehavior((this.interactionEnabled && !this.exiting && !this.closeAllExitActive) ?
+        HitTestMode.Default : HitTestMode.None)
+      .zIndex(FLOATING_TABS_CROSS_DEVICE_LAYER_Z_INDEX)
+  }
+
+  /**
+   * The cross-device page is inset like the tab grids: the status bar plus the same breathing
+   * room the cards use, never less than the cards' own top padding.
+   */
+  private resolveCrossDeviceContentTopInset(): number {
+    return this.resolveContentTopPadding();
+  }
+
+  /**
+   * The bottom inset has to be the whole chrome zone, not the cards' content gap: the last
+   * remote tab must come to rest above the floating bar instead of behind it.
+   */
+  private resolveCrossDeviceContentBottomInset(): number {
+    return this.resolveContentBottomPadding();
   }
 
   @Builder
@@ -1118,10 +1179,27 @@ export struct BrowserTabsFloatingOverlay {
       this.onSwitchSectionHome(section);
       return;
     }
+    this.applySectionSelection(section);
+    this.onActiveSectionChange(section);
+  }
+
+  /**
+   * A section the shell selects on its own behalf — the cross-device page, after entitlement
+   * and sign-in resolved — arrives as the `activeSection` prop. Adopt it without reporting it
+   * back, or the two would answer each other forever.
+   */
+  private syncSelectedSectionFromProps(): void {
+    const next = this.activeSection;
+    if (next === this.selectedSection) {
+      return;
+    }
+    this.applySectionSelection(next);
+  }
+
+  private applySectionSelection(section: BrowserTabsOverviewSection): void {
     this.stopDeckMotion();
     this.deckPositionSeeded = false;
     this.selectedSection = section;
-    this.onActiveSectionChange(section);
     this.syncSiteIcons();
     this.clearEntryAnimationTimer();
     this.clearLateMountEntryAnimationTimer();
@@ -1130,6 +1208,7 @@ export struct BrowserTabsFloatingOverlay {
     this.refreshDeckPresentation();
     this.positionCardsForCurrentSection();
     this.prepareSectionSwitchPosition();
+    this.refreshBottomChromeCounts();
   }
 
   private returnToEntryTab(): void {
@@ -1165,6 +1244,7 @@ export struct BrowserTabsFloatingOverlay {
     }, () => {
       this.removalState = this.shadowViewModel.markLocalRemoval(this.removalState, tabId);
     });
+    this.refreshBottomChromeCounts();
     this.onCloseTab(tabId);
   }
 
@@ -1210,7 +1290,14 @@ export struct BrowserTabsFloatingOverlay {
     return tabIds;
   }
 
+  private isCrossDeviceSectionSelected(): boolean {
+    return this.selectedSection === 'devices';
+  }
+
   private isSelectedSectionEmpty(): boolean {
+    if (this.isCrossDeviceSectionSelected()) {
+      return false;
+    }
     // The deck already holds its item list; rebuilding every presentation here would run on every
     // animation frame, because `horizontalDeckPosition` is a `@State` the deck writes each frame.
     if (this.isStackLayout()) {
@@ -1291,6 +1378,14 @@ export struct BrowserTabsFloatingOverlay {
     this.syncLocalRemovalStateFromTabs();
     this.refreshDeckPresentation();
     this.syncSiteIcons();
+    this.refreshBottomChromeCounts();
+  }
+
+  private refreshBottomChromeCounts(): void {
+    const state = this.buildBottomChromeState();
+    if (state.regularTabCount !== this.bottomChromeRegularTabCount) {
+      this.bottomChromeRegularTabCount = state.regularTabCount;
+    }
   }
 
   private syncSiteIcons(): void {
@@ -2288,6 +2383,7 @@ export struct BrowserTabsFloatingOverlay {
     this.stopDeckMotion();
     this.removalState = this.shadowViewModel.markLocalRemoval(this.removalState, tabId);
     this.refreshDeckPresentation();
+    this.refreshBottomChromeCounts();
     // `refreshDeckPresentation` anchors on the list that still held the closed card, so its position
     // is not the one the animation already reached. Re-publishing the settled values is a no-op for
     // the cards, because they are where the animation left them.

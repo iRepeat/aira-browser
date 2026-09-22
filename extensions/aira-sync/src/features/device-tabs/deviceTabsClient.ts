@@ -17,6 +17,7 @@ import {
 import { readExtensionStorageRecord } from '@/platform/extensionStorage';
 import { LEAFTAB_SELECTED_SYNC_SOURCE_KEY } from '@/features/sync/app/leafTabSyncStorageKeys';
 import { parseLeafTabSyncRemoteKind } from '@/sync/leaftab/source';
+import { resolveCrossDeviceTransportKind } from './crossDeviceTransport';
 
 type ApiResponse = {
   ok?: boolean;
@@ -48,7 +49,7 @@ export async function publishCurrentDesktopTabs(): Promise<boolean> {
 export async function listPhoneTabs(): Promise<CrossDeviceTabList> {
   const context = await readDesktopContext();
   if (!context) {
-    throw new Error('请先连接 Personal Server 或 Aira 手机端。');
+    throw new Error('请先登录同一账号，或连接 Personal Server。');
   }
   if (!context.entitled) {
     throw new Error('Aira 云跨设备标签页需要 Pro；Personal Server 不需要会员。');
@@ -92,7 +93,15 @@ async function readDesktopContext(): Promise<{
   ]);
   const selectedSource = parseLeafTabSyncRemoteKind(sourceRecord[LEAFTAB_SELECTED_SYNC_SOURCE_KEY]);
   const metadata = resolveBrowserMetadata();
-  if (selectedSource === 'personal-server' && personalServer?.capabilities.crossDeviceTabs) {
+  const accountSignedIn = Boolean(
+    session?.uid && session.deviceCredential && snapshot.status !== 'reauth-required',
+  );
+  const transport = resolveCrossDeviceTransportKind({
+    selectedSyncSource: selectedSource,
+    personalServerReady: Boolean(personalServer?.capabilities.crossDeviceTabs),
+    accountSignedIn,
+  });
+  if (transport === 'personal-server' && personalServer) {
     return {
       kind: 'personal-server',
       uid: personalServer.instanceId,
@@ -109,8 +118,7 @@ async function readDesktopContext(): Promise<{
       },
     };
   }
-  if (selectedSource !== 'aira-cloud') return null;
-  if (!session?.uid || !session.deviceCredential || snapshot.status === 'reauth-required') {
+  if (transport !== 'account' || !session?.uid || !session.deviceCredential) {
     return null;
   }
   const expiresAt = Number(snapshot.membership?.expiresAt || 0);

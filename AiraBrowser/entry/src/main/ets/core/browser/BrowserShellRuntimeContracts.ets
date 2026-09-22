@@ -43,8 +43,8 @@ export type BrowserSystemSheetType =
   'novelReaderText' |
   'novelReaderAppearance' |
   'novelReaderSettings' |
-  'crossDeviceTabs' |
-  'resourceCandidates';
+  'resourceCandidates' |
+  'crossDeviceTabs';
 
 export interface PendingGeolocationPermissionRequest {
   tabId: string;

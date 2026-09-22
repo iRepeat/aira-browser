@@ -5,11 +5,11 @@
     "familyName": "AiraOperationalIcons",
     "fontFile": "vendor/lucide/aira-operational-icons/AiraOperationalIcons.ttf",
     "packagedRawfile": "fonts/aira/aira-operational-icons.ttf",
-    "fontSha256": "21b6a4ce8631c2b63fe602ec8effbcbc3071ac7d2d6e5fcee11f27c367032862",
+    "fontSha256": "2358ce4aca6bd789ca1f3b33098d527732f4d8a24145efe660bdfc795c832dc3",
     "selectionFile": "vendor/lucide/aira-operational-icons/selection.json",
     "selectionSha256": "7129e2313559f24d52065311edd88d4d0810a139b65e298f577bef66a3539b3b",
     "sourceManifestFile": "vendor/lucide/aira-operational-icons/source-manifest.json",
-    "sourceManifestSha256": "ba592cc37b582101e7d1e5489e42570482b04255cbb3932fe6864ee85beb0559",
+    "sourceManifestSha256": "cd0f147ec46906c20cc0bc2e4e059ca1fb53db533a2539318d19323733e70f1b",
     "fontQuarantinedIconIds": [
       "desktopCard.shortcut.history",
       "desktopCard.shortcut.bookmarks",
@@ -1572,6 +1572,33 @@
         "kind": "font",
         "glyph": "toolbar-expand-hint",
         "reason": "lucide-1.38.0"
+      }
+    },
+    {
+      "id": "crossDeviceLink.localDevice",
+      "legacyResourceFamily": "app_cross_device_link_local_device",
+      "representation": {
+        "kind": "font",
+        "glyph": "device-mobile",
+        "reason": "this page's own phone, so the row never borrows the send-to-desktop action glyph"
+      }
+    },
+    {
+      "id": "crossDeviceLink.peerComputer",
+      "legacyResourceFamily": "app_cross_device_link_peer_computer",
+      "representation": {
+        "kind": "font",
+        "glyph": "desktop",
+        "reason": "a paired computer on the cross-device-link page"
+      }
+    },
+    {
+      "id": "crossDeviceLink.help",
+      "legacyResourceFamily": "app_cross_device_link_help",
+      "representation": {
+        "kind": "font",
+        "glyph": "info",
+        "reason": "the cross-device-link page's help action"
       }
     }
   ],

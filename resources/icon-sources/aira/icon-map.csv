@@ -23,8 +23,8 @@ vendor/lucide/aira-operational-icons/svg/code.svg,Lucide 1.38.0 / code,app_setti
 vendor/lucide/aira-operational-icons/svg/corners-out.svg,Lucide 1.38.0 / fullscreen,app_toolbar_full_screen,app_toolbar_full_screen,Lucide Operational font source
 vendor/lucide/aira-operational-icons/svg/crown.svg,Lucide 1.38.0 / crown,app_settings_membership,app_settings_membership;app_membership_benefit_membership,one font glyph serves multiple app resource families
 vendor/lucide/aira-operational-icons/svg/cursor-text.svg,Lucide 1.38.0 / text-cursor-input,app_toolbar_fill_address,app_toolbar_fill_address,Lucide Operational font source
-vendor/lucide/aira-operational-icons/svg/desktop.svg,Lucide 1.38.0 / monitor,app_theme_mode_system,app_theme_mode_system,Lucide Operational font source
-vendor/lucide/aira-operational-icons/svg/device-mobile.svg,Lucide 1.38.0 / smartphone,app_toolbar_add_to_desktop,app_toolbar_add_to_desktop,Lucide Operational font source
+vendor/lucide/aira-operational-icons/svg/desktop.svg,Lucide 1.38.0 / monitor,app_theme_mode_system,app_theme_mode_system;app_cross_device_link_peer_computer,one font glyph serves multiple app resource families
+vendor/lucide/aira-operational-icons/svg/device-mobile.svg,Lucide 1.38.0 / smartphone,app_toolbar_add_to_desktop,app_toolbar_add_to_desktop;app_cross_device_link_local_device,one font glyph serves multiple app resource families
 vendor/lucide/aira-operational-icons/svg/device-rotate.svg,Lucide 1.38.0 / rotate-cw,app_toolbar_screen_orientation,app_toolbar_screen_orientation,Lucide Operational font source
 vendor/lucide/aira-operational-icons/svg/dots-three.svg,Lucide 1.38.0 / ellipsis,app_toolbar_more,app_toolbar_more,Lucide Operational font source
 vendor/lucide/aira-operational-icons/svg/download-simple.svg,Lucide 1.38.0 / download,app_settings_downloads,app_settings_downloads;app_shortcut_downloads;app_membership_benefit_downloads,one font glyph serves multiple app resource families
@@ -40,7 +40,7 @@ vendor/lucide/aira-operational-icons/svg/globe.svg,Lucide 1.38.0 / globe,app_set
 vendor/lucide/aira-operational-icons/svg/globe-earth.svg,Lucide 1.38.0 / earth,app_userscripts_default_icon,app_userscripts_default_icon,Lucide Operational font source
 vendor/lucide/aira-operational-icons/svg/house.svg,Lucide 1.38.0 / house,app_settings_custom_homepage,app_settings_custom_homepage;app_shortcut_home,one font glyph serves multiple app resource families
 vendor/lucide/aira-operational-icons/svg/identification-card.svg,Lucide 1.38.0 / contact,app_settings_user_agent,app_settings_user_agent;app_toolbar_user_agent_preset,one font glyph serves multiple app resource families
-vendor/lucide/aira-operational-icons/svg/info.svg,Lucide 1.38.0 / info,app_settings_about,app_settings_about,Lucide Operational font source
+vendor/lucide/aira-operational-icons/svg/info.svg,Lucide 1.38.0 / info,app_settings_about,app_settings_about;app_cross_device_link_help,one font glyph serves multiple app resource families
 vendor/lucide/aira-operational-icons/svg/link-simple.svg,Lucide 1.38.0 / link,app_toolbar_copy_link,app_toolbar_copy_link,Lucide Operational font source
 vendor/lucide/aira-operational-icons/svg/lock.svg,Lucide 1.38.0 / lock,app_video_assistant_lock,app_video_assistant_lock,Lucide Operational font source
 vendor/lucide/aira-operational-icons/svg/lock-key.svg,Lucide 1.38.0 / shield-keyhole,app_toolbar_connection_security,app_toolbar_connection_security,Lucide Operational font source

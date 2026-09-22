@@ -35,6 +35,7 @@ const SETTINGS_ROW_SPACE = 12;
 const SETTINGS_ACTION_BUTTON_HEIGHT = 44;
 const SETTINGS_TEXT_FIELD_HEIGHT = 46;
 const SETTINGS_ROW_ICON_SIZE = 34;
+const SETTINGS_STATIC_ICON_SIZE = 20;
 const SETTINGS_ROW_OPTION_ICON_SIZE = 38;
 const SETTINGS_DROPDOWN_MENU_MIN_WIDTH = 232;
 const SETTINGS_DROPDOWN_MENU_ITEM_HEIGHT = 48;
@@ -750,11 +751,45 @@ export struct SettingsStaticValueRow {
   @Prop secondaryTextColor: ResourceColor = '';
   @Prop valueClickable: boolean = false;
   @Prop pressedBackgroundColor: ResourceColor = '';
+  /** Optional leading glyph, so a static row can still show what kind of thing it names. */
+  @Prop icon?: Resource = undefined;
+  /** The same slot for an Aira font icon, which is what app-owned rows should prefer. */
+  @Prop airaIconId: AiraRenderableIconId | undefined = undefined;
+  @Prop iconColor: ResourceColor = '';
+  /**
+   * The badge behind the glyph. Unset means transparent, so a plain row stays plain; a list
+   * that sits beside icon rows can pass its own color to keep one leading shape across rows.
+   */
+  @Prop iconBackgroundColor?: ResourceColor = undefined;
   @State valuePressed: boolean = false;
   onValueAction?: () => void;
 
   build() {
     Row({ space: SETTINGS_ROW_SPACE }) {
+      if (this.airaIconId !== undefined || this.icon) {
+        Stack({ alignContent: Alignment.Center }) {
+          Circle()
+            .width(SETTINGS_ROW_ICON_SIZE)
+            .height(SETTINGS_ROW_ICON_SIZE)
+            .fill(this.resolveIconBackgroundColor())
+
+          if (this.airaIconId !== undefined) {
+            AiraIcon({
+              airaIconId: this.airaIconId as AiraRenderableIconId,
+              iconSize: SETTINGS_STATIC_ICON_SIZE,
+              iconColor: this.resolveIconColor()
+            })
+          } else {
+            SymbolGlyph(this.icon as Resource)
+              .fontSize(SETTINGS_STATIC_ICON_SIZE)
+              .fontWeight(FontWeight.Regular)
+              .fontColor([this.resolveIconColor()])
+          }
+        }
+        .width(SETTINGS_ROW_ICON_SIZE)
+        .height(SETTINGS_ROW_ICON_SIZE)
+      }
+
       Column({ space: 4 }) {
         Text(this.title)
           .width('100%')
@@ -847,6 +882,16 @@ export struct SettingsStaticValueRow {
       return this.resolvePrimaryTextColor();
     }
     return this.resolveSecondaryTextColor();
+  }
+
+  private resolveIconColor(): ResourceColor {
+    return `${this.iconColor}`.length > 0 ? this.iconColor : this.storedPrimaryTextColor;
+  }
+
+  private resolveIconBackgroundColor(): ResourceColor {
+    return this.iconBackgroundColor === undefined
+      ? $r('sys.color.ohos_id_color_background_transparent')
+      : this.iconBackgroundColor;
   }
 
   private resolveValueBackgroundColor(): ResourceColor {

@@ -53,7 +53,7 @@ export struct HuaweiAccountInfoContent {
           title: 'Aira Pro',
           value: this.resolveMembershipValue(),
           airaIconId: 'settings.membership',
-          iconBackgroundColor: this.theme.accent,
+          iconBackgroundColor: this.theme.settingsIconBackgrounds.syncMethod,
           iconColor: this.iconForegroundColor,
           rowPosition: 'single',
           primaryTextColor: this.theme.textPrimary,

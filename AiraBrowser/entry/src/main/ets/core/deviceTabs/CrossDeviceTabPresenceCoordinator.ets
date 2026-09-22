@@ -1,11 +1,10 @@
 import { TabRecord } from '../../common/models/BrowserModels';
 import { AIRA_DISTRIBUTION_CAPABILITY_OWNER } from '../../common/config/AiraDistributionCapabilityOwner';
-import { AiraMembershipState } from '../../common/models/MembershipModels';
+import { AiraLapsedProView, AiraMembershipState, buildEmptyLapsedProView } from '../../common/models/MembershipModels';
 import {
   AiraPersonalServerConfig,
   AiraSyncSettings
 } from '../../common/models/AiraSyncModels';
-import { AIRA_FEATURE_CROSS_DEVICE_TABS } from '../../common/constants/MembershipFeatureKeys';
 import {
   sharedCrossDeviceTabPresencePreferencesRepository,
   CrossDeviceTabPresencePreferencesRepository
@@ -24,15 +23,19 @@ import {
   BrowserWindowSessionLifetimeListener,
   sharedBrowserWindowSessionLifetimeSignal
 } from '../browser/BrowserWindowSessionLifetimeSignal';
-import { FeatureGateCoordinator } from '../membership/FeatureGateCoordinator';
 import {
   CrossDeviceTabPresenceDevice,
   CrossDeviceTabPresenceLocalDevice,
-  CrossDeviceTabPresencePanelAccessDecision,
   CrossDeviceTabPresencePanelState,
   CrossDeviceTabPresencePanelStatus,
   CrossDeviceTabPresenceTab
 } from './CrossDeviceTabPresenceModels';
+import {
+  buildCrossDeviceTabsEmptyPresentation,
+  CROSS_DEVICE_TABS_EMPTY_NONE,
+  CrossDeviceTabsEmptyKind,
+  CrossDeviceTabsEmptyPresentation
+} from './CrossDeviceTabsEmptyPresentation';
 
 const PUBLISH_DEBOUNCE_MS: number = 750;
 const HEARTBEAT_INTERVAL_MS: number = 60000;
@@ -46,46 +49,13 @@ interface CrossDeviceTabPresenceProviderContext {
   personalServer?: AiraPersonalServerConfig;
 }
 
-export class CrossDeviceTabPresenceEntryHost {
-  private readonly openTabsSheetAction: () => void;
-  private readonly openProAction: () => void;
-  private readonly openSyncSettingsAction: () => void;
-  private readonly showUnavailableAction: (title: string, message: string) => void;
-
-  constructor(
-    openTabsSheetAction: () => void,
-    openProAction: () => void,
-    openSyncSettingsAction: () => void,
-    showUnavailableAction: (title: string, message: string) => void
-  ) {
-    this.openTabsSheetAction = openTabsSheetAction;
-    this.openProAction = openProAction;
-    this.openSyncSettingsAction = openSyncSettingsAction;
-    this.showUnavailableAction = showUnavailableAction;
-  }
-
-  openTabsSheet(): void {
-    this.openTabsSheetAction();
-  }
-
-  openPro(): void {
-    this.openProAction();
-  }
-
-  openSyncSettings(): void {
-    this.openSyncSettingsAction();
-  }
-
-  showUnavailable(title: string, message: string): void {
-    this.showUnavailableAction(title, message);
-  }
-}
-
 export class CrossDeviceTabPresenceCoordinator {
   private readonly preferencesRepository: CrossDeviceTabPresencePreferencesRepository;
   private readonly apiService: CrossDeviceTabPresenceApiService;
   private readonly authService: HuaweiAccountSyncAuthService;
   private syncConfigStore?: AiraSyncConfigStore;
+  private membershipStateReader?: () => AiraMembershipState;
+  private lapsedProReader?: () => AiraLapsedProView;
   private readonly tabsByWindowId: Record<string, CrossDeviceTabPresenceTab[] | undefined> = {};
   private readonly foregroundByWindowId: Record<string, boolean | undefined> = {};
   private readonly lifetimeListeners: Record<string, BrowserWindowSessionLifetimeListener | undefined> = {};
@@ -94,7 +64,6 @@ export class CrossDeviceTabPresenceCoordinator {
   private heartbeatTimer: number = -1;
   private publishPromise?: Promise<void>;
   private entitlementBlocked: boolean = false;
-  private panelOpening: boolean = false;
 
   constructor(
     preferencesRepository?: CrossDeviceTabPresencePreferencesRepository,
@@ -108,6 +77,15 @@ export class CrossDeviceTabPresenceCoordinator {
 
   configureSyncConfigStore(syncConfigStore: AiraSyncConfigStore): void {
     this.syncConfigStore = syncConfigStore;
+  }
+
+  /** Membership facts stay with their owner. The panel only reads them to choose an empty page. */
+  configureMembershipFacts(
+    stateReader: () => AiraMembershipState,
+    lapsedReader: () => AiraLapsedProView
+  ): void {
+    this.membershipStateReader = stateReader;
+    this.lapsedProReader = lapsedReader;
   }
 
   reconcileWindowRecords(windowId: string, records: TabRecord[]): void {
@@ -129,152 +107,69 @@ export class CrossDeviceTabPresenceCoordinator {
     try {
       const settings = await this.requireSyncConfigStore().initialize();
       const localDevice = await this.preferencesRepository.readLocalDevice();
-      if (!this.isSupportedProvider(settings)) {
-        return this.buildPanelState(
-          'disabled',
-          false,
-          localDevice.deviceName,
-          [],
-          this.resolveUnsupportedProviderMessage()
-        );
+      if (settings.remoteKind === 'self_hosted') {
+        const context = await this.resolveProviderContext(settings, localDevice)
+          .catch((): undefined => undefined);
+        if (context === undefined) {
+          return this.buildPanelState(
+            'disabled',
+            false,
+            localDevice.deviceName,
+            [],
+            '请先连接私有化部署',
+            buildCrossDeviceTabsEmptyPresentation('connect_personal_server', 'credentials')
+          );
+        }
+        return this.loadEnabledPanel(context);
       }
-      if (settings.remoteKind === 'aira_cloud' &&
+      if (AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity() ||
         !AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
+        const unavailable = !AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity();
         return this.buildPanelState(
           'disabled',
           false,
           localDevice.deviceName,
           [],
-          AIRA_DISTRIBUTION_CAPABILITY_OWNER.resolveUnavailableReason('aira_cloud')
+          unavailable ? '跨设备互联不可用' : '请先连接私有化部署',
+          buildCrossDeviceTabsEmptyPresentation('connect_personal_server', unavailable ? 'unavailable' : 'community')
         );
       }
       const context = await this.resolveProviderContext(settings, localDevice);
       if (context === undefined) {
-        return this.buildPanelState('signed_out', false, localDevice.deviceName, [], '请先使用华为账号登录。');
+        return this.buildPanelState(
+          'signed_out',
+          false,
+          localDevice.deviceName,
+          [],
+          '请先使用华为账号登录。',
+          buildCrossDeviceTabsEmptyPresentation('sign_in')
+        );
       }
-      const enabled = await this.preferencesRepository.isEnabled(context.preferenceScope);
-      if (!enabled) {
-        return this.buildPanelState('disabled', false, context.device.deviceName, [], '');
+      const proKind = this.resolveCloudProEmptyKind(context.uid);
+      if (proKind !== 'none') {
+        return this.buildPanelState(
+          'disabled',
+          false,
+          context.device.deviceName,
+          [],
+          '',
+          buildCrossDeviceTabsEmptyPresentation(proKind)
+        );
       }
-      const result = context.kind === 'self_hosted' && context.personalServer !== undefined
-        ? await this.apiService.listPersonalServer(
-          context.personalServer.baseUrl,
-          context.personalServer.deviceToken
-        )
-        : await this.apiService.list(context.uid, context.device.deviceId);
-      return {
-        status: 'ready',
-        enabled: true,
-        deviceName: context.device.deviceName,
-        devices: result.devices,
-        message: '',
-        serverTime: result.serverTime,
-        onlineWindowMs: result.onlineWindowMs
-      };
+      return this.loadEnabledPanel(context);
     } catch (error) {
       const device = await this.preferencesRepository.readLocalDevice();
-      return this.buildPanelState('error', true, device.deviceName, [], this.resolveErrorMessage(error));
+      const proRequired = this.isProRequired(error);
+      const message = this.resolveErrorMessage(error);
+      return this.buildPanelState(
+        proRequired ? 'disabled' : 'error',
+        false,
+        device.deviceName,
+        [],
+        proRequired ? '' : message,
+        buildCrossDeviceTabsEmptyPresentation(proRequired ? 'pro_required' : 'error', proRequired ? '' : message)
+      );
     }
-  }
-
-  async requestPanelAccess(
-    featureGateCoordinator: FeatureGateCoordinator
-  ): Promise<CrossDeviceTabPresencePanelAccessDecision> {
-    const settings = await this.requireSyncConfigStore().initialize();
-    if (settings.remoteKind === 'self_hosted') {
-      const localDevice = await this.preferencesRepository.readLocalDevice();
-      const context = await this.resolveProviderContext(settings, localDevice);
-      if (context === undefined) {
-        return {
-          allowed: false,
-          title: '请先连接私有化部署',
-          message: '跨设备标签页需要有效的私有化部署设备凭据。',
-          openPro: false,
-          openSyncSettings: true
-        };
-      }
-      await this.enableProviderByDefault(context);
-      return {
-        allowed: true,
-        title: '',
-        message: '',
-        openPro: false
-      };
-    }
-    if (AIRA_DISTRIBUTION_CAPABILITY_OWNER.isCommunity()) {
-      return {
-        allowed: false,
-        title: '请先连接私有化部署',
-        message: '跨设备标签页支持通过你自己部署的私有化部署使用，请先在同步设置中完成连接。',
-        openPro: false,
-        openSyncSettings: true
-      };
-    }
-    if (settings.remoteKind !== 'aira_cloud') {
-      return {
-        allowed: false,
-        title: '当前同步服务不支持跨设备标签页',
-        message: this.resolveUnsupportedProviderMessage(),
-        openPro: false,
-        openSyncSettings: false
-      };
-    }
-    if (!AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
-      return {
-        allowed: false,
-        title: '请先配置跨设备同步',
-        message: '跨设备标签页需要官方云服务或你自己部署的私有化部署。',
-        openPro: false,
-        openSyncSettings: true
-      };
-    }
-    const decision = await featureGateCoordinator.evaluateAccess(
-      AIRA_FEATURE_CROSS_DEVICE_TABS,
-      {
-        dataScope: 'profile_persistent',
-        privacyMode: 'regular',
-        loggedIn: true
-      }
-    );
-    if (!decision.allowed) {
-      const proRequired = decision.reason === 'pro_required';
-      return {
-        allowed: false,
-        title: proRequired ? 'Aira 云跨设备标签页需要 Pro' : decision.title,
-        message: proRequired
-          ? 'Aira 官方托管的跨设备标签页需要 Pro；连接私有化部署后可免费使用。'
-          : decision.message,
-        openPro: true
-      };
-    }
-    const localDevice = await this.preferencesRepository.readLocalDevice();
-    const context = await this.resolveProviderContext(settings, localDevice);
-    if (context === undefined) {
-      return {
-        allowed: false,
-        title: '请先登录华为账号',
-        message: 'Aira 云同步的跨设备标签页需要华为账号登录。',
-        openPro: false
-      };
-    }
-    await this.enableProviderByDefault(context);
-    return {
-      allowed: true,
-      title: '',
-      message: '',
-      openPro: false
-    };
-  }
-
-  requestOpenPanel(
-    featureGateCoordinator: FeatureGateCoordinator,
-    host: CrossDeviceTabPresenceEntryHost
-  ): void {
-    if (this.panelOpening) {
-      return;
-    }
-    this.panelOpening = true;
-    void this.openPanel(featureGateCoordinator, host);
   }
 
   async reconcileMembershipState(state: AiraMembershipState): Promise<void> {
@@ -294,8 +189,7 @@ export class CrossDeviceTabPresenceCoordinator {
       }
       return;
     }
-    if (settings.remoteKind !== 'aira_cloud' ||
-      !AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
+    if (!AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
       this.entitlementBlocked = true;
       this.clearPublishTimer();
       this.stopHeartbeat();
@@ -333,46 +227,73 @@ export class CrossDeviceTabPresenceCoordinator {
 
   async clearCurrentAccountSnapshot(): Promise<void> {
     const settings = await this.requireSyncConfigStore().initialize();
-    if (settings.remoteKind !== 'aira_cloud' ||
-      !AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
+    if (!AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
       return;
     }
-    this.clearPublishTimer();
-    this.stopHeartbeat();
     const identity = await this.authService.getCurrentIdentity();
     if (identity === undefined || identity.uid.trim().length === 0) {
       return;
+    }
+    // Personal Server keeps publishing on its own credential. Signing out only withdraws
+    // the account snapshot, and must not stop that other channel's heartbeat.
+    if (settings.remoteKind !== 'self_hosted') {
+      this.clearPublishTimer();
+      this.stopHeartbeat();
     }
     const device = await this.preferencesRepository.readLocalDevice();
     await this.apiService.clear(identity.uid, device.deviceId);
   }
 
-  private async openPanel(
-    featureGateCoordinator: FeatureGateCoordinator,
-    host: CrossDeviceTabPresenceEntryHost
-  ): Promise<void> {
+  /**
+   * The cross-device switch is this owner's own preference, separate from the data-sync master
+   * switch: a user who pauses bookmarks and history may still want tab handoff and page push.
+   * Turning it off stops publishing and the heartbeat and withdraws our own snapshot, so the
+   * other side stops seeing this phone; it never touches sync state.
+   */
+  async setCrossDeviceLinkEnabled(enabled: boolean): Promise<void> {
+    const settings = await this.requireSyncConfigStore().initialize();
+    const localDevice = await this.preferencesRepository.readLocalDevice();
+    const context = await this.resolveProviderContext(settings, localDevice).catch((): undefined => undefined);
+    if (context === undefined) {
+      return;
+    }
+    await this.preferencesRepository.setEnabled(context.preferenceScope, enabled);
+    if (enabled) {
+      this.entitlementBlocked = false;
+      if (this.hasForegroundWindow()) {
+        this.startHeartbeat();
+        this.schedulePublish();
+      }
+      return;
+    }
+    this.clearPublishTimer();
+    this.stopHeartbeat();
+    await this.withdrawSnapshot(context);
+  }
+
+  /** The preference is scoped to the paired account or server instance, like the panel itself. */
+  async isCrossDeviceLinkEnabled(): Promise<boolean> {
+    const settings = await this.requireSyncConfigStore().initialize();
+    const localDevice = await this.preferencesRepository.readLocalDevice();
+    const context = await this.resolveProviderContext(settings, localDevice).catch((): undefined => undefined);
+    if (context === undefined) {
+      return false;
+    }
+    return await this.preferencesRepository.isEnabled(context.preferenceScope);
+  }
+
+  private async withdrawSnapshot(context: CrossDeviceTabPresenceProviderContext): Promise<void> {
     try {
-      const decision = await this.requestPanelAccess(featureGateCoordinator);
-      if (decision.allowed) {
-        host.openTabsSheet();
+      if (context.kind === 'self_hosted' && context.personalServer !== undefined) {
+        await this.apiService.clearPersonalServer(
+          context.personalServer.baseUrl,
+          context.personalServer.deviceToken
+        );
         return;
       }
-      if (decision.openPro) {
-        host.openPro();
-        return;
-      }
-      if (decision.openSyncSettings === true) {
-        host.openSyncSettings();
-        return;
-      }
-      host.showUnavailable(decision.title, decision.message);
+      await this.apiService.clear(context.uid, context.device.deviceId);
     } catch (_error) {
-      host.showUnavailable(
-        '暂时无法打开跨设备标签页',
-        '跨设备标签页暂时不可用，请稍后重试。'
-      );
-    } finally {
-      this.panelOpening = false;
+      // Withdrawing is best effort: the snapshot expires on its own within the online window.
     }
   }
 
@@ -456,9 +377,7 @@ export class CrossDeviceTabPresenceCoordinator {
       return;
     }
     const settings = await this.requireSyncConfigStore().initialize();
-    if (!this.isSupportedProvider(settings) ||
-      (settings.remoteKind === 'aira_cloud' &&
-        !AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud'))) {
+    if (!this.isSupportedProvider(settings)) {
       this.stopHeartbeat();
       return;
     }
@@ -571,12 +490,68 @@ export class CrossDeviceTabPresenceCoordinator {
     return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : fallback;
   }
 
+  private async loadEnabledPanel(
+    context: CrossDeviceTabPresenceProviderContext
+  ): Promise<CrossDeviceTabPresencePanelState> {
+    const enabled = await this.preferencesRepository.isEnabled(context.preferenceScope);
+    if (!enabled) {
+      return this.buildPanelState(
+        'disabled',
+        false,
+        context.device.deviceName,
+        [],
+        '',
+        buildCrossDeviceTabsEmptyPresentation('link_disabled')
+      );
+    }
+    const result = context.kind === 'self_hosted' && context.personalServer !== undefined
+      ? await this.apiService.listPersonalServer(
+        context.personalServer.baseUrl,
+        context.personalServer.deviceToken
+      )
+      : await this.apiService.list(context.uid, context.device.deviceId);
+    const empty = result.devices.length === 0
+      ? buildCrossDeviceTabsEmptyPresentation('no_devices')
+      : CROSS_DEVICE_TABS_EMPTY_NONE;
+    return {
+      status: 'ready',
+      enabled: true,
+      deviceName: context.device.deviceName,
+      devices: result.devices,
+      message: '',
+      serverTime: result.serverTime,
+      onlineWindowMs: result.onlineWindowMs,
+      empty: empty
+    };
+  }
+
+  /**
+   * Pro is checked only after a Huawei identity exists, and only once that identity's
+   * membership has been loaded. A missing reader or a not-yet-hydrated account does not
+   * pretend to be a paywall; the list call still reports `pro_required` if it is.
+   */
+  private resolveCloudProEmptyKind(uid: string): CrossDeviceTabsEmptyKind {
+    if (this.membershipStateReader === undefined) {
+      return 'none';
+    }
+    const state = this.membershipStateReader();
+    if (state.userId.trim() !== uid || this.isActiveProState(state, uid)) {
+      return 'none';
+    }
+    const lapsed = this.lapsedProReader === undefined ? buildEmptyLapsedProView() : this.lapsedProReader();
+    if (lapsed.uid === uid && lapsed.expiredAt > 0) {
+      return 'pro_expired';
+    }
+    return 'pro_required';
+  }
+
   private buildPanelState(
     status: CrossDeviceTabPresencePanelStatus,
     enabled: boolean,
     deviceName: string,
     devices: CrossDeviceTabPresenceDevice[],
-    message: string
+    message: string,
+    empty: CrossDeviceTabsEmptyPresentation = CROSS_DEVICE_TABS_EMPTY_NONE
   ): CrossDeviceTabPresencePanelState {
     return {
       status: status,
@@ -585,7 +560,8 @@ export class CrossDeviceTabPresenceCoordinator {
       devices: devices,
       message: message,
       serverTime: Date.now(),
-      onlineWindowMs: 120000
+      onlineWindowMs: 120000,
+      empty: empty
     };
   }
 
@@ -619,8 +595,15 @@ export class CrossDeviceTabPresenceCoordinator {
     return this.syncConfigStore;
   }
 
+  /**
+   * Account login carries the link by itself. Data sync may be off, WebDAV, or Huawei Space.
+   * Personal Server is the other channel, and only when it is the active sync provider.
+   */
   private isSupportedProvider(settings: AiraSyncSettings): boolean {
-    return settings.remoteKind === 'aira_cloud' || settings.remoteKind === 'self_hosted';
+    if (settings.remoteKind === 'self_hosted') {
+      return true;
+    }
+    return AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud');
   }
 
   private async resolveProviderContext(
@@ -648,7 +631,7 @@ export class CrossDeviceTabPresenceCoordinator {
         personalServer: config
       };
     }
-    if (settings.remoteKind !== 'aira_cloud') {
+    if (!AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')) {
       return undefined;
     }
     const identity: HuaweiAccountSyncIdentity | undefined = await this.authService.getCurrentIdentity();
@@ -662,12 +645,6 @@ export class CrossDeviceTabPresenceCoordinator {
       device: localDevice,
       uid: uid
     };
-  }
-
-  private resolveUnsupportedProviderMessage(): string {
-    return AIRA_DISTRIBUTION_CAPABILITY_OWNER.isAvailable('aira_cloud')
-      ? '请选择私有化部署或 Aira 云同步后再使用跨设备标签页。'
-      : '请选择私有化部署后再使用跨设备标签页。';
   }
 
   private isActiveProState(state: AiraMembershipState, uid: string): boolean {

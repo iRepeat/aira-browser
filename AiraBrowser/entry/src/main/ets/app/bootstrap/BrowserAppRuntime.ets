@@ -159,6 +159,7 @@ import { RdbOfflinePageRepository } from '../../data/offline/OfflinePageReposito
 import { MembershipRepository } from '../../data/membership/MembershipRepository';
 import { NewUserGiftRepository } from '../../data/membership/NewUserGiftRepository';
 import { BottomToolbarGuideRepository } from '../../data/onboarding/BottomToolbarGuideRepository';
+import { AiraLapsedProView, AiraMembershipState } from '../../common/models/MembershipModels';
 import { MembershipFeature } from '../../features/membership/MembershipFeature';
 import { HistoryFeature } from '../../features/history/HistoryFeature';
 import { sharedDesktopCardSearchEngineService } from
@@ -448,6 +449,10 @@ export const sharedNewUserGiftRepository: NewUserGiftRepository = new NewUserGif
 export const sharedBottomToolbarGuideRepository: BottomToolbarGuideRepository = new BottomToolbarGuideRepository();
 export const sharedMembershipFeature: MembershipFeature =
   new MembershipFeature(sharedMembershipRepository, undefined, undefined, undefined, sharedAiraSyncConfigStore);
+sharedCrossDeviceTabPresenceCoordinator.configureMembershipFacts(
+  (): AiraMembershipState => sharedMembershipFeature.getState(),
+  (): AiraLapsedProView => sharedMembershipFeature.getLapsedProState()
+);
 const sharedUserScriptPackageLifecycleCoordinator: UserScriptPackageLifecycleCoordinator =
   new UserScriptPackageLifecycleCoordinator(
     sharedUserScriptRepository,

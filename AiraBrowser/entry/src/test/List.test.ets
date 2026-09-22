@@ -44,6 +44,7 @@ import syncExperienceAutomaticDomainGateTest from './SyncExperienceAutomaticDoma
 import airaBookmarkIdentityNoOpServiceTest from './AiraBookmarkIdentityNoOpService.test';
 import airaSyncClosedLoopTest from './AiraSyncClosedLoop.test';
 import airaSyncWorkThrottleTest from './AiraSyncWorkThrottle.test';
+import airaHttpRequestGateTest from './AiraHttpRequestGate.test';
 import huaweiSpaceHistoryCloudReadGateTest from './HuaweiSpaceHistoryCloudReadGate.test';
 import historySyncTransportContractTest from './HistorySyncTransportContract.test';
 import huaweiSpaceTransportWarmupTest from './HuaweiSpaceTransportWarmup.test';
@@ -103,6 +104,7 @@ export default function tests(): void {
   airaBookmarkIdentityNoOpServiceTest();
   airaSyncClosedLoopTest();
   airaSyncWorkThrottleTest();
+  airaHttpRequestGateTest();
   huaweiSpaceHistoryCloudReadGateTest();
   historySyncTransportContractTest();
   huaweiSpaceTransportWarmupTest();

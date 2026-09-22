@@ -795,6 +795,33 @@ function checkToolbarGestureFrameContract() {
   'inactive Search Backdrop hosts must collapse out of layout and hit testing behind the host visibility gate');
 }
 
+function checkExpandedSearchPageBackgroundContract() {
+  const expandedScrimSource = fs.readFileSync(expandedScrimPath, 'utf8');
+  const addressPanelSource = fs.readFileSync(addressPanelPath, 'utf8');
+  const shellPageSource = fs.readFileSync(shellPagePath, 'utf8');
+  const rootBottomPanelSessionSource = fs.readFileSync(rootBottomPanelSessionPath, 'utf8');
+  const presentationSource = fs.readFileSync(path.join(
+    repoRoot,
+    'AiraBrowser/entry/src/main/ets/core/browser/BrowserSearchBackdropPresentationViewModel.ets'
+  ), 'utf8');
+  assert(presentationSource.includes('resolveExpandedPageBackgroundVisible(') &&
+    presentationSource.includes("input.surfaceEligible && input.detent === 'middle'"),
+  'the expanded search page background is owned by the backdrop presentation policy and only the committed middle surface');
+  assert(rootBottomPanelSessionSource.includes('this.searchBackdropPresentationViewModel.resolveExpandedPageBackgroundVisible({') &&
+    rootBottomPanelSessionSource.includes('pageBackgroundVisible: pageBackgroundVisible') &&
+    shellPageSource.includes('pageBackgroundVisible: this.buildRootBottomPanelExpandedScrimState().pageBackgroundVisible'),
+  'the shell must paint the expanded page background from the session policy, not from a local colour choice');
+  assert(expandedScrimSource.includes('BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY') &&
+    expandedScrimSource.includes('private shouldPaintExpandedPageBackground(): boolean') &&
+    expandedScrimSource.includes('return !this.surfaceSuppressed && this.surfaceEligible && this.pageBackgroundVisible;') &&
+    expandedScrimSource.includes('.backgroundColor(this.storedPageBackgroundColor)') &&
+    !expandedScrimSource.includes('browser_overlay_scrim') &&
+    !expandedScrimSource.includes('start_window_background'),
+  'the committed search interface must paint a full-screen theme page background, not a drag veil or a dim scrim');
+  assert(addressPanelSource.includes('floatingTopSurfaceChromeVisible: false'),
+  'suggestion rows must sit on the full-screen page background instead of owning a separate history plate');
+}
+
 function checkRoutedToolbarBackdropContract() {
   const routeSource = fs.readFileSync(shellRouteCoordinatorPath, 'utf8');
   const shellPageSource = fs.readFileSync(shellPagePath, 'utf8');
@@ -900,7 +927,8 @@ const checks = [
   checkToolbarResponsiveGridContract,
   checkUnifiedToolbarPageContract,
   checkToolbarGestureFrameContract,
-  checkRoutedToolbarBackdropContract
+  checkRoutedToolbarBackdropContract,
+  checkExpandedSearchPageBackgroundContract
 ];
 const failures = [];
 for (const check of checks) {

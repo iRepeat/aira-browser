@@ -82,7 +82,7 @@ export class SettingsCenterViewModel {
     }
     accountRows.push(this.buildRow(
       'sync',
-      '同步',
+      '数据同步',
       this.getFullModeRequiredValue(isFullServiceMode),
       isFullServiceMode
     ));

@@ -581,20 +581,29 @@ export struct SettingsNavigationScreen {
   private resolveRowIconBackgroundColor(destination: SettingsCenterDestination): ResourceColor {
     switch (destination) {
       case 'general':
-      case 'custom_homepage':
-      case 'toolbar_customization':
       case 'app_service_mode':
         return this.settingsIconBackgrounds.general;
+      case 'custom_homepage':
+        return this.settingsIconBackgrounds.customHomepage;
+      case 'toolbar_customization':
+        return this.settingsIconBackgrounds.toolbar;
+      case 'cross_device_link':
+        return this.settingsIconBackgrounds.crossDeviceLink;
       case 'aira_pro':
+      case 'sync':
         return this.settingsIconBackgrounds.sync;
       case 'search':
         return this.settingsIconBackgrounds.search;
       case 'privacy_security':
-      case 'private_mode':
         return this.settingsIconBackgrounds.privacySecurity;
+      case 'private_mode':
+        return this.settingsIconBackgrounds.privateMode;
       case 'web_features':
+        return this.settingsIconBackgrounds.webFeatures;
       case 'user_scripts':
         return this.settingsIconBackgrounds.userScripts;
+      case 'web_apps':
+        return this.settingsIconBackgrounds.webApps;
       case 'webpage_translation':
         return this.settingsIconBackgrounds.webpageTranslation;
       case 'passwords':
@@ -607,10 +616,8 @@ export struct SettingsNavigationScreen {
         return this.settingsIconBackgrounds.appearance;
       case 'experiments':
         return this.settingsIconBackgrounds.experiments;
-      case 'sync':
-        return this.settingsIconBackgrounds.sync;
       case 'advanced_settings':
-        return this.settingsIconBackgrounds.general;
+        return this.settingsIconBackgrounds.advancedSettings;
       case 'about':
         return this.settingsIconBackgrounds.about;
       default:

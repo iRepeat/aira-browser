@@ -31,6 +31,9 @@ import {
 } from '../../services/web/BrowserOfflineFastFailureCoordinator';
 import { BrowserWebNavigationStateSyncCoordinator } from '../../services/web/BrowserWebNavigationStateSyncCoordinator';
 import { BrowserWebLoadRuntimeCoordinator } from '../../services/web/BrowserWebLoadRuntimeCoordinator';
+import {
+  BrowserWebNavigationInterceptionCoordinator
+} from './BrowserWebNavigationInterceptionCoordinator';
 import { BrowserActiveTabRuntimeRestoreCoordinator } from '../../services/web/BrowserActiveTabRuntimeRestoreCoordinator';
 import { BrowserRuntimeLifecyclePort } from '../../services/web/BrowserRuntimeLifecyclePort';
 import { BrowserRuntimeMutationPort } from '../../services/web/BrowserRuntimeLifecyclePort';
@@ -152,6 +155,7 @@ export interface BrowserWebPageLifecycleDependencies {
   loadFailureSurfaceCoordinator: BrowserWebLoadFailureSurfaceCoordinator;
   offlineFastFailureCoordinator: BrowserOfflineFastFailureCoordinator;
   webLoadRuntimeCoordinator: BrowserWebLoadRuntimeCoordinator;
+  webNavigationInterceptionCoordinator: BrowserWebNavigationInterceptionCoordinator;
   activeTabRuntimeRestoreCoordinator: BrowserActiveTabRuntimeRestoreCoordinator;
   addressSubmissionCoordinator: BrowserAddressSubmissionCoordinator;
   appUrlOpenCoordinator: BrowserAppUrlOpenCoordinator;
@@ -384,6 +388,9 @@ export class BrowserWebPageLifecycleApplicationCoordinator implements
     sharedBrowserHttpsFirstNavigationService.clearTab(request.tabId);
     this.dependencies.httpsFirstPromptCoordinator.clearHttpsFirstFallbackForTab(request.tabId);
     this.dependencies.webLoadRuntimeCoordinator.clearUserAgentRuntimeState(request.tabId);
+    // A rewrite the last navigation callback deferred belongs to a tab that is going away; dropping it keeps the
+    // Web Load Runtime from issuing a load for a closed tab.
+    this.dependencies.webNavigationInterceptionCoordinator.cancelSameWebNavigationRewrite(request.tabId);
     this.dependencies.elementInspectionSessionCoordinator.handleOriginRuntimeRemoved(request.tabId);
     if (request.shouldDeleteSnapshot) {
       await this.dependencies.webStateSnapshotStore.deleteSnapshot(request.snapshotPath);
