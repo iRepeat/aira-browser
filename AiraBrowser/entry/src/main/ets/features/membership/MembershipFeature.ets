@@ -30,10 +30,14 @@ import {
 import { MembershipQuotaService } from '../../services/membership/MembershipQuotaService';
 import { AiraNewUserGiftFunctionService } from '../../services/membership/AiraNewUserGiftFunctionService';
 import {
+  AiraComplimentaryClaimFunctionService,
+  AiraComplimentaryClaimResponseBody
+} from '../../services/membership/AiraComplimentaryClaimFunctionService';
+import {
   MEMBERSHIP_REFRESH_DEFAULT_FRESH_MS,
   MEMBERSHIP_REFRESH_RETRY_COOLDOWN_MS
 } from '../../services/membership/MembershipRefreshPolicyService';
-import { AIRA_PRO_ONE_TIME_PRODUCT_ID } from '../../services/membership/HuaweiIapProductCatalog';
+import { isAiraProLifetimeProductId } from '../../services/membership/HuaweiIapProductCatalog';
 import { resolveAiraHuaweiAccountIdentity } from '../../common/models/AiraSyncModels';
 import { AiraSyncConfigStore } from '../../services/sync/AiraSyncConfigStore';
 import { BrowserDataBoundaryInput } from '../../common/models/BrowserModels';
@@ -72,6 +76,13 @@ export interface AiraNewUserGiftEnsureResult {
   state?: AiraMembershipState;
 }
 
+export interface AiraComplimentaryClaimResult {
+  ok: boolean;
+  code: string;
+  message: string;
+  state?: AiraMembershipState;
+}
+
 export class MembershipFeature {
   private repository: MembershipRepository;
   private entitlementService: EntitlementService;
@@ -81,6 +92,7 @@ export class MembershipFeature {
   private privacyEffectPolicy: BrowserPrivacyEffectPolicyService;
   private profileBoundaryService: BrowserProfileBoundaryService;
   private newUserGiftService: AiraNewUserGiftFunctionService;
+  private complimentaryClaimService: AiraComplimentaryClaimFunctionService;
   private syncConfigStore?: AiraSyncConfigStore;
   private stateChangeHandler?: MembershipStateChangeHandler;
   private newUserGift: AiraNewUserGiftView = buildEmptyNewUserGiftView();
@@ -103,7 +115,8 @@ export class MembershipFeature {
     membershipEntitlementProofService: MembershipEntitlementProofService = new MembershipEntitlementProofService(),
     privacyEffectPolicy: BrowserPrivacyEffectPolicyService = new BrowserPrivacyEffectPolicyService(),
     profileBoundaryService: BrowserProfileBoundaryService = new BrowserProfileBoundaryService(),
-    newUserGiftService: AiraNewUserGiftFunctionService = new AiraNewUserGiftFunctionService()
+    newUserGiftService: AiraNewUserGiftFunctionService = new AiraNewUserGiftFunctionService(),
+    complimentaryClaimService: AiraComplimentaryClaimFunctionService = new AiraComplimentaryClaimFunctionService()
   ) {
     this.repository = repository;
     this.entitlementService = entitlementService;
@@ -114,6 +127,7 @@ export class MembershipFeature {
     this.profileBoundaryService = profileBoundaryService;
     this.syncConfigStore = syncConfigStore;
     this.newUserGiftService = newUserGiftService;
+    this.complimentaryClaimService = complimentaryClaimService;
   }
 
   setStateChangeHandler(handler: MembershipStateChangeHandler): void {
@@ -282,6 +296,108 @@ export class MembershipFeature {
       message: '已获得新用户会员',
       state: committedSnapshot.state
     };
+  }
+
+  /**
+   * Claims the user-triggered 15-day Pro period. The hosted service is the
+   * authority: a current permanent or subscription member is refused, an
+   * unexpired claim cannot be repeated, and an expired claim can be taken
+   * again. This never invents a local grant.
+   */
+  async claimComplimentaryMembership(
+    boundaryInput: BrowserDataBoundaryInput
+  ): Promise<AiraComplimentaryClaimResult> {
+    if (!this.isEffectAllowed('membership_complimentary_claim', boundaryInput, 'remote_account_sync_state')) {
+      return {
+        ok: false,
+        code: 'private_session_blocked',
+        message: '请回到普通会话后再领取会员。'
+      };
+    }
+    await this.repository.initialize();
+    await this.initializeSyncConfigIfAvailable();
+    const uid = this.getHuaweiUid();
+    if (uid.length <= 0) {
+      return {
+        ok: false,
+        code: 'login_required',
+        message: '请先使用华为账号登录。'
+      };
+    }
+    const accountScope = this.captureAccountScope(uid);
+    const response = await this.complimentaryClaimService.claim(uid);
+    if (!this.isCurrentAccountScope(accountScope)) {
+      return {
+        ok: false,
+        code: 'account_changed',
+        message: '账号已切换，请稍后重试。'
+      };
+    }
+    if (response.ok !== true) {
+      await this.commitComplimentaryClaimGrant(accountScope, response);
+      return {
+        ok: false,
+        code: response.code?.trim() ?? 'complimentary_claim_failed',
+        message: response.message?.trim() ?? '会员领取失败，请稍后再试。'
+      };
+    }
+    const committedSnapshot = await this.commitComplimentaryClaimGrant(accountScope, response);
+    if (!this.isCurrentAccountScope(accountScope)) {
+      return {
+        ok: false,
+        code: 'account_changed',
+        message: '账号已切换，请稍后重试。'
+      };
+    }
+    if (committedSnapshot === undefined) {
+      return {
+        ok: false,
+        code: 'grant_not_applied',
+        message: '会员领取未能生效，请稍后重试。'
+      };
+    }
+    if (committedSnapshot.state.plan !== 'pro') {
+      return {
+        ok: false,
+        code: 'grant_not_applied',
+        message: '会员领取未能生效，请稍后重试。'
+      };
+    }
+    this.notifyStateChanged(committedSnapshot.state);
+    return {
+      ok: true,
+      code: 'complimentary_claim_granted',
+      message: response.message?.trim() ?? '已领取 15 天会员',
+      state: committedSnapshot.state
+    };
+  }
+
+  private async commitComplimentaryClaimGrant(
+    accountScope: MembershipAccountScope,
+    response: AiraComplimentaryClaimResponseBody
+  ): Promise<MembershipRepositorySnapshot | undefined> {
+    const grant = response.membershipGrant ?? undefined;
+    if (grant === undefined) {
+      return undefined;
+    }
+    const committedSnapshot = await this.repository.updateSnapshotIf(
+      (): boolean => this.isCurrentAccountScope(accountScope),
+      (snapshot: MembershipRepositorySnapshot): MembershipRepositorySnapshot => {
+        const accountState = this.buildStateForUid(snapshot.state, accountScope.uid);
+        const nextState = this.buildStateFromGrant(accountState, grant);
+        const syncedAt = Date.now();
+        nextState.lastSyncedAt = syncedAt;
+        nextState.updatedAt = syncedAt;
+        return {
+          state: nextState,
+          quotas: snapshot.quotas
+        };
+      }
+    );
+    if (committedSnapshot !== undefined) {
+      this.notifyStateChanged(committedSnapshot.state);
+    }
+    return committedSnapshot;
   }
 
   async loadState(): Promise<AiraMembershipState> {
@@ -1046,7 +1162,7 @@ export class MembershipFeature {
       plan: 'pro',
       accountRecognition: previous.accountRecognition,
       accessFlags: ['club'],
-      subscriptionStatus: productId.trim() === AIRA_PRO_ONE_TIME_PRODUCT_ID ? 'none' : 'active',
+      subscriptionStatus: isAiraProLifetimeProductId(productId) ? 'none' : 'active',
       subscriptionProductId: productId.trim(),
       planExpiresAt: expiresAt,
       accountFirstSeenAt: previous.accountFirstSeenAt,
@@ -1070,7 +1186,7 @@ export class MembershipFeature {
     source: string,
     productId: string
   ): AiraSubscriptionStatus {
-    if (productId === AIRA_PRO_ONE_TIME_PRODUCT_ID) {
+    if (isAiraProLifetimeProductId(productId)) {
       return 'none';
     }
     const remoteStatus = grant.subscriptionStatus?.trim().toLowerCase() ?? '';

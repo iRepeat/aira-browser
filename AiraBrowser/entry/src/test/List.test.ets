@@ -50,6 +50,7 @@ import historySyncTransportContractTest from './HistorySyncTransportContract.tes
 import huaweiSpaceTransportWarmupTest from './HuaweiSpaceTransportWarmup.test';
 import historySelectionMoreMenuTest from './HistorySelectionMoreMenu.test';
 import huaweiIapProductCatalogTest from './HuaweiIapProductCatalog.test';
+import airaProComplimentaryClaimPolicyTest from './AiraProComplimentaryClaimPolicy.test';
 import startupWelcomeIntroTest from './StartupWelcomeIntro.test';
 import browserWebTopSafeAreaColorTest from './BrowserWebTopSafeAreaColor.test';
 import browserSearchEnginePopupLayoutViewModelTest from './BrowserSearchEnginePopupLayoutViewModel.test';
@@ -110,6 +111,7 @@ export default function tests(): void {
   huaweiSpaceTransportWarmupTest();
   historySelectionMoreMenuTest();
   huaweiIapProductCatalogTest();
+  airaProComplimentaryClaimPolicyTest();
   startupWelcomeIntroTest();
   browserWebTopSafeAreaColorTest();
   browserSearchEnginePopupLayoutViewModelTest();

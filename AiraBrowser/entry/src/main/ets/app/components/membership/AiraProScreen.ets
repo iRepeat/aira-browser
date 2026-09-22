@@ -5,7 +5,9 @@ import {
   AiraProOverviewViewModel,
   AiraProOverviewViewState
 } from '../../../core/membership/AiraProOverviewViewModel';
+import { AiraProComplimentaryClaimDialog } from './AiraProComplimentaryClaimDialog';
 import { AiraProOverviewScreen } from './AiraProOverviewScreen';
+import { CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 import {
   BrowserThemeViewState,
   BrowserThemeViewStateFactory
@@ -22,6 +24,10 @@ import { BrowserDataBoundaryInput } from '../../../common/models/BrowserModels';
 import { SettingsHdsScaffold } from '../settings/SettingsHdsScaffold';
 import { SettingsNavigationCoordinator } from '../../router/SettingsNavigationCoordinator';
 import { HuaweiLoginSheetContent } from '../account/HuaweiLoginSheetContent';
+import { SyncDesktopBookmarkGuideContent } from '../sync/SyncDesktopBookmarkGuideContent';
+import {
+  SYNC_DESKTOP_BOOKMARK_GUIDE_TITLE
+} from '../../../services/sync/SyncDesktopBookmarkGuideMarkdownService';
 import { BrowserAdaptiveModalOverlay } from '../browser/BrowserAdaptiveModalOverlay';
 import { AiraLegalWebDocumentContent } from '../legal/AiraLegalWebDocumentContent';
 import {
@@ -40,10 +46,11 @@ import {
   sharedMembershipFeature,
   sharedPreferencesRepository
 } from '../../bootstrap/BrowserAppRuntime';
+import { AiraComplimentaryClaimResult } from '../../../features/membership/MembershipFeature';
 import { AppServiceModeGateService } from '../../../services/settings/AppServiceModeGateService';
 import { MEMBERSHIP_REFRESH_ACCOUNT_VISIBLE_FRESH_MS } from '../../../services/membership/MembershipRefreshPolicyService';
 
-type AiraProSheetKind = 'none' | 'login' | 'legalDocument';
+type AiraProSheetKind = 'none' | 'login' | 'legalDocument' | 'selfHostingGuide';
 export type AiraProPresentationMode = 'page' | 'workspace';
 export type AiraProPageLayoutMode = 'phone' | 'large_screen';
 
@@ -98,6 +105,20 @@ export struct AiraProScreen {
     this.dataScope,
     this.privacyMode
   );
+  private complimentaryClaimInFlight: boolean = false;
+  private complimentaryClaimDialogController: CustomDialogController = new CustomDialogController({
+    builder: AiraProComplimentaryClaimDialog({
+      state: $state,
+      onClaim: (): void => {
+        this.claimComplimentaryMembership();
+      }
+    }),
+    customStyle: true,
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    autoCancel: true,
+    alignment: DialogAlignment.Center
+  });
   @State private activeSheetVisible: boolean = false;
   @State private activeSheetMounted: boolean = false;
   @State private activeSheetKind: AiraProSheetKind = 'none';
@@ -119,6 +140,10 @@ export struct AiraProScreen {
 
   aboutToDisappear(): void {
     this.unbindThemePreferencesUpdates();
+    try {
+      this.complimentaryClaimDialogController.close();
+    } catch (_error) {
+    }
   }
 
   onPageShow(): void {
@@ -224,12 +249,15 @@ export struct AiraProScreen {
       primaryTextColor: this.theme.textPrimary,
       secondaryTextColor: this.theme.textSecondary,
       dividerColor: this.theme.divider,
-      outlineStrokeColor: this.theme.outline,
       settingsIconForeground: this.theme.settingsIconForeground,
       settingsIconBackgrounds: this.theme.settingsIconBackgrounds,
+      syncProviderIconBackgrounds: this.theme.syncProviderIconBackgrounds,
       scroller: this.contentScroller,
       onSubscribe: (planId: string) => {
         this.openProPurchase(planId);
+      },
+      onOpenSelfHostingGuide: () => {
+        this.openSelfHostingGuide();
       },
       onOpenMembershipTerms: () => {
         this.openMembershipTerms();
@@ -239,6 +267,9 @@ export struct AiraProScreen {
       },
       onManageSubscription: () => {
         this.openSubscriptionManagement();
+      },
+      onOpenComplimentaryClaim: () => {
+        this.openComplimentaryClaim();
       }
     })
   }
@@ -273,9 +304,53 @@ export struct AiraProScreen {
       })
         .width('100%')
         .height('100%')
+    } else if (this.activeSheetKind === 'selfHostingGuide') {
+      SyncDesktopBookmarkGuideContent()
+        .width('100%')
+        .height('100%')
     } else {
       this.buildHuaweiLoginSheet()
     }
+  }
+
+  private openComplimentaryClaim(): void {
+    if (!this.state.complimentaryClaim.entryVisible) {
+      return;
+    }
+    this.complimentaryClaimDialogController.open();
+  }
+
+  /**
+   * The centered dialog only starts the claim. The hosted service decides
+   * whether this account receives the 15 days and returns the grant to store.
+   */
+  private claimComplimentaryMembership(): void {
+    if (!this.state.complimentaryClaim.actionEnabled || this.complimentaryClaimInFlight) {
+      return;
+    }
+    this.complimentaryClaimInFlight = true;
+    sharedMembershipFeature.claimComplimentaryMembership(this.buildAiraProDataBoundaryInput())
+      .then((result: AiraComplimentaryClaimResult) => {
+        this.complimentaryClaimInFlight = false;
+        if (result.ok) {
+          this.complimentaryClaimDialogController.close();
+        }
+        this.applyAiraProState();
+        this.showToast(result.message.length > 0 ? result.message : '会员领取失败，请稍后再试。');
+        if (result.ok) {
+          sharedMembershipFeature.refreshStateForBoundary(this.buildAiraProDataBoundaryInput(), { force: true })
+            .then(() => {
+              this.applyAiraProState();
+            })
+            .catch((_error: Error) => {
+              this.applyAiraProState();
+            });
+        }
+      })
+      .catch((_error: Error) => {
+        this.complimentaryClaimInFlight = false;
+        this.showToast('会员领取失败，请稍后再试。');
+      });
   }
 
   @Builder
@@ -357,6 +432,21 @@ export struct AiraProScreen {
       this.purchaseFlowHost,
       this.buildAiraProDataBoundaryInput()
     );
+  }
+
+  /**
+   * The free-route row's only action. Cold self-hosting has nothing to configure
+   * on this page, so it hands off to the existing deployment guide instead of a
+   * second copy of the recipe. The desktop workspace keeps its own scroll host,
+   * so it reuses the same guide as an in-workspace sheet rather than pushing a
+   * page route behind the workspace scaffold.
+   */
+  private openSelfHostingGuide(): void {
+    if (this.isDesktopPresentation()) {
+      this.openActiveSheet('selfHostingGuide');
+      return;
+    }
+    this.navigationCoordinator.openSyncDesktopBookmarkGuide(this.buildAiraProBoundaryState());
   }
 
   private restorePurchaseForPlan(planId: string): void {
@@ -501,6 +591,9 @@ export struct AiraProScreen {
     if (this.activeSheetKind === 'login') {
       return '登录华为账号';
     }
+    if (this.activeSheetKind === 'selfHostingGuide') {
+      return SYNC_DESKTOP_BOOKMARK_GUIDE_TITLE;
+    }
     if (this.activeSheetKind === 'legalDocument') {
       return this.legalDocument.title;
     }
@@ -509,11 +602,12 @@ export struct AiraProScreen {
 
   private shouldShowDesktopDialogHeader(): boolean {
     return this.activeSheetKind === 'login' ||
-      this.activeSheetKind === 'legalDocument';
+      this.activeSheetKind === 'legalDocument' ||
+      this.activeSheetKind === 'selfHostingGuide';
   }
 
   private resolveDesktopDialogHeight(): Length {
-    if (this.activeSheetKind === 'legalDocument') {
+    if (this.activeSheetKind === 'legalDocument' || this.activeSheetKind === 'selfHostingGuide') {
       return '82%';
     }
     return 500;

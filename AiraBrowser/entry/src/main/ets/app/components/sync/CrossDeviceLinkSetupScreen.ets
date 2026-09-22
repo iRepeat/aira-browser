@@ -119,11 +119,6 @@ export struct CrossDeviceLinkSetupScreen {
         showTitleBar: !this.embedded,
         useTopSafeInset: !this.embedded,
         desktopPresentation: this.desktopPresentation,
-        menuActionLabel: '帮助',
-        menuActionIcon: $r('sys.symbol.doc_text_fill'),
-        onMenuAction: (): void => {
-          this.navigationCoordinator.openSyncDesktopBookmarkGuide(this.boundary);
-        },
         onBack: (): void => {
           this.handleBack();
         }

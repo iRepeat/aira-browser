@@ -34,7 +34,7 @@ import {
   SiteIconListTarget
 } from '../../../core/siteicons/SiteIconListPresenter';
 import { SiteControlsManualOriginDialog } from './SiteControlsManualOriginDialog';
-import { createCenteredDialogMaterial } from '../common/CenteredDialogSurface';
+import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 
 const SITE_CONTROLS_OVERVIEW_CARD_GAP: number = 10;
 const SITE_CONTROLS_OVERVIEW_CARD_HEIGHT: number = 88;
@@ -106,7 +106,9 @@ export struct SiteControlsManagementScreen {
       confirm: (): boolean => this.confirmManualOrigin()
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
 

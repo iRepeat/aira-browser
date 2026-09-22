@@ -20,7 +20,7 @@ import {
   BrowserSessionPrivacyMode
 } from '../../../common/models/BrowserModels';
 import { BrowserAdaptiveModalOverlay } from './BrowserAdaptiveModalOverlay';
-import { createCenteredDialogMaterial } from '../common/CenteredDialogSurface';
+import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 
 @Component
 export struct BrowserSystemSurfaceHost {
@@ -82,7 +82,9 @@ export struct BrowserSystemSurfaceHost {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (_dismissDialogAction: DismissDialogAction): void => {
       this.onSelectionBack();
     }
@@ -100,7 +102,9 @@ export struct BrowserSystemSurfaceHost {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (_dismissDialogAction: DismissDialogAction): void => {
       this.onCloseRequested();
     }
@@ -120,7 +124,9 @@ export struct BrowserSystemSurfaceHost {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (_dismissDialogAction: DismissDialogAction): void => {
       this.onCloseRequested();
     }

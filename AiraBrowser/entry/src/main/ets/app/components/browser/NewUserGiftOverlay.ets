@@ -25,6 +25,9 @@ export struct NewUserGiftOverlay {
       visible: this.visible,
       layoutMode: this.layoutMode,
       title: NEW_USER_GIFT_OVERLAY_TITLE,
+      // The gift is announced once per account. An outside tap must not be what dismisses it,
+      // or the user loses the notification without ever reading what was granted.
+      dismissOnOutsideTap: false,
       phoneEnterOffsetY: FEATURE_GATE_OVERLAY_ENTER_OFFSET_Y,
       phoneSheetAlignment: Alignment.Center,
       animationDurationMs: FEATURE_GATE_OVERLAY_ANIMATION_DURATION_MS,

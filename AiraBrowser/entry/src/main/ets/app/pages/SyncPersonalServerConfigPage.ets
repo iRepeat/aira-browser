@@ -1,8 +1,9 @@
 import router from '@ohos.router';
+import { BrowserBoundaryRouteState } from '../../common/utils/RouteParamUtils';
 import { showCenteredAlertDialog } from '../components/common/CenteredDialogSurface';
 import { SettingsHdsScaffold } from '../components/settings/SettingsHdsScaffold';
-import { SettingsScrollBody } from '../components/settings/SettingsLayout';
-import { SettingsActionButton } from '../components/settings/SettingsRows';
+import { SettingsScrollBody, SettingsGroupCard } from '../components/settings/SettingsLayout';
+import { SettingsActionButton, SettingsNavigationRow } from '../components/settings/SettingsRows';
 import { SyncFormField } from '../components/sync/SyncFormFields';
 import {
   sharedAiraSyncConfigStore,
@@ -86,6 +87,28 @@ struct SyncPersonalServerConfigPage {
         }
       }) {
         SettingsScrollBody({ contentSpace: 18, topPadding: 8, bottomPadding: 28 }) {
+          // The row sits on its own surface, not straight on the page background:
+          // every other settings entry on this page is a card, and a bare row here
+          // read as a floating label above the form rather than a tappable entry.
+          SettingsGroupCard({
+            surfaceColor: this.storedSurfaceBackgroundColor
+          }) {
+            SettingsNavigationRow({
+              title: '查看私有化部署教程',
+              value: '看教程',
+              airaIconId: 'settings.webdav',
+              iconBackgroundColor: this.storedAccentColor,
+              iconColor: this.storedOnPrimaryColor,
+              rowPosition: 'single',
+              primaryTextColor: this.storedPrimaryTextColor,
+              secondaryTextColor: this.storedSecondaryTextColor,
+              pressedBackgroundColor: this.storedPressedBackgroundColor,
+              onAction: () => {
+                this.navigationCoordinator.openSyncDesktopBookmarkGuide(this.buildBoundaryState());
+              }
+            })
+          }
+
           SyncFormField({
             label: '服务器地址',
             placeholder: 'https://sync.example.com',
@@ -165,6 +188,21 @@ struct SyncPersonalServerConfigPage {
   private canPair(): boolean {
     return !this.isBusy && this.baseUrl.trim().length > 0 && this.pairingCode.trim().length > 0 &&
       this.deviceName.trim().length > 0;
+  }
+
+  /**
+   * The guide is a normal settings route, so it has to travel with the same data
+   * boundary this page was opened under. This page is reached from more than one
+   * surface, so it reads the boundary from its own route params instead of
+   * assuming a single caller.
+   */
+  private buildBoundaryState(): BrowserBoundaryRouteState {
+    const params = router.getParams() as Record<string, string | undefined> | undefined;
+    return {
+      dataScope: params?.dataScope ?? '',
+      privacyMode: params?.privacyMode ?? '',
+      boundarySource: params?.boundarySource ?? ''
+    };
   }
 
   private pair(): void {

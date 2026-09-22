@@ -1,7 +1,7 @@
 import { AiraMembershipState } from '../../common/models/MembershipModels';
 import {
   AIRA_PRO_ONE_TIME_PLAN,
-  AIRA_PRO_ONE_TIME_PRODUCT_ID,
+  isAiraProLifetimeProductId,
   AIRA_PRO_SELLABLE_IAP_PLANS,
   HuaweiIapProductPlan,
   findAiraProIapPlanByProductId
@@ -26,6 +26,12 @@ import {
   AiraProReachableDeviceGlyph
 } from './AiraProBenefitCatalog';
 import { AiraRenderableIconId } from '../resources/GeneratedAiraIconCatalog';
+import {
+  AIRA_PRO_COMPLIMENTARY_CLAIM_DAYS,
+  AiraProComplimentaryClaimAvailability,
+  AiraProComplimentaryClaimDecision,
+  resolveAiraProComplimentaryClaimDecision
+} from './AiraProComplimentaryClaimPolicy';
 const AIRA_PRO_SUBSCRIPTION_ACTION_TEXT: string = '立即订阅';
 const AIRA_PRO_SUBSCRIPTION_CONSENT_ACTION_TEXT: string = '同意协议后立即订阅';
 const AIRA_PRO_SUBSCRIPTION_FOOTER_TEXT: string =
@@ -57,6 +63,15 @@ export interface AiraProOverviewViewState {
   benefits: AiraProOverviewBenefitState[];
   reachableDevices: AiraProOverviewReachableDeviceState[];
   plans: AiraProOverviewPlanState[];
+  /** A current Pro holder sees this instead of, or above, the storefront. */
+  showMembershipStatus: boolean;
+  membershipStatusTitle: string;
+  membershipStatusDetail: string;
+  /** Only a live Huawei subscription has an auto-renewal page to open. */
+  showManageSubscription: boolean;
+  /** Hidden once there is nothing left to buy, including permanent membership. */
+  showPurchaseButton: boolean;
+  complimentaryClaim: AiraProComplimentaryClaimState;
   proValue: string;
   proActivatedActionText: string;
   proLegalPromptText: string;
@@ -65,6 +80,19 @@ export interface AiraProOverviewViewState {
   proActionsEnabled: boolean;
   proSubscribeEnabled: boolean;
   lifetimeUpgradePrompt: AiraProLifetimeUpgradePromptState;
+}
+
+export interface AiraProComplimentaryClaimState {
+  entryVisible: boolean;
+  entryTitle: string;
+  title: string;
+  /** The grant length, shown as the dialog's large numeral. */
+  days: number;
+  message: string;
+  statusText: string;
+  actionText: string;
+  actionEnabled: boolean;
+  availability: AiraProComplimentaryClaimAvailability;
 }
 
 export interface AiraProOverviewPlanState {
@@ -85,6 +113,14 @@ export interface AiraProOverviewPlanState {
   consentActionText: string;
   footerText: string;
   action: AiraProOverviewPlanAction;
+}
+
+interface AiraProMembershipPresentation {
+  showMembershipStatus: boolean;
+  membershipStatusTitle: string;
+  membershipStatusDetail: string;
+  showManageSubscription: boolean;
+  showPurchaseButton: boolean;
 }
 
 export interface AiraProLifetimeUpgradePromptState {
@@ -115,22 +151,33 @@ export class AiraProOverviewViewModel {
       dataScope,
       privacyMode
     );
-    const plans: AiraProOverviewPlanState[] = this.membershipPresentationService.isLongTermMember(membershipState)
-      ? []
-      : AIRA_PRO_SELLABLE_IAP_PLANS.map((plan: HuaweiIapProductPlan) =>
-        this.buildSubscriptionPlanState(plan, membershipState, purchaseAllowed));
+    const plans: AiraProOverviewPlanState[] = this.buildVisiblePlans(
+      membershipState,
+      purchaseAllowed
+    );
+    const presentation = this.resolveMembershipPresentation(membershipState, plans, purchaseAllowed);
+    const actionsEnabled = purchaseAllowed && restoreAllowed && subscriptionManagementAllowed;
     return {
       title: this.resolveHeroTitle(membershipState),
       subtitle: this.resolveHeroSubtitle(membershipState),
       benefits: this.buildBenefitStates(),
       reachableDevices: this.buildReachableDeviceStates(),
       plans: plans,
+      showMembershipStatus: presentation.showMembershipStatus,
+      membershipStatusTitle: presentation.membershipStatusTitle,
+      membershipStatusDetail: presentation.membershipStatusDetail,
+      showManageSubscription: presentation.showManageSubscription,
+      showPurchaseButton: presentation.showPurchaseButton,
+      complimentaryClaim: this.buildComplimentaryClaimState(
+        membershipState,
+        plans.length > 0 && actionsEnabled
+      ),
       proValue: this.resolveProValue(membershipState),
       proActivatedActionText: this.resolveActivatedActionText(membershipState),
       proLegalPromptText: '我已阅读并同意',
       proLegalAgreementTitle: '会员服务协议',
       proLegalRenewalTitle: '自动续费服务协议',
-      proActionsEnabled: purchaseAllowed && restoreAllowed && subscriptionManagementAllowed,
+      proActionsEnabled: actionsEnabled,
       proSubscribeEnabled: plans.some((plan: AiraProOverviewPlanState) => plan.action !== 'unavailable'),
       lifetimeUpgradePrompt: this.buildLifetimeUpgradePrompt(membershipState)
     };
@@ -164,6 +211,12 @@ export class AiraProOverviewViewModel {
       ],
       plans: [],
       reachableDevices: this.buildReachableDeviceStates(),
+      showMembershipStatus: false,
+      membershipStatusTitle: '',
+      membershipStatusDetail: '',
+      showManageSubscription: false,
+      showPurchaseButton: false,
+      complimentaryClaim: this.buildHiddenComplimentaryClaim(),
       proValue: '本地功能已全部开启',
       proActivatedActionText: '无需会员',
       proLegalPromptText: '',
@@ -181,17 +234,123 @@ export class AiraProOverviewViewModel {
   }
 
   private resolveHeroTitle(state: AiraMembershipState): string {
-    return this.membershipPresentationService.isLongTermMember(state) ? 'Aira Pro 已开通' : 'Aira Pro';
+    if (state.plan !== 'pro') {
+      return 'Aira Pro';
+    }
+    if (this.membershipPresentationService.isLongTermMember(state) &&
+      !this.membershipPresentationService.hasInsiderRecognition(state)) {
+      return '永久会员已开通';
+    }
+    return 'Aira Pro 已开通';
   }
 
   private resolveHeroSubtitle(state: AiraMembershipState): string {
-    if (!this.membershipPresentationService.isLongTermMember(state)) {
+    if (state.plan !== 'pro') {
       return '本地功能永久免费，Pro 只用于 Aira 官方托管云服务。';
     }
-    if (this.membershipPresentationService.hasInsiderRecognition(state)) {
-      return 'INSIDER 长期会员权益已生效。感谢你帮助测试和改进 Aira。';
+    if (this.membershipPresentationService.isLongTermMember(state)) {
+      if (this.membershipPresentationService.hasInsiderRecognition(state)) {
+        return 'INSIDER 长期会员权益已生效。感谢你帮助测试和改进 Aira。';
+      }
+      return '你可以永久使用全部 Aira 官方托管云服务。';
     }
-    return '长期会员权益已生效，你可以永久使用全部 Aira 官方托管云服务。感谢你对 Aira 的支持。';
+    const until = state.planExpiresAt > 0 ? this.formatDate(state.planExpiresAt) : '';
+    if (this.isCurrentSubscriptionMember(state)) {
+      if (state.subscriptionStatus === 'cancelled') {
+        return until.length > 0 ? `自动续费已关闭，权益保留至 ${until}。` : '自动续费已关闭，当前周期结束后失效。';
+      }
+      const productTitle = this.resolveIapProductTitle(state.subscriptionProductId);
+      const planName = productTitle.length > 0 ? productTitle : '订阅';
+      return until.length > 0 ? `${planName}已生效，权益至 ${until}。` : `${planName}已生效。`;
+    }
+    return until.length > 0
+      ? `当前会员至 ${until}，到期后可购买永久会员或订阅。`
+      : '当前会员生效中，到期后可购买永久会员或订阅。';
+  }
+
+  private buildVisiblePlans(
+    state: AiraMembershipState,
+    purchaseAllowed: boolean
+  ): AiraProOverviewPlanState[] {
+    if (this.membershipPresentationService.isLongTermMember(state)) {
+      return [];
+    }
+    const lifetimePlan = this.buildOneTimePlanState(state, purchaseAllowed);
+    if (this.isCurrentSubscriptionMember(state)) {
+      return [lifetimePlan];
+    }
+    const subscriptionPlans: AiraProOverviewPlanState[] = AIRA_PRO_SELLABLE_IAP_PLANS.map(
+      (plan: HuaweiIapProductPlan) => this.buildSubscriptionPlanState(plan, state, purchaseAllowed)
+    );
+    return [lifetimePlan].concat(subscriptionPlans);
+  }
+
+  private resolveMembershipPresentation(
+    state: AiraMembershipState,
+    plans: AiraProOverviewPlanState[],
+    purchaseAllowed: boolean
+  ): AiraProMembershipPresentation {
+    const permanent = this.membershipPresentationService.isLongTermMember(state);
+    const subscription = this.isCurrentSubscriptionMember(state);
+    const timed = state.plan === 'pro' && !permanent && !subscription;
+    const hasPurchasablePlan = plans.some((plan: AiraProOverviewPlanState) => plan.action === 'purchase');
+    return {
+      showMembershipStatus: permanent || subscription || timed,
+      membershipStatusTitle: this.resolveMembershipStatusTitle(state, permanent, subscription),
+      membershipStatusDetail: this.resolveMembershipStatusDetail(state, permanent, subscription, timed),
+      showManageSubscription: subscription,
+      showPurchaseButton: hasPurchasablePlan || (!purchaseAllowed && plans.length > 0)
+    };
+  }
+
+  private resolveMembershipStatusTitle(
+    state: AiraMembershipState,
+    permanent: boolean,
+    subscription: boolean
+  ): string {
+    if (permanent && this.membershipPresentationService.hasInsiderRecognition(state)) {
+      return 'INSIDER 长期会员';
+    }
+    if (permanent) {
+      return '永久会员';
+    }
+    if (subscription) {
+      const productTitle = this.resolveIapProductTitle(state.subscriptionProductId);
+      return productTitle.length > 0 ? productTitle : '订阅会员';
+    }
+    return '会员生效中';
+  }
+
+  private resolveMembershipStatusDetail(
+    state: AiraMembershipState,
+    permanent: boolean,
+    subscription: boolean,
+    timed: boolean
+  ): string {
+    if (permanent) {
+      return '永久有效，无需续费';
+    }
+    const until = state.planExpiresAt > 0 ? this.formatDate(state.planExpiresAt) : '';
+    if (subscription) {
+      if (state.subscriptionStatus === 'cancelled') {
+        return until.length > 0 ? `已关闭自动续费 · ${until} 到期` : '已关闭自动续费';
+      }
+      return until.length > 0 ? `自动续费中 · ${until} 到期` : '自动续费中';
+    }
+    if (timed) {
+      return until.length > 0 ? `至 ${until}` : '到期后可购买';
+    }
+    return '';
+  }
+
+  private isCurrentSubscriptionMember(state: AiraMembershipState): boolean {
+    if (state.plan !== 'pro' || this.membershipPresentationService.isLongTermMember(state)) {
+      return false;
+    }
+    return state.subscriptionStatus === 'active' ||
+      state.subscriptionStatus === 'grace_period' ||
+      state.subscriptionStatus === 'cancelled' ||
+      state.subscriptionStatus === 'unknown';
   }
 
   private buildOneTimePlanState(
@@ -204,8 +363,8 @@ export class AiraProOverviewViewModel {
       purchaseKind: 'one_time',
       title: AIRA_PRO_ONE_TIME_PLAN.title,
       priceText: AIRA_PRO_ONE_TIME_PLAN.displayPrice,
-      amountText: AIRA_PRO_ONE_TIME_PLAN.displayPrice,
-      periodText: '',
+      amountText: AIRA_PRO_ONE_TIME_PLAN.amountText,
+      periodText: AIRA_PRO_ONE_TIME_PLAN.periodText,
       discountBadgeText: '',
       originalPriceText: '',
       description: this.buildOneTimePlanDescription(state),
@@ -315,6 +474,42 @@ export class AiraProOverviewViewModel {
     return '一次购买，不自动续费；权益不设固定到期日。';
   }
 
+  private buildComplimentaryClaimState(
+    membershipState: AiraMembershipState,
+    entryVisible: boolean
+  ): AiraProComplimentaryClaimState {
+    if (!entryVisible) {
+      return this.buildHiddenComplimentaryClaim();
+    }
+    const decision: AiraProComplimentaryClaimDecision =
+      resolveAiraProComplimentaryClaimDecision(membershipState, Date.now());
+    return {
+      entryVisible: true,
+      entryTitle: '我不想订阅，免费领取会员',
+      title: '免费领取会员',
+      days: AIRA_PRO_COMPLIMENTARY_CLAIM_DAYS,
+      message: '',
+      statusText: decision.statusText,
+      actionText: decision.actionText,
+      actionEnabled: decision.actionEnabled,
+      availability: decision.availability
+    };
+  }
+
+  private buildHiddenComplimentaryClaim(): AiraProComplimentaryClaimState {
+    return {
+      entryVisible: false,
+      entryTitle: '',
+      title: '',
+      days: AIRA_PRO_COMPLIMENTARY_CLAIM_DAYS,
+      message: '',
+      statusText: '',
+      actionText: '',
+      actionEnabled: false,
+      availability: 'available'
+    };
+  }
+
   private buildLifetimeUpgradePrompt(state: AiraMembershipState): AiraProLifetimeUpgradePromptState {
     return {
       title: '升级长期会员',
@@ -356,7 +551,7 @@ export class AiraProOverviewViewModel {
 
   private resolveIapProductTitle(productId: string): string {
     const normalized = productId.trim();
-    if (normalized === AIRA_PRO_ONE_TIME_PRODUCT_ID) {
+    if (isAiraProLifetimeProductId(normalized)) {
       return AIRA_PRO_ONE_TIME_PLAN.title;
     }
     return findAiraProIapPlanByProductId(normalized)?.title ?? '';

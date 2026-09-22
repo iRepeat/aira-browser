@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import {
-  createCenteredDialogMaterial,
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
 } from '../common/CenteredDialogSurface';
 import {
@@ -203,7 +204,9 @@ export struct CustomHomepageSettingsScreen {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   private remoteHomepageProgressDialogController: CustomDialogController = new CustomDialogController({
@@ -218,7 +221,9 @@ export struct CustomHomepageSettingsScreen {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.remoteHomepageProgressInProgress) {
         dismissDialogAction.dismiss();

@@ -38,14 +38,6 @@ export function createImmersiveMaterial(
   });
 }
 
-export function createDialogImmersiveMaterial(style: ImmersiveStyleHandle): ImmersiveMaterialHandle {
-  return new uiMaterial.ImmersiveMaterial({
-    style: style,
-    applyShadow: true,
-    interactive: false
-  });
-}
-
 export function isKitMaterialEnabled(): boolean {
   return uiMaterial.getMaterialInfo().state !== uiMaterial.MaterialState.DISABLE;
 }
@@ -63,20 +55,3 @@ export function systemMaterialModifier(
   return new SystemMaterialAttributeModifier(material);
 }
 
-export function dialogSystemMaterialField(
-  material: ImmersiveMaterialHandle | undefined
-): Record<string, ImmersiveMaterialHandle | undefined> {
-  const fields: Record<string, ImmersiveMaterialHandle | undefined> =
-    new Object() as Record<string, ImmersiveMaterialHandle | undefined>;
-  if (material !== undefined) {
-    fields.systemMaterial = material;
-  }
-  return fields;
-}
-
-export function assignDialogSystemMaterial(
-  params: Object,
-  material: ImmersiveMaterialHandle | undefined
-): void {
-  (params as Record<string, ImmersiveMaterialHandle | undefined>).systemMaterial = material;
-}

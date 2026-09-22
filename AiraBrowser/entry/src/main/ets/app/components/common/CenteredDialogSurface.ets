@@ -1,14 +1,5 @@
-import {
-  FLOATING_GLASS_MATERIAL_THICK_STYLE,
-  isFloatingGlassMaterialAvailable
-} from './FloatingGlassMaterialTokens';
-import {
-  applyCommonSystemMaterial,
-  assignDialogSystemMaterial,
-  createDialogImmersiveMaterial,
-  ImmersiveMaterialHandle
-} from './ArkUiMaterialAccess';
 import { display } from '@kit.ArkUI';
+import { BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY } from '../../../core/theme/BrowserThemeStorageKeys';
 import {
   CENTERED_DIALOG_ALERT_WIDTH_RATIO,
   CENTERED_DIALOG_MAX_WIDTH_VP,
@@ -42,11 +33,17 @@ const CENTERED_DIALOG_ALERT_WIDTH_PERCENT: Dimension = '90%';
 
 const centeredDialogWidthViewModel: CenteredDialogWidthViewModel = new CenteredDialogWidthViewModel();
 
-export function createCenteredDialogMaterial(): ImmersiveMaterialHandle | undefined {
-  if (!isFloatingGlassMaterialAvailable()) {
-    return undefined;
+/**
+ * One opaque surface for every centered dialog. Reads the same floating-surface
+ * token the rest of the shell uses, and falls back to the light/dark resource
+ * when the theme has not been published yet.
+ */
+export function resolveCenteredDialogSurfaceColor(): ResourceColor {
+  const storedColor = AppStorage.get<string>(BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY);
+  if (storedColor === undefined || storedColor.length === 0) {
+    return $r('app.color.surface_floating_background');
   }
-  return createDialogImmersiveMaterial(FLOATING_GLASS_MATERIAL_THICK_STYLE);
+  return storedColor;
 }
 
 export type CenteredAlertDialogParams =
@@ -99,15 +96,17 @@ function readDisplayWidthVp(): number {
     return 0;
   }
 }
-/** Adds the shared API 26 presentation parameters without choosing the execution owner. */
+
+/** Adds the shared centered-dialog surface without choosing the execution owner. */
 export function configureCenteredAlertDialog(params: CenteredAlertDialogParams): CenteredAlertDialogParams {
   params.width = resolveCenteredAlertDialogWidth();
   params.cornerRadius = CENTERED_DIALOG_CORNER_RADIUS_VP;
-  assignDialogSystemMaterial(params, createCenteredDialogMaterial());
+  params.backgroundColor = resolveCenteredDialogSurfaceColor();
+  params.backgroundBlurStyle = BlurStyle.NONE;
   return params;
 }
 
-/** Applies the shared API 26 material contract while retaining AlertDialog's native behavior. */
+/** Applies the shared solid surface while retaining AlertDialog's native behavior. */
 export function showCenteredAlertDialog(params: CenteredAlertDialogParams): void {
   AlertDialog.show(configureCenteredAlertDialog(params));
 }
@@ -118,7 +117,6 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
   private readonly contentPadding: boolean;
   private readonly paddingTop: number;
   private readonly paddingBottom: number;
-  private readonly materialEnabled: boolean;
   private readonly definiteWidth: boolean;
 
   constructor(
@@ -127,7 +125,6 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
     contentPadding: boolean = false,
     paddingTop: number = CENTERED_DIALOG_TOP_PADDING_VP,
     paddingBottom: number = CENTERED_DIALOG_BOTTOM_PADDING_VP,
-    materialEnabled: boolean = true,
     definiteWidth: boolean = false
   ) {
     this.fillHeight = fillHeight;
@@ -135,7 +132,6 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
     this.contentPadding = contentPadding;
     this.paddingTop = paddingTop;
     this.paddingBottom = paddingBottom;
-    this.materialEnabled = materialEnabled;
     this.definiteWidth = definiteWidth;
   }
 
@@ -162,6 +158,7 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
     }
     instance.borderRadius(CENTERED_DIALOG_CORNER_RADIUS_VP)
     instance.clip(true)
+    instance.backgroundColor(resolveCenteredDialogSurfaceColor())
     if (this.contentPadding) {
       instance.padding({
         left: CENTERED_DIALOG_HORIZONTAL_PADDING_VP,
@@ -169,9 +166,6 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
         top: this.paddingTop,
         bottom: this.paddingBottom
       })
-    }
-    if (this.materialEnabled) {
-      applyCommonSystemMaterial(instance, createCenteredDialogMaterial());
     }
   }
 }
@@ -186,26 +180,25 @@ export const CENTERED_DIALOG_TALL_PADDED_SURFACE_MODIFIER: AttributeModifier<Com
   new CenteredDialogSurfaceModifier(true, false, true);
 export const CENTERED_DIALOG_SCROLL_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
   new CenteredDialogSurfaceModifier(false, true);
-// CustomDialog content uses the controller's systemMaterial so the system owns one glass surface.
 export const CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
-  new CenteredDialogSurfaceModifier(false, false, true, CENTERED_DIALOG_TOP_PADDING_VP, CENTERED_DIALOG_BOTTOM_PADDING_VP, false);
+  new CenteredDialogSurfaceModifier(false, false, true);
 export const CENTERED_DIALOG_SYSTEM_COMPACT_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
-  new CenteredDialogSurfaceModifier(false, false, true, 16, 12, false);
+  new CenteredDialogSurfaceModifier(false, false, true, 16, 12);
 export const CENTERED_DIALOG_SYSTEM_TALL_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
-  new CenteredDialogSurfaceModifier(true, false, false, CENTERED_DIALOG_TOP_PADDING_VP, CENTERED_DIALOG_BOTTOM_PADDING_VP, false);
+  new CenteredDialogSurfaceModifier(true);
 // Same tall surface, but with a definite width for content that has no intrinsic width
 // (a wrapped Navigation or Scroll) and would otherwise collapse narrower than its peers.
 export const CENTERED_DIALOG_SYSTEM_TALL_DEFINITE_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
-  new CenteredDialogSurfaceModifier(true, false, false, CENTERED_DIALOG_TOP_PADDING_VP, CENTERED_DIALOG_BOTTOM_PADDING_VP, false, true);
+  new CenteredDialogSurfaceModifier(true, false, false, CENTERED_DIALOG_TOP_PADDING_VP,
+    CENTERED_DIALOG_BOTTOM_PADDING_VP, true);
 export const CENTERED_DIALOG_SYSTEM_TALL_PADDED_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
-  new CenteredDialogSurfaceModifier(true, false, true, CENTERED_DIALOG_TOP_PADDING_VP, CENTERED_DIALOG_BOTTOM_PADDING_VP, false);
+  new CenteredDialogSurfaceModifier(true, false, true);
 export const CENTERED_DIALOG_SYSTEM_SCROLL_SURFACE_MODIFIER: AttributeModifier<CommonAttribute> =
-  new CenteredDialogSurfaceModifier(false, true, false, CENTERED_DIALOG_TOP_PADDING_VP, CENTERED_DIALOG_BOTTOM_PADDING_VP, false);
+  new CenteredDialogSurfaceModifier(false, true);
 
 @Component
 export struct CenteredDialogSurface {
   @Prop fillHeight: boolean = false;
-  @Prop materialEnabled: boolean = true;
   @BuilderParam content: () => void = this.emptyContent;
 
   build() {
@@ -221,14 +214,7 @@ export struct CenteredDialogSurface {
     Stack({ alignContent: Alignment.TopStart }) {
       this.content()
     }
-    .attributeModifier(new CenteredDialogSurfaceModifier(
-      false,
-      false,
-      true,
-      CENTERED_DIALOG_TOP_PADDING_VP,
-      CENTERED_DIALOG_BOTTOM_PADDING_VP,
-      this.materialEnabled
-    ))
+    .attributeModifier(new CenteredDialogSurfaceModifier(false, false, true))
   }
 
   @Builder
@@ -236,14 +222,7 @@ export struct CenteredDialogSurface {
     Stack({ alignContent: Alignment.TopStart }) {
       this.content()
     }
-    .attributeModifier(new CenteredDialogSurfaceModifier(
-      true,
-      false,
-      false,
-      CENTERED_DIALOG_TOP_PADDING_VP,
-      CENTERED_DIALOG_BOTTOM_PADDING_VP,
-      this.materialEnabled
-    ))
+    .attributeModifier(new CenteredDialogSurfaceModifier(true))
   }
 
   @Builder

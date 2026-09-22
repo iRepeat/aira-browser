@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import {
-  createCenteredDialogMaterial,
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
 } from '../common/CenteredDialogSurface';
 import { pasteboard } from '@kit.BasicServicesKit';
@@ -218,7 +219,9 @@ export struct SettingsInlineDetailPanel {
     alignment: DialogAlignment.Center,
     autoCancel: true,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
   private supportQqGroupDialogController: CustomDialogController = new CustomDialogController({
     builder: SupportQqGroupDialog({
@@ -230,7 +233,9 @@ export struct SettingsInlineDetailPanel {
     alignment: DialogAlignment.Center,
     autoCancel: true,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
   private alwaysPrivateConfirmationDialogController: CustomDialogController = new CustomDialogController({
     builder: AlwaysPrivateModeConfirmationDialog({
@@ -247,7 +252,9 @@ export struct SettingsInlineDetailPanel {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
 
   aboutToAppear(): void {

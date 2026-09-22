@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import {
-  createCenteredDialogMaterial,
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
 } from '../common/CenteredDialogSurface';
 import {
@@ -138,7 +139,9 @@ export struct LocalBackupScreen {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onDidDisappear: (): void => {
       this.handleImportDialogDisappear();
     }
@@ -148,7 +151,9 @@ export struct LocalBackupScreen {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
       if (!this.isBusy) {
         dismissDialogAction.dismiss();

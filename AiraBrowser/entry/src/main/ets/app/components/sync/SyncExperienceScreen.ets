@@ -32,7 +32,11 @@ import {
   SyncExperienceSelectionDialog,
   SyncExperienceSelectionKind
 } from './SyncExperienceSelectionDialog';
-import { createCenteredDialogMaterial, resolveWideCenteredDialogWidth } from '../common/CenteredDialogSurface';
+import {
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
+  resolveCenteredDialogSurfaceColor,
+  resolveWideCenteredDialogWidth
+} from '../common/CenteredDialogSurface';
 import { SyncContentSwitchCard } from './SyncContentSwitchCard';
 import {
   BrowserSettingsIconBackgroundTokenSet,
@@ -162,7 +166,9 @@ export struct SyncExperienceScreen {
     // The controller caps its own box at 400 vp by default; widen the box too, or the
     // 560 vp content is laid out against a narrower box and gets clipped.
     width: resolveWideCenteredDialogWidth(),
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
 
   aboutToAppear(): void {

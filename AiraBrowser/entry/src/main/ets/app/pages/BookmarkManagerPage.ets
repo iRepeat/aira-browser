@@ -1,6 +1,7 @@
 import { DEFAULT_THEME_PALETTE } from '../../features/theme/palettes/DefaultThemePalette';
 import {
-  createCenteredDialogMaterial,
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
 } from '../components/common/CenteredDialogSurface';
 import { common } from '@kit.AbilityKit';
@@ -220,7 +221,7 @@ struct BookmarkManagerPage {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   private editNodeDialogController: CustomDialogController = new CustomDialogController({
@@ -234,7 +235,7 @@ struct BookmarkManagerPage {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   private bookmarkTransferProgressDialogOpen: boolean = false;
@@ -250,7 +251,7 @@ struct BookmarkManagerPage {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.bookmarkTransferInProgress) {
         dismissDialogAction.dismiss();
@@ -268,7 +269,7 @@ struct BookmarkManagerPage {
     alignment: DialogAlignment.Center,
     autoCancel: true,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
   private bookmarkTransferProgressController: SyncOperationProgressController = new SyncOperationProgressController(
     (state: SyncOperationProgressUiState): void => {

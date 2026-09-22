@@ -3,7 +3,9 @@ import {
   TranslationProviderTemplateId
 } from '../../../common/models/BrowserModels';
 import {
-  createCenteredDialogMaterial,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
+  CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER,
+  resolveCenteredDialogSurfaceColor,
   showCenteredAlertDialog
 } from '../common/CenteredDialogSurface';
 import {
@@ -30,7 +32,6 @@ import {
   BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
-import { CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER } from '../common/CenteredDialogSurface';
 import { TranslationProviderEditScreen } from './TranslationProviderEditScreen';
 import { TranslationProviderConfigScreen } from './TranslationProviderConfigScreen';
 import { SettingsDesktopWorkspaceHeader } from '../settings/SettingsDesktopWorkspaceHeader';
@@ -81,7 +82,9 @@ export struct TranslationProviderWorkspaceHost {
     autoCancel: false,
     alignment: DialogAlignment.Center,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
   @StorageProp(BROWSER_THEME_STORAGE_ACCENT_KEY) private storedAccentColor: string = '#0A59F7';
   @StorageProp(BROWSER_THEME_STORAGE_PRESSED_BACKGROUND_KEY) private storedPressedBackgroundColor: string = '#DDE4EC';

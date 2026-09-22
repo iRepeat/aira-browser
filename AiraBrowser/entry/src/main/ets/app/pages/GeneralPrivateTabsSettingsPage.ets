@@ -10,7 +10,7 @@ import {
 import { sharedPreferencesRepository } from '../bootstrap/BrowserAppRuntime';
 import { SettingsOptionRow, SettingsSwitchRow } from '../components/settings/SettingsRows';
 import { SettingsHdsScaffold } from '../components/settings/SettingsHdsScaffold';
-import { createCenteredDialogMaterial } from '../components/common/CenteredDialogSurface';
+import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../components/common/CenteredDialogSurface';
 import {
   SettingsGroupCard,
   SettingsGroupDivider,
@@ -67,7 +67,9 @@ struct GeneralPrivateTabsSettingsPage {
     autoCancel: false,
     alignment: DialogAlignment.Center,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
 
   aboutToAppear(): void {

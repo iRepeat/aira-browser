@@ -17,6 +17,12 @@ export struct BrowserAdaptiveModalOverlay {
   @Prop title: string = '';
   @Prop showDesktopHeader: boolean = true;
   @Prop showDesktopRefreshButton: boolean = false;
+  /**
+   * Whether a tap on the dimmed area (or an Escape press on a large screen) closes this
+   * surface. Announcements that must actually be read keep it false: a stray tap then does
+   * nothing, and only the surface's own action button can finish it.
+   */
+  @Prop dismissOnOutsideTap: boolean = true;
   @Prop phoneSheetHeight: Length = '';
   @Prop phoneSheetAlignment: Alignment = Alignment.Bottom;
   @Prop phoneEnterOffsetY: number = 48;
@@ -60,7 +66,9 @@ export struct BrowserAdaptiveModalOverlay {
           modalTransition: ModalTransition.NONE,
           backgroundColor: Color.Transparent,
           onWillDismiss: (_action: DismissContentCoverAction): void => {
-            this.requestDismiss();
+            if (this.dismissOnOutsideTap) {
+              this.requestDismiss();
+            }
           },
           onDisappear: (): void => {
             this.handleLargeScreenCoverDisappear();
@@ -74,6 +82,7 @@ export struct BrowserAdaptiveModalOverlay {
         enterOffsetY: this.phoneEnterOffsetY,
         animationDurationMs: this.animationDurationMs,
         zIndexValue: this.zIndexValue,
+        dismissOnOutsideTap: this.dismissOnOutsideTap,
         onDismiss: this.onDismiss
       }) {
         this.content()
@@ -97,7 +106,9 @@ export struct BrowserAdaptiveModalOverlay {
           }))
           .hitTestBehavior(this.largeScreenPresentationVisible ? HitTestMode.Default : HitTestMode.None)
           .onClick((): void => {
-            this.requestDismiss();
+            if (this.dismissOnOutsideTap) {
+              this.requestDismiss();
+            }
           })
 
         Column({ space: 0 }) {
@@ -134,7 +145,9 @@ export struct BrowserAdaptiveModalOverlay {
           .animation({ duration: this.animationDurationMs, curve: Curve.EaseOut }))
         .hitTestBehavior(this.largeScreenPresentationVisible ? HitTestMode.BLOCK_HIERARCHY : HitTestMode.None)
         .keyboardShortcut(FunctionKey.ESC, [], (): void => {
-          this.requestDismiss();
+          if (this.dismissOnOutsideTap) {
+            this.requestDismiss();
+          }
         })
       }
     }

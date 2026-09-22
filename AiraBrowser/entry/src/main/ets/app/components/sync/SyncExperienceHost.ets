@@ -1,6 +1,7 @@
 import router from '@ohos.router';
 import {
-  createCenteredDialogMaterial,
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
 } from '../common/CenteredDialogSurface';
 import {
@@ -93,7 +94,9 @@ export struct SyncExperienceHost {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.syncProgressInProgress) {
         dismissDialogAction.dismiss();

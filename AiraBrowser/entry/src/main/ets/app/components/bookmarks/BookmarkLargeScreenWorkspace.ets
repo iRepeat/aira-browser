@@ -1,6 +1,7 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import {
-  createCenteredDialogMaterial,
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
 } from '../common/CenteredDialogSurface';
 import {
@@ -122,7 +123,9 @@ export struct BookmarkLargeScreenWorkspace {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   private editNodeDialogController: CustomDialogController = new CustomDialogController({
@@ -136,7 +139,9 @@ export struct BookmarkLargeScreenWorkspace {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
 

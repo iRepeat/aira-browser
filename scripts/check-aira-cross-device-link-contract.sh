@@ -35,6 +35,7 @@ HOST_REL="${ETS_DIR}/app/components/sync/CrossDeviceLinkHost.ets"
 PAGE_REL="${ETS_DIR}/app/pages/CrossDeviceLinkPage.ets"
 SETUP_PAGE_REL="${ETS_DIR}/app/pages/CrossDeviceLinkSetupPage.ets"
 SETUP_SCREEN_REL="${ETS_DIR}/app/components/sync/CrossDeviceLinkSetupScreen.ets"
+PERSONAL_SERVER_PAGE_REL="${ETS_DIR}/app/pages/SyncPersonalServerConfigPage.ets"
 CATALOG_SERVICE_REL="${ETS_DIR}/services/sync/SyncDesktopExtensionCatalog.ets"
 DESTINATIONS_REL="${ETS_DIR}/core/settings/SettingsDestinationCatalog.ets"
 CENTER_VIEW_MODEL_REL="${ETS_DIR}/core/settings/SettingsCenterViewModel.ets"
@@ -231,8 +232,18 @@ require_pattern "${SCREEN_REL}" "buildSyncSection\\(\\)" \
   "the sync section must have one builder."
 reject_pattern "${SCREEN_REL}" "iconBackgroundColor: this.storedAccentColor" \
   "capability and list icons must not all collapse to one flat color."
-require_pattern "${SCREEN_REL}" "menuActionAiraIconId: HELP_GLYPH" \
-  "the help action must use the app's own font glyph."
+# The header carries no help action: a document icon in the title bar competed with the
+# back action and duplicated an entry that now lives on the surfaces it belongs to.
+reject_pattern "${SCREEN_REL}" "menuActionLabel|menuActionAiraIconId|onMenuAction" \
+  "the link page must not keep a title-bar help action."
+reject_pattern "${SETUP_SCREEN_REL}" "menuActionLabel|menuActionIcon|onMenuAction" \
+  "the setup sub-page must not keep a title-bar help action."
+# Removing the header icon must not remove the guide: the private-deployment config page
+# is where a self-hosting user lands, so it carries the remaining entry point.
+require_pattern "${PERSONAL_SERVER_PAGE_REL}" "查看私有化部署教程" \
+  "the private-deployment page must offer the deployment guide."
+require_pattern "${PERSONAL_SERVER_PAGE_REL}" "openSyncDesktopBookmarkGuide" \
+  "the private-deployment guide entry must open the shared guide route."
 
 # The local package page is password protected: opening it copies the password first and
 # tells the user it is ready to paste, so the password stays in the catalog.
@@ -350,25 +361,22 @@ require_pattern "${VIEW_MODEL_REL}" "onlineComputerCount: facts.devices.length" 
 require_pattern "${HOST_REL}" "resolveAiraHuaweiAccountIdentity" \
   "the header identity must come from the sync owner's settings."
 # The page's own chrome uses the app's Operational font icons, never the system symbol set:
-# its own phone, its paired computer, and its help action each have a semantic id.
+# its own phone and its paired computer each have a semantic id. The help glyph is gone
+# with the header action, so only the two header peers remain.
 require_pattern "${SCREEN_REL}" "LOCAL_DEVICE_GLYPH: AiraRenderableIconId = 'crossDeviceLink.localDevice'" \
   "the phone side of the header must be the app's own device font icon."
 require_pattern "${SCREEN_REL}" "PEER_COMPUTER_GLYPH: AiraRenderableIconId = 'crossDeviceLink.peerComputer'" \
   "the computer side of the header must be the app's own computer font icon."
-require_pattern "${SCREEN_REL}" "HELP_GLYPH: AiraRenderableIconId = 'crossDeviceLink.help'" \
-  "the help action must be the app's own font icon."
-require_pattern "${SCREEN_REL}" "menuActionAiraIconId: HELP_GLYPH" \
-  "the help action must go through the scaffold's Aira icon slot."
+reject_pattern "${SCREEN_REL}" "HELP_GLYPH|crossDeviceLink\.help" \
+  "the removed header help action must not linger as a glyph constant."
 reject_pattern "${SCREEN_REL}" "sys\\.symbol\\.doc_text_fill" \
-  "the help action must not fall back to the system document glyph."
+  "the link page must not fall back to the system document glyph."
 reject_pattern "${SCREEN_REL}" "sys\\.symbol\\.phone_fill|sys\\.symbol\\.desktop_fill" \
   "the header peers must not fall back to the system device glyphs."
 require_pattern "${CATALOG_REL}" "crossDeviceLink.localDevice" \
   "the catalog must own the page's device glyph."
 require_pattern "${CATALOG_REL}" "crossDeviceLink.peerComputer" \
   "the catalog must own the page's computer glyph."
-require_pattern "${CATALOG_REL}" "crossDeviceLink.help" \
-  "the catalog must own the page's help glyph."
 require_pattern "${SCREEN_REL}" "this\\.buildConnector\\(this\\.isComputerOnline\\(\\)\\)" \
   "only the computer connector may follow the online state."
 reject_pattern "${SCREEN_REL}" "connectionTitle|connectionMessage" \

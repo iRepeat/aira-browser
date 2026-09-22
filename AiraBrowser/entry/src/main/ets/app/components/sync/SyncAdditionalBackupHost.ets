@@ -1,6 +1,8 @@
 import { AiraAdditionalBackupIntervalDays } from '../../../common/models/AiraSyncModels';
 import {
-  createCenteredDialogMaterial,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
+  CenteredDialogSurface,
+  resolveCenteredDialogSurfaceColor,
   showCenteredAlertDialog
 } from '../common/CenteredDialogSurface';
 import {
@@ -64,7 +66,6 @@ import {
   BrowserFeatureSheetHeader,
   BrowserImmersiveSheetLayout
 } from '../browser/BrowserModalBottomSheet';
-import { CenteredDialogSurface } from '../common/CenteredDialogSurface';
 
 interface SyncAdditionalBackupIntervalOption {
   days: AiraAdditionalBackupIntervalDays;
@@ -135,7 +136,9 @@ export struct SyncAdditionalBackupHost {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.progressInProgress) {
         dismissDialogAction.dismiss();

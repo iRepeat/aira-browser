@@ -8,8 +8,9 @@ import {
 } from '../../../core/browser/BrowserWebCapabilityPromptApplicationCoordinator';
 import { BrowserSheetActionButton } from './BrowserModalBottomSheet';
 import {
-  CENTERED_DIALOG_SYSTEM_COMPACT_SURFACE_MODIFIER,
-  createCenteredDialogMaterial
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
+  CENTERED_DIALOG_SYSTEM_COMPACT_SURFACE_MODIFIER
 } from '../common/CenteredDialogSurface';
 
 @CustomDialog
@@ -77,7 +78,9 @@ export struct BrowserSitePermissionPromptHost {
       onAction: (action: BrowserSitePermissionPromptAction): void => this.handleAction(action)
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true,
     onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
       if (this.decisionCommitted) {

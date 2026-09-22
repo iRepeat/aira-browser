@@ -41,7 +41,7 @@ export struct SecureDnsProfileEditDialog {
   controller?: CustomDialogController;
 
   build() {
-    CenteredDialogSurface({ materialEnabled: false }) {
+    CenteredDialogSurface() {
       SecureDnsProfileEditHost({
         presentationMode: 'dialog',
         dataScope: this.dataScope,

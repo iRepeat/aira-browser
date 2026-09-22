@@ -3,7 +3,8 @@ import {
   AiraSyncProviderKind
 } from '../../common/models/AiraSyncModels';
 import {
-  createCenteredDialogMaterial,
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
 } from '../components/common/CenteredDialogSurface';
 import router from '@ohos.router';
@@ -154,7 +155,9 @@ struct SyncWebdavConfigPage {
     alignment: DialogAlignment.Center,
     autoCancel: true,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
   private syncResultDialogController: CustomDialogController = new CustomDialogController({
     builder: SyncResultDialog({
@@ -164,7 +167,9 @@ struct SyncWebdavConfigPage {
     alignment: DialogAlignment.Center,
     autoCancel: true,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
   private syncProgressDialogOpen: boolean = false;
   private syncProgressTipTimer: number = -1;
@@ -187,7 +192,9 @@ struct SyncWebdavConfigPage {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.syncFloatingInProgress) {
         dismissDialogAction.dismiss();

@@ -1,8 +1,9 @@
 export const AIRA_PRO_MONTHLY_PRODUCT_ID: string = 'aira_pro_monthly';
 export const AIRA_PRO_QUARTERLY_PRODUCT_ID: string = 'aira_pro_quarterly';
 export const AIRA_PRO_YEARLY_PRODUCT_ID: string = 'aira_pro_yearly';
-export const AIRA_PRO_ONE_TIME_PRODUCT_ID: string = 'aira_pro_one_time';
-const AIRA_PRO_ONE_TIME_DISPLAY_PRICE: string = '¥38.8';
+export const AIRA_PRO_ONE_TIME_PRODUCT_ID: string = 'aira_pro_lifetime';
+const AIRA_PRO_LEGACY_ONE_TIME_PRODUCT_ID: string = 'aira_pro_one_time';
+const AIRA_PRO_ONE_TIME_DISPLAY_PRICE: string = '¥68.8';
 
 export type HuaweiIapProductPeriod = 'monthly' | 'quarterly' | 'yearly';
 export type HuaweiIapPlanId = HuaweiIapProductPeriod | 'one_time';
@@ -32,6 +33,8 @@ export interface HuaweiIapOneTimePlan {
   featurePlan: 'pro';
   title: string;
   displayPrice: string;
+  amountText: string;
+  periodText: string;
   description: string;
   badgeText: string;
 }
@@ -80,10 +83,12 @@ export const AIRA_PRO_ONE_TIME_PLAN: HuaweiIapOneTimePlan = {
   productId: AIRA_PRO_ONE_TIME_PRODUCT_ID,
   planId: 'one_time',
   featurePlan: 'pro',
-  title: '长期会员',
-  displayPrice: AIRA_PRO_ONE_TIME_DISPLAY_PRICE,
-  description: `早鸟价 ${AIRA_PRO_ONE_TIME_DISPLAY_PRICE} · 长期有效 · 不自动续费`,
-  badgeText: '推荐'
+  title: '永久会员',
+  displayPrice: `${AIRA_PRO_ONE_TIME_DISPLAY_PRICE} 永久`,
+  amountText: AIRA_PRO_ONE_TIME_DISPLAY_PRICE,
+  periodText: '永久',
+  description: '一次购买，永久有效，不自动续费',
+  badgeText: ''
 };
 
 export const AIRA_PRO_SELLABLE_IAP_PLANS: HuaweiIapProductPlan[] = [
@@ -139,4 +144,11 @@ export function resolveAiraProProductId(planId: string): string {
     return AIRA_PRO_ONE_TIME_PRODUCT_ID;
   }
   return resolveAiraProIapPlan(normalizedPlanId).productId;
+}
+
+/** Current store id is `aira_pro_lifetime`; older builds sold `aira_pro_one_time`. */
+export function isAiraProLifetimeProductId(productId: string): boolean {
+  const normalizedProductId = productId.trim();
+  return normalizedProductId === AIRA_PRO_ONE_TIME_PRODUCT_ID ||
+    normalizedProductId === AIRA_PRO_LEGACY_ONE_TIME_PRODUCT_ID;
 }

@@ -23,10 +23,6 @@ export function createImmersiveMaterial(
   return new ImmersiveMaterialPlaceholder();
 }
 
-export function createDialogImmersiveMaterial(_style: ImmersiveStyleHandle): ImmersiveMaterialHandle {
-  return new ImmersiveMaterialPlaceholder();
-}
-
 export function isKitMaterialEnabled(): boolean {
   return false;
 }
@@ -43,16 +39,3 @@ export function systemMaterialModifier(
   return new NoopSystemMaterialAttributeModifier();
 }
 
-export function dialogSystemMaterialField(
-  _material: ImmersiveMaterialHandle | undefined
-): Record<string, ImmersiveMaterialHandle | undefined> {
-  const fields: Record<string, ImmersiveMaterialHandle | undefined> =
-    new Object() as Record<string, ImmersiveMaterialHandle | undefined>;
-  return fields;
-}
-
-export function assignDialogSystemMaterial(
-  _params: Object,
-  _material: ImmersiveMaterialHandle | undefined
-): void {
-}

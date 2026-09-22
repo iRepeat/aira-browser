@@ -15,7 +15,7 @@ import {
 } from './SettingsLayout';
 import { SettingsOptionRow, SettingsRowPosition } from './SettingsRows';
 import { DesktopInterfaceModeConfirmationDialog } from './DesktopInterfaceModeConfirmationDialog';
-import { createCenteredDialogMaterial } from '../common/CenteredDialogSurface';
+import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 
 const TABLET_INTERFACE_MODE_RADIO_GROUP: string = 'tablet-interface-mode';
 
@@ -49,7 +49,9 @@ export struct BrowserTabletInterfaceModeSettingsContent {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
 
   aboutToAppear(): void {

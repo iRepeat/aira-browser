@@ -1018,7 +1018,7 @@ import {
 import { ReadingWindowBrightnessService } from '../../services/reading/ReadingWindowBrightnessService';
 import { ReaderSpeechPlayerOverlay } from '../components/browser/ReaderSpeechPlayerScreen';
 import { ReaderSpeechVoiceDialog } from '../components/browser/ReaderSpeechVoiceDialog';
-import { createCenteredDialogMaterial } from '../components/common/CenteredDialogSurface';
+import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../components/common/CenteredDialogSurface';
 import {
   WebpageTranslationTargetLanguageOverlay
 } from '../components/translation/WebpageTranslationTargetLanguageSheet';
@@ -5446,7 +5446,9 @@ struct BrowserShellPage {
     }),
     alignment: DialogAlignment.Center,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   private largeScreenWebZoomDialogController: CustomDialogController = new CustomDialogController({
@@ -5465,7 +5467,9 @@ struct BrowserShellPage {
     }),
     alignment: DialogAlignment.Center,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       this.browserLargeScreenShellIntentApplication.handleWebZoomDialogDismissed();
@@ -5489,7 +5493,9 @@ struct BrowserShellPage {
     }),
     alignment: DialogAlignment.Center,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: false
   });
   private editHomeShortcutDialogController: CustomDialogController = new CustomDialogController({
@@ -5503,7 +5509,9 @@ struct BrowserShellPage {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   private desktopShortcutNameDialogController: CustomDialogController = new CustomDialogController({
@@ -5514,7 +5522,9 @@ struct BrowserShellPage {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       void this.webAppInstallCoordinator.handleDialogDismissed();
@@ -5532,7 +5542,9 @@ struct BrowserShellPage {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: false
   });
   private httpAuthDialogController: CustomDialogController = new CustomDialogController({
@@ -5546,7 +5558,9 @@ struct BrowserShellPage {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: false
   });
   private siteReportDialogController: CustomDialogController = new CustomDialogController({
@@ -5559,7 +5573,9 @@ struct BrowserShellPage {
       }
     }),
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   private documentViewerFileInfoDialogController: CustomDialogController = new CustomDialogController({
@@ -5568,7 +5584,9 @@ struct BrowserShellPage {
     }),
     alignment: DialogAlignment.Center,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   private readerSpeechVoiceDialogController: CustomDialogController = new CustomDialogController({
@@ -5580,7 +5598,9 @@ struct BrowserShellPage {
     }),
     alignment: DialogAlignment.Center,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     autoCancel: true
   });
   @State addressBarTabSwipePreview?: BrowserTabPreviewState = undefined;

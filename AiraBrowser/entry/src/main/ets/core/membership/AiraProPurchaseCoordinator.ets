@@ -10,7 +10,7 @@ import {
   HuaweiIapVerificationResponseBody
 } from '../../services/membership/HuaweiIapVerificationFunctionService';
 import {
-  AIRA_PRO_ONE_TIME_PRODUCT_ID,
+  isAiraProLifetimeProductId,
   isAiraProIapPlanId,
   isAiraProSellablePlanId
 } from '../../services/membership/HuaweiIapProductCatalog';
@@ -223,7 +223,9 @@ export class AiraProPurchaseCoordinator {
     period: string = 'monthly',
     uid: string = ''
   ): Promise<HuaweiIapOperationResult> {
-    if (!isAiraProSellablePlanId(period)) {
+    // Monthly and yearly stay on the renewal sheet. Permanent membership is
+    // the separate non-consumable aira_pro_lifetime purchase.
+    if (!isAiraProSellablePlanId(period) && period.trim().toLowerCase() !== 'one_time') {
       return this.buildUnsupportedPlanResult(period, 'purchase_pro_monthly');
     }
     if (uid.trim().length <= 0) {
@@ -492,7 +494,7 @@ export class AiraProPurchaseCoordinator {
   }
 
   private isLongTermPurchase(verification: HuaweiIapVerificationResponseBody): boolean {
-    return verification.productId?.trim() === AIRA_PRO_ONE_TIME_PRODUCT_ID;
+    return isAiraProLifetimeProductId(verification.productId ?? '');
   }
 
   private formatDate(timestamp: number): string {

@@ -21,7 +21,7 @@ import { KeyboardShortcutsContent } from './KeyboardShortcutsContent';
 import { AppIconSettingsContent } from './AppIconSettingsContent';
 import { ThemePaletteSettingsContent } from './ThemePaletteSettingsContent';
 import { BrowserTabletInterfaceModeSettingsContent } from './BrowserTabletInterfaceModeSettingsContent';
-import { createCenteredDialogMaterial } from '../common/CenteredDialogSurface';
+import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 import { BrowserTrackingProtectionSettingsContent } from './BrowserTrackingProtectionSettingsContent';
 import {
   SiteControlsExternalNavigationDefaultContent
@@ -212,7 +212,9 @@ export struct SettingsLargeScreenShell {
     alignment: DialogAlignment.Center,
     autoCancel: true,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
 
   build() {

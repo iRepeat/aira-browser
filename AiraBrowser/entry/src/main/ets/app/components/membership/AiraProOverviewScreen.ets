@@ -7,7 +7,9 @@ import {
 import { AiraProReachableDeviceGlyph } from '../../../core/membership/AiraProBenefitCatalog';
 import {
   BrowserSettingsIconBackgroundTokenSet,
-  DEFAULT_BROWSER_SETTINGS_ICON_BACKGROUND_TOKENS
+  BrowserSyncProviderIconBackgroundTokenSet,
+  DEFAULT_BROWSER_SETTINGS_ICON_BACKGROUND_TOKENS,
+  DEFAULT_BROWSER_SYNC_PROVIDER_ICON_BACKGROUND_TOKENS
 } from '../../../features/theme/BrowserThemePaletteModels';
 import { AiraIcon } from '../common/AiraIcon';
 import {
@@ -49,6 +51,22 @@ export struct AiraProOverviewScreen {
     benefits: [],
     reachableDevices: [],
     plans: [],
+    showMembershipStatus: false,
+    membershipStatusTitle: '',
+    membershipStatusDetail: '',
+    showManageSubscription: false,
+    showPurchaseButton: true,
+    complimentaryClaim: {
+      entryVisible: false,
+      entryTitle: '',
+      title: '',
+      days: 15,
+      message: '',
+      statusText: '',
+      actionText: '',
+      actionEnabled: false,
+      availability: 'available'
+    },
     proValue: '查看',
     proActivatedActionText: '已开通 Aira Pro',
     proLegalPromptText: '我已阅读并同意',
@@ -70,17 +88,20 @@ export struct AiraProOverviewScreen {
   @Prop primaryTextColor: ResourceColor = '#111318';
   @Prop secondaryTextColor: ResourceColor = '#5F6875';
   @Prop dividerColor: ResourceColor = '#E3E8EF';
-  @Prop outlineStrokeColor: ResourceColor = '#26000000';
   @Prop settingsIconForeground: ResourceColor = '#FFFFFF';
   @Prop settingsIconBackgrounds: BrowserSettingsIconBackgroundTokenSet =
     DEFAULT_BROWSER_SETTINGS_ICON_BACKGROUND_TOKENS;
-  @State private selectedPlanId: string = 'yearly';
+  @Prop syncProviderIconBackgrounds: BrowserSyncProviderIconBackgroundTokenSet =
+    DEFAULT_BROWSER_SYNC_PROVIDER_ICON_BACKGROUND_TOKENS;
+  @State private selectedPlanId: string = 'one_time';
   @State private proTermsAccepted: boolean = false;
   scroller?: Scroller;
   onSubscribe?: (planId: string) => void;
+  onOpenSelfHostingGuide?: () => void;
   onOpenMembershipTerms?: () => void;
   onOpenAutoRenewalNotice?: () => void;
   onManageSubscription?: () => void;
+  onOpenComplimentaryClaim?: () => void;
 
   build() {
     SettingsScrollBody({
@@ -92,8 +113,20 @@ export struct AiraProOverviewScreen {
       this.buildHero()
       this.buildReachableDeviceRail()
       this.buildBenefitCard()
-      this.buildPlanArea()
-      this.buildSubscriptionActions()
+      if (this.state.showMembershipStatus) {
+        this.buildMembershipStatusCard()
+      }
+      this.buildSelfHostingRow()
+      if (this.state.plans.length > 0) {
+        Column({ space: 14 }) {
+          this.buildPlanCards()
+          this.buildLegalConsent()
+        }
+        .width('100%')
+      }
+      if (this.state.showPurchaseButton) {
+        this.buildSubscriptionActions()
+      }
     }
   }
 
@@ -175,7 +208,6 @@ export struct AiraProOverviewScreen {
     .padding({ left: 12, right: 14 })
     .backgroundColor(this.surfaceBackground)
     .borderRadius(AIRA_PRO_DEVICE_CHIP_CORNER_RADIUS)
-    .border({ width: 1, color: this.outlineStrokeColor })
     .alignItems(VerticalAlign.Center)
   }
 
@@ -228,19 +260,6 @@ export struct AiraProOverviewScreen {
     .alignItems(VerticalAlign.Center)
   }
 
-  @Builder
-  private buildPlanArea() {
-    if (this.state.plans.length > 0) {
-      Column({ space: 14 }) {
-        this.buildPlanCards()
-        this.buildLegalConsent()
-      }
-      .width('100%')
-    } else {
-      this.buildActiveMembershipCard()
-    }
-  }
-
   /**
    * Two cards, equal height. The discount badge is pinned to the card's top-right
    * corner instead of sitting in the title row's flow, so a badged card and a
@@ -248,17 +267,25 @@ export struct AiraProOverviewScreen {
    */
   @Builder
   private buildPlanCards() {
-    Row({ space: 12 }) {
-      ForEach(this.state.plans, (plan: AiraProOverviewPlanState) => {
-        this.buildPlanCard(plan)
+    Column({ space: 12 }) {
+      ForEach(this.lifetimePlans(), (plan: AiraProOverviewPlanState) => {
+        this.buildPlanCard(plan, false)
       }, (plan: AiraProOverviewPlanState) => plan.id)
+
+      Row({ space: 12 }) {
+        ForEach(this.subscriptionPlans(), (plan: AiraProOverviewPlanState) => {
+          this.buildPlanCard(plan, true)
+        }, (plan: AiraProOverviewPlanState) => plan.id)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
     }
     .width('100%')
-    .alignItems(VerticalAlign.Top)
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
-  private buildPlanCard(plan: AiraProOverviewPlanState) {
+  private buildPlanCard(plan: AiraProOverviewPlanState, stretch: boolean) {
     Column({ space: 0 }) {
       Stack({ alignContent: Alignment.TopEnd }) {
         Row() {
@@ -300,7 +327,7 @@ export struct AiraProOverviewScreen {
           .fontColor(this.primaryTextColor)
 
         if (plan.periodText.length > 0) {
-          Span(plan.periodText)
+          Span(plan.periodText.startsWith('/') ? plan.periodText : ` ${plan.periodText}`)
             .fontSize(AIRA_PRO_PLAN_PERIOD_FONT_SIZE)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.secondaryTextColor)
@@ -320,8 +347,9 @@ export struct AiraProOverviewScreen {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .padding({ top: 8 })
     }
-    .layoutWeight(1)
-    .constraintSize({ minHeight: AIRA_PRO_PLAN_CARD_MIN_HEIGHT })
+    .width(stretch ? 0 : '100%')
+    .layoutWeight(stretch ? 1 : 0)
+    .constraintSize({ minHeight: stretch ? AIRA_PRO_PLAN_CARD_MIN_HEIGHT : 0 })
     .padding({ left: 14, right: 14, top: 14, bottom: 14 })
     .backgroundColor(this.surfaceBackground)
     .borderRadius(AIRA_PRO_PLAN_CARD_CORNER_RADIUS)
@@ -338,60 +366,119 @@ export struct AiraProOverviewScreen {
   }
 
   /**
-   * A member who already holds Pro has no plans to choose, so the same slot
-   * becomes a status card with the one action that still applies.
+   * The free route stays on the page for every membership state. A status card
+   * explains the current Pro grant; it does not replace this row.
    */
   @Builder
-  private buildActiveMembershipCard() {
-    Column({ space: 14 }) {
+  private buildSelfHostingRow() {
+    SettingsGroupCard({ surfaceColor: this.surfaceBackground }) {
       Row({ space: 12 }) {
-        Column({ space: 4 }) {
-          Text(this.state.proActivatedActionText)
+        Stack({ alignContent: Alignment.Center }) {
+          Circle()
+            .width(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
+            .height(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
+            .fill(this.syncProviderIconBackgrounds.webdav)
+
+          AiraIcon({
+            airaIconId: 'settings.webdav',
+            iconSize: AIRA_PRO_BENEFIT_ICON_IMAGE_SIZE,
+            iconColor: this.settingsIconForeground
+          })
+        }
+        .width(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
+        .height(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
+
+        Column({ space: 2 }) {
+          Text('私有化部署')
             .width('100%')
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
             .fontColor(this.primaryTextColor)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          if (this.state.proValue.length > 0) {
-            Text(this.state.proValue)
-              .width('100%')
-              .fontSize(13)
-              .lineHeight(18)
-              .fontColor(this.secondaryTextColor)
-              .maxLines(2)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
+          Text('免费使用，查看部署教程')
+            .width('100%')
+            .fontSize(12)
+            .lineHeight(17)
+            .fontColor(this.secondaryTextColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
 
-      Button() {
-        Text('管理自动续费')
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.accentColor)
-          .maxLines(1)
+        Text('›')
+          .fontSize(20)
+          .fontColor(this.secondaryTextColor)
       }
       .width('100%')
-      .height(AIRA_PRO_MANAGE_BUTTON_HEIGHT)
-      .type(ButtonType.Normal)
-      .buttonStyle(ButtonStyleMode.NORMAL)
-      .backgroundColor(AIRA_PRO_TRANSPARENT_COLOR)
-      .borderRadius(AIRA_PRO_MANAGE_BUTTON_HEIGHT / 2)
-      .border({ width: 1.5, color: this.accentColor })
-      .enabled(this.state.proActionsEnabled)
-      .opacity(this.state.proActionsEnabled ? 1 : 0.52)
-      .stateEffect(this.state.proActionsEnabled)
-      .onClick(() => {
-        if (this.state.proActionsEnabled) {
-          this.onManageSubscription?.();
-        }
+      .padding({
+        left: AIRA_PRO_BENEFIT_ROW_HORIZONTAL_PADDING,
+        right: AIRA_PRO_BENEFIT_ROW_HORIZONTAL_PADDING,
+        top: AIRA_PRO_BENEFIT_ROW_VERTICAL_PADDING,
+        bottom: AIRA_PRO_BENEFIT_ROW_VERTICAL_PADDING
       })
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.onOpenSelfHostingGuide?.();
+      })
+    }
+  }
+
+  /**
+   * A member who already holds Pro has no plans to choose, so the same slot
+   * becomes a status card with the one action that still applies.
+   */
+  @Builder
+  private buildMembershipStatusCard() {
+    Column({ space: 14 }) {
+      Column({ space: 4 }) {
+        Text(this.state.membershipStatusTitle)
+          .width('100%')
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.primaryTextColor)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        if (this.state.membershipStatusDetail.length > 0) {
+          Text(this.state.membershipStatusDetail)
+            .width('100%')
+            .fontSize(13)
+            .lineHeight(18)
+            .fontColor(this.secondaryTextColor)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+
+      if (this.state.showManageSubscription) {
+        Button() {
+          Text('管理自动续费')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.accentColor)
+            .maxLines(1)
+        }
+        .width('100%')
+        .height(AIRA_PRO_MANAGE_BUTTON_HEIGHT)
+        .type(ButtonType.Normal)
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .backgroundColor(AIRA_PRO_TRANSPARENT_COLOR)
+        .borderRadius(AIRA_PRO_MANAGE_BUTTON_HEIGHT / 2)
+        .border({ width: 1.5, color: this.accentColor })
+        .enabled(this.state.proActionsEnabled)
+        .opacity(this.state.proActionsEnabled ? 1 : 0.52)
+        .stateEffect(this.state.proActionsEnabled)
+        .onClick(() => {
+          if (this.state.proActionsEnabled) {
+            this.onManageSubscription?.();
+          }
+        })
+      }
     }
     .width('100%')
     .padding({ left: 18, right: 18, top: 18, bottom: 18 })
@@ -509,6 +596,21 @@ export struct AiraProOverviewScreen {
           this.onSubscribe?.(selectedPlan.id);
         }
       })
+
+      if (this.state.complimentaryClaim.entryVisible) {
+        Text(this.state.complimentaryClaim.entryTitle)
+          .width('100%')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.accentColor)
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .padding({ top: 6, bottom: 2 })
+          .onClick(() => {
+            this.onOpenComplimentaryClaim?.();
+          })
+      }
     }
     .width('100%')
   }
@@ -611,6 +713,14 @@ export struct AiraProOverviewScreen {
 
   private selectedPlanRequiresConsent(): boolean {
     return this.resolveSelectedPlan()?.action === 'purchase';
+  }
+
+  private lifetimePlans(): AiraProOverviewPlanState[] {
+    return this.state.plans.filter((plan: AiraProOverviewPlanState) => plan.purchaseKind === 'one_time');
+  }
+
+  private subscriptionPlans(): AiraProOverviewPlanState[] {
+    return this.state.plans.filter((plan: AiraProOverviewPlanState) => plan.purchaseKind !== 'one_time');
   }
 
   private resolveSelectedPlan(): AiraProOverviewPlanState | undefined {

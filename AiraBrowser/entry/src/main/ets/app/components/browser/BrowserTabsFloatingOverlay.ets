@@ -89,9 +89,11 @@ const FLOATING_TABS_HORIZONTAL_PADDING: number = 16;
 const FLOATING_TABS_TOP_PADDING: number = 28;
 // Cards dissolve into the top edge instead of being cut off by it, the same way the
 // settings pages and the bookmark/history lists do. The stops are shared by all three tab
-// layouts so a card fades out identically whichever deck the user is in.
+// layouts so a card fades out identically whichever deck the user is in. The band is
+// deliberately shorter than the list surfaces': this page's top chrome is only the corner
+// button, so a full-height fade was blurring rows the user was still reading.
 const FLOATING_TABS_TOP_BLUR_RADIUS: number = 20;
-const FLOATING_TABS_TOP_BLUR_STOPS: Array<[number, number]> = [[1, 0], [1, 0.05], [0, 0.14], [0, 1]];
+const FLOATING_TABS_TOP_BLUR_STOPS: Array<[number, number]> = [[1, 0], [1, 0.033], [0, 0.093], [0, 1]];
 const FLOATING_TABS_GRID_GAP: number = 16;
 const FLOATING_TABS_EXIT_DURATION_MS: number = 280;
 const FLOATING_TABS_CLOSE_ALL_COMMIT_DELAY_MS: number = 32;
@@ -623,6 +625,10 @@ export struct BrowserTabsFloatingOverlay {
       .width('100%')
       .height('100%')
       .opacity(this.resolveSurfaceProgress())
+      .linearGradientBlur(FLOATING_TABS_TOP_BLUR_RADIUS, {
+        fractionStops: FLOATING_TABS_TOP_BLUR_STOPS,
+        direction: GradientDirection.Bottom
+      })
       .hitTestBehavior((this.interactionEnabled && !this.exiting && !this.closeAllExitActive) ?
         HitTestMode.Default : HitTestMode.None)
       .zIndex(FLOATING_TABS_CROSS_DEVICE_LAYER_Z_INDEX)

@@ -8,8 +8,9 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { BrowserSheetActionButton } from '../browser/BrowserModalBottomSheet';
 import {
-  CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER,
-  createCenteredDialogMaterial
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
+  CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER
 } from '../common/CenteredDialogSurface';
 
 export type ClientUpdateRequiredAction = 'open_update' | 'continue_local';
@@ -114,7 +115,9 @@ export struct ClientUpdateRequiredOverlay {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
 
   aboutToAppear(): void {

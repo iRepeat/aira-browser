@@ -8,8 +8,9 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { BrowserSheetActionButton } from './BrowserModalBottomSheet';
 import {
-  CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER,
-  createCenteredDialogMaterial
+  resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
+  CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER
 } from '../common/CenteredDialogSurface';
 
 const DOWNLOAD_FILE_NAME_MAX_LENGTH: number = 180;
@@ -166,7 +167,9 @@ export struct BrowserDownloadConfirmOverlay {
     alignment: DialogAlignment.Center,
     autoCancel: true,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
     onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
       this.handleInteractiveDismiss();
       dismissDialogAction.dismiss();

@@ -75,7 +75,11 @@ export struct BrowserModalBottomOverlay {
           duration: this.animationDurationMs,
           curve: Curve.EaseOut
         })
-        .hitTestBehavior(this.presentationVisible && this.dismissOnOutsideTap ? HitTestMode.Default : HitTestMode.None)
+        // A scrim that does not dismiss must still swallow the tap, otherwise the press
+        // lands on the page behind the modal and the user interacts with what they cannot see.
+        .hitTestBehavior(this.presentationVisible
+          ? (this.dismissOnOutsideTap ? HitTestMode.Default : HitTestMode.Block)
+          : HitTestMode.None)
         .onClick(() => {
           if (this.dismissOnOutsideTap) {
             this.onDismiss();

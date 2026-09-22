@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  AIRA_PRO_ONE_TIME_PLAN,
   AIRA_PRO_SELLABLE_IAP_PLANS,
   isAiraProSellablePlanId,
   resolveAiraProPlanPeriodText
@@ -39,6 +40,17 @@ export default function huaweiIapProductCatalogTest(): void {
     it('carries the discount badge on the yearly plan only', 0, () => {
       expect(AIRA_PRO_SELLABLE_IAP_PLANS[0].discountBadgeText).assertEqual('');
       expect(AIRA_PRO_SELLABLE_IAP_PLANS[1].discountBadgeText).assertEqual('−34%');
+    });
+
+    // The permanent card is shown on the page, but it is not one of the two
+    // auto-renewing plans the renewal sheet sells.
+    it('prices permanent membership at 68.8 without selling it as a subscription', 0, () => {
+      expect(AIRA_PRO_ONE_TIME_PLAN.productId).assertEqual('aira_pro_lifetime');
+      expect(AIRA_PRO_ONE_TIME_PLAN.title).assertEqual('永久会员');
+      expect(AIRA_PRO_ONE_TIME_PLAN.amountText).assertEqual('¥68.8');
+      expect(AIRA_PRO_ONE_TIME_PLAN.periodText).assertEqual('永久');
+      expect(AIRA_PRO_ONE_TIME_PLAN.displayPrice).assertEqual('¥68.8 永久');
+      expect(isAiraProSellablePlanId('one_time')).assertFalse();
     });
   });
 }

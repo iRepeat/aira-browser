@@ -29,6 +29,9 @@ export struct BottomToolbarGuideOverlay {
       visible: this.visible,
       layoutMode: this.layoutMode,
       title: BOTTOM_TOOLBAR_GUIDE_OVERLAY_TITLE,
+      // The lesson is taught once per device. A tap on the scrim must not be what ends it,
+      // or an accidental tap swallows the only time the gesture is explained.
+      dismissOnOutsideTap: false,
       phoneEnterOffsetY: FEATURE_GATE_OVERLAY_ENTER_OFFSET_Y,
       phoneSheetAlignment: Alignment.Center,
       animationDurationMs: FEATURE_GATE_OVERLAY_ANIMATION_DURATION_MS,

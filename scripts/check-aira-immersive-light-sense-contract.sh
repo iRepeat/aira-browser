@@ -125,8 +125,14 @@ require_text "$MANAGEMENT_HDS_FILE" 'materialLevel: hdsMaterial.MaterialLevel.AD
   'Management HDS title bar must use ADAPTIVE material level.'
 require_text "$MANAGEMENT_HDS_FILE" 'materialEnabled: true' \
   'Management HDS title actions must explicitly opt into the API-gated material.'
-require_text "$CENTERED_DIALOG_FILE" 'applyCommonSystemMaterial(instance, createCenteredDialogMaterial());' \
-  'custom dialog surfaces must apply systemMaterial through the API-gated helper.'
+require_text "$CENTERED_DIALOG_FILE" 'instance.backgroundColor(resolveCenteredDialogSurfaceColor())' \
+  'centered dialog content must paint the shared opaque surface.'
+require_text "$CENTERED_DIALOG_FILE" 'params.backgroundBlurStyle = BlurStyle.NONE;' \
+  'centered alerts must disable the default dialog blur so the surface stays opaque.'
+if rg -q --fixed-strings 'createCenteredDialogMaterial' "$CENTERED_DIALOG_FILE" || \
+   rg -q --fixed-strings 'systemMaterial' "$CENTERED_DIALOG_FILE"; then
+  fail 'centered dialogs must use one opaque surface instead of immersive material.'
+fi
 # AlertDialog.width is window-relative with no constraintSize, so a bare percentage
 # stretches the alert to the whole PC/large-screen window. The width must stay
 # clamped to the shared centered-dialog maximum.
@@ -137,16 +143,13 @@ require_text "$CENTERED_DIALOG_WIDTH_VIEW_MODEL" 'CENTERED_DIALOG_MAX_WIDTH_VP' 
 if rg -q --fixed-strings "params.width = '90%';" "$CENTERED_DIALOG_FILE"; then
   fail 'centered alerts must not apply a flat window-relative percentage width on large screens.'
 fi
-# Sync progress must keep the CustomDialog system surface: no immersive material.
-# The SYSTEM_* modifiers are material-free (materialEnabled: false) and only supply
-# the centered width contract, so they are allowed — the material mechanisms and
-# the material-applying modifiers are not.
-if rg -q 'createCenteredDialogMaterial|applyCommonSystemMaterial|ImmersiveMaterial|systemMaterial|CENTERED_DIALOG_(SURFACE|COMPACT_SURFACE|TALL_SURFACE|TALL_PADDED_SURFACE|SCROLL_SURFACE)_MODIFIER' \
+# Sync progress uses the same opaque centered surface as every other dialog.
+if rg -q 'createCenteredDialogMaterial|applyCommonSystemMaterial|ImmersiveMaterial|systemMaterial' \
   "$SYNC_PROGRESS_DIALOG_FILE"; then
-  fail 'sync progress must use the CustomDialog system default surface instead of API 26 immersive material.'
+  fail 'sync progress must use the shared opaque dialog surface instead of immersive material.'
 fi
 require_text "$SYNC_PROGRESS_DIALOG_FILE" 'CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER' \
-  'sync progress must take the shared centered width cap from the material-free system modifier.'
+  'sync progress must take the shared centered dialog surface.'
 if rg -q --fixed-strings 'new CustomDialogController(withDialogSystemMaterial' \
   "$COMPONENT_DIR" "${REPO_ROOT}/AiraBrowser/entry/src/main/ets/app/pages" -g '*.ets'; then
   fail 'CustomDialogController must receive the options object literal directly so @CustomDialog builders keep new.'
@@ -154,9 +157,22 @@ fi
 for file in "${SYNC_PROGRESS_HOST_FILES[@]}"; do
   require_text "$file" 'customStyle: false' \
     "sync progress host must use the system CustomDialog style: ${file#"$REPO_ROOT"/}"
-  require_text "$file" 'systemMaterial: createCenteredDialogMaterial()' \
-    "sync progress host must pass material through CustomDialogController: ${file#"$REPO_ROOT"/}"
+  require_text "$file" 'backgroundColor: resolveCenteredDialogSurfaceColor(),' \
+    "sync progress host must use the shared opaque dialog surface: ${file#"$REPO_ROOT"/}"
+  require_text "$file" 'backgroundBlurStyle: BlurStyle.NONE,' \
+    "sync progress host must disable dialog blur: ${file#"$REPO_ROOT"/}"
 done
+if rg -q --fixed-strings 'systemMaterial: createCenteredDialogMaterial()' \
+  "$COMPONENT_DIR" "${REPO_ROOT}/AiraBrowser/entry/src/main/ets/app/pages" -g '*.ets'; then
+  fail 'centered dialogs must not opt into immersive systemMaterial.'
+fi
+while IFS= read -r file; do
+  require_text "$file" 'backgroundBlurStyle: BlurStyle.NONE,' \
+    "CustomDialogController must use the opaque dialog surface: ${file#"$REPO_ROOT"/}"
+  require_text "$file" 'cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,' \
+    "CustomDialogController must use the shared dialog corner radius: ${file#"$REPO_ROOT"/}"
+done < <(rg -l --fixed-strings 'new CustomDialogController(' \
+  "$COMPONENT_DIR" "${REPO_ROOT}/AiraBrowser/entry/src/main/ets/app/pages" -g '*.ets')
 require_text "$SEGMENTED_TABS_FILE" 'HdsTabs' \
   'shared segmented tabs must use the HDS Tabs component.'
 require_text "$SEGMENTED_TABS_FILE" 'HdsTabsController' \

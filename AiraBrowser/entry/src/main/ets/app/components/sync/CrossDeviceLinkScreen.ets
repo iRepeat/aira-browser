@@ -42,7 +42,6 @@ const EXTENSION_GLYPH: AiraRenderableIconId = 'site.setting.externalActions';
 const SELF_HOSTED_GLYPH: AiraRenderableIconId = 'settings.webdav';
 const LOCAL_DEVICE_GLYPH: AiraRenderableIconId = 'crossDeviceLink.localDevice';
 const PEER_COMPUTER_GLYPH: AiraRenderableIconId = 'crossDeviceLink.peerComputer';
-const HELP_GLYPH: AiraRenderableIconId = 'crossDeviceLink.help';
 
 const STATUS_PANEL_HORIZONTAL_PADDING: number = 16;
 const STATUS_PANEL_VERTICAL_PADDING: number = 18;
@@ -90,7 +89,6 @@ export struct CrossDeviceLinkScreen {
     DEFAULT_BROWSER_SYNC_PROVIDER_ICON_BACKGROUND_TOKENS;
   scrollers: Array<Scroller> = [];
   onBack: () => void = (): void => {};
-  onHelp: () => void = (): void => {};
   onOpenSetup: () => void = (): void => {};
   onOpenDeviceTabs: (deviceId: string) => void = (_deviceId: string): void => {};
   /** This page's own cross-device switch; it never writes data-sync state. */
@@ -112,12 +110,7 @@ export struct CrossDeviceLinkScreen {
         useTopSafeInset: this.useTopSafeInset,
         contentKind: this.contentKind,
         desktopPresentation: this.desktopPresentation,
-        menuActionLabel: '帮助',
-        menuActionAiraIconId: HELP_GLYPH,
         scrollers: [this.contentScroller],
-        onMenuAction: (): void => {
-          this.onHelp();
-        },
         onBack: (): void => {
           this.onBack();
         }

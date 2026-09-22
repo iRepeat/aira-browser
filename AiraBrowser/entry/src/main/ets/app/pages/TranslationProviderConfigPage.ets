@@ -1,6 +1,8 @@
 import { DEFAULT_THEME_PALETTE } from '../../features/theme/palettes/DefaultThemePalette';
 import {
-  createCenteredDialogMaterial,
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
+  CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER,
+  resolveCenteredDialogSurfaceColor,
   showCenteredAlertDialog
 } from '../components/common/CenteredDialogSurface';
 import router from '@ohos.router';
@@ -32,7 +34,6 @@ import {
 } from '../../core/theme/BrowserThemeStorageKeys';
 import { AppServiceModeGateService } from '../../services/settings/AppServiceModeGateService';
 import { readBrowserBoundaryRouteState } from '../../common/utils/RouteParamUtils';
-import { CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER } from '../components/common/CenteredDialogSurface';
 
 @CustomDialog
 struct TranslationProviderValidationDialog {
@@ -81,7 +82,9 @@ struct TranslationProviderConfigPage {
     autoCancel: false,
     alignment: DialogAlignment.Center,
     customStyle: false,
-    systemMaterial: createCenteredDialogMaterial(),
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
   });
   @State private draft: TranslationProviderEditDraft = this.editViewModel.buildInitialDraft('custom_http');
   @State private errorMessage: string = '';

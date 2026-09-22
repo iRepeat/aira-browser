@@ -206,9 +206,6 @@ export struct CrossDeviceLinkHost {
             }
             this.navigationCoordinator.back();
           },
-          onHelp: (): void => {
-            this.navigationCoordinator.openSyncDesktopBookmarkGuide(this.boundary);
-          },
           onOpenSetup: (): void => {
             if (this.desktopPresentation) {
               this.showSetupInline = true;

@@ -93,7 +93,6 @@ DISCOVERED_BUILD_PROFILE=""
 ARK_UI_MATERIAL_ACCESS="${PROJECT_DIR}/entry/src/main/ets/app/components/common/ArkUiMaterialAccess.ets"
 ARK_UI_MATERIAL_ACCESS_STUB="${REPO_ROOT}/scripts/harmony-api24-stubs/ArkUiMaterialAccess.ets"
 ARK_UI_MATERIAL_ACCESS_BACKUP=""
-DIALOG_SYSTEM_MATERIAL_BACKUP_DIR=""
 
 # DevEco's native build invokes Cargo through the Rust toolchain. On machines
 # where the global registry was initialized by root, keep dependency downloads
@@ -188,14 +187,6 @@ cleanup() {
   if [ -n "${ARK_UI_MATERIAL_ACCESS_BACKUP}" ] && [ -f "${ARK_UI_MATERIAL_ACCESS_BACKUP}" ]; then
     cp "${ARK_UI_MATERIAL_ACCESS_BACKUP}" "${ARK_UI_MATERIAL_ACCESS}"
     rm -f "${ARK_UI_MATERIAL_ACCESS_BACKUP}"
-  fi
-  if [ -n "${DIALOG_SYSTEM_MATERIAL_BACKUP_DIR}" ] && [ -d "${DIALOG_SYSTEM_MATERIAL_BACKUP_DIR}" ]; then
-    while IFS= read -r -d '' backup_file; do
-      local_path="${backup_file#${DIALOG_SYSTEM_MATERIAL_BACKUP_DIR}/}"
-      cp "${backup_file}" "${REPO_ROOT}/${local_path}"
-    done < <(find "${DIALOG_SYSTEM_MATERIAL_BACKUP_DIR}" -type f -print0)
-    rm -rf "${DIALOG_SYSTEM_MATERIAL_BACKUP_DIR}"
-    DIALOG_SYSTEM_MATERIAL_BACKUP_DIR=""
   fi
 }
 trap cleanup EXIT
@@ -1951,14 +1942,6 @@ NODE
     ARK_UI_MATERIAL_ACCESS_BACKUP="$(mktemp "${TMPDIR:-/tmp}/aira-arkui-material-access-backup.XXXXXX")"
     cp "${ARK_UI_MATERIAL_ACCESS}" "${ARK_UI_MATERIAL_ACCESS_BACKUP}"
     cp "${ARK_UI_MATERIAL_ACCESS_STUB}" "${ARK_UI_MATERIAL_ACCESS}"
-    DIALOG_SYSTEM_MATERIAL_BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aira-dialog-system-material.XXXXXX")"
-    while IFS= read -r file; do
-      rel="${file#"${REPO_ROOT}"/}"
-      mkdir -p "${DIALOG_SYSTEM_MATERIAL_BACKUP_DIR}/$(dirname "${rel}")"
-      cp "${file}" "${DIALOG_SYSTEM_MATERIAL_BACKUP_DIR}/${rel}"
-      sed -i '' '/systemMaterial: createCenteredDialogMaterial(),/d' "${file}"
-    done < <(rg -l --fixed-strings 'systemMaterial: createCenteredDialogMaterial(),' \
-      "${PROJECT_DIR}/entry/src/main/ets" -g '*.ets' || true)
     echo "SDK API ${sdk_api}: compiling with ArkUI material fallback stub. API 26 uiMaterial implementation remains in git."
   else
     echo "SDK API ${sdk_api}: compiling with ArkUI uiMaterial."
