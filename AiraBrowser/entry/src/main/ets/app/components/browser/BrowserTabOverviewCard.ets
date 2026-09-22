@@ -446,15 +446,29 @@ export struct BrowserTabOverviewCard {
   }
 
   private syncRenderableSnapshotFromProps(): void {
+    const nextPixelMap = this.snapshotPixelMap;
+    // The persisted JPEG of this same capture is published as the shrink finishes. Swapping the
+    // Image off the live PixelMap onto that file remounts it, and the card flashes blank for a
+    // frame. Keep the PixelMap that is already on screen until the session actually releases it.
+    if (this.renderSnapshotPixelMap !== undefined && nextPixelMap !== undefined) {
+      return;
+    }
     this.renderSnapshotImageUri = this.snapshotImageUri.trim();
-    this.renderSnapshotPixelMap = this.snapshotPixelMap;
+    this.renderSnapshotPixelMap = nextPixelMap;
     this.renderSnapshotImageWidth = Math.max(1, Math.floor(this.presentation.sharedSnapshotImageWidth));
     this.renderSnapshotImageHeight = Math.max(1, Math.floor(this.presentation.sharedSnapshotImageHeight));
   }
 
   private resolveRenderableSnapshotImageUri(): string {
     const localUri = this.renderSnapshotImageUri.trim();
-    return localUri.length > 0 ? localUri : this.snapshotImageUri.trim();
+    if (localUri.length > 0) {
+      return localUri;
+    }
+    // A held PixelMap must not fall through to a URI that arrived after it was painted.
+    if (this.renderSnapshotPixelMap !== undefined) {
+      return '';
+    }
+    return this.snapshotImageUri.trim();
   }
 
   private resolveRenderableSnapshotPixelMap(): image.PixelMap | undefined {

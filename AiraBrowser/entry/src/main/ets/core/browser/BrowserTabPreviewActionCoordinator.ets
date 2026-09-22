@@ -43,7 +43,23 @@ export interface BrowserTabPreviewActiveCaptureInput {
 export interface BrowserTabPreviewLifecycleCaptureInput {
   activeTabId: string;
   showHomePage: boolean;
+  tabsOverviewVisible?: boolean;
   source: string;
+}
+
+/**
+ * Backgrounding while the tabs overview is open must not recapture the active tab.
+ * The web layer is unmounted there, so the only remaining API is webPageSnapshot,
+ * which re-lays the document and returns the top of the page. That image then
+ * replaces the scrolled visible-surface snapshot the card is already showing.
+ */
+export function shouldCaptureTabPreviewOnLifecycleExit(
+  input: BrowserTabPreviewLifecycleCaptureInput
+): boolean {
+  if (input.showHomePage || input.activeTabId.trim().length <= 0) {
+    return false;
+  }
+  return input.tabsOverviewVisible !== true;
 }
 
 export type BrowserTabPreviewOpenerBeforeSwitchSource = 'background_prompt' | 'window_open';
@@ -158,7 +174,14 @@ export class BrowserTabPreviewActionCoordinator {
     input: BrowserTabPreviewLifecycleCaptureInput
   ): void {
     const tabId = input.activeTabId;
-    if (input.showHomePage || tabId.trim().length <= 0) {
+    if (!shouldCaptureTabPreviewOnLifecycleExit(input)) {
+      if (input.tabsOverviewVisible === true && tabId.trim().length > 0 && !input.showHomePage) {
+        port.recordRuntimeEvent(
+          'tab_preview_lifecycle_capture_skipped',
+          `source=${input.source} reason=tabs-overview-visible`,
+          tabId
+        );
+      }
       return;
     }
     void this.captureExplicit(port, {

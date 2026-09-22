@@ -9237,6 +9237,7 @@ struct BrowserShellPage {
       {
         activeTabId: this.activeTabId,
         showHomePage: this.showHomePage,
+        tabsOverviewVisible: this.showTabsSheet,
         source: source
       }
     );

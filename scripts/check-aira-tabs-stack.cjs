@@ -580,8 +580,18 @@ test('the overlay deck wires the policy, per-frame motion and the reference visu
   // SettlingEnabled dropping must not yank an in-flight displacement back to the origin.
   assert.match(overlay, /if \(this\.entryDisplacementProgress > 0 && this\.entryDisplacementProgress < 1\) \{\s*return;/);
   // In-deck morph already covers the current card; hiding that preview leaves a hole at unmount.
+  // The grid and the strip paint the morph above the cards instead, and used to keep the preview
+  // at opacity 0 until that overlay unmounted — the card flashed as the shrink finished. Once the
+  // overlay is covering the card, the preview stays painted, including the frame the overlay drops
+  // before the covered-tab id clears.
   assert.match(overlay, /coveredByMorph: this\.shouldHideCardSurfaceUnderMorph\(item\.tab\.id\)/);
-  assert.match(overlay, /if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*return false;/);
+  assert.match(overlay, /if \(this\.shouldMountSharedSnapshotInDeck\(\)\) \{\s*this\.entryMorphPreviewLatchedTabId = '';\s*return false;/);
+  assert.match(overlay, /private isEntryMorphOverlayCovering\(tabId: string\): boolean \{[\s\S]*?state\.tabId === tabId/);
+  assert.match(overlay, /this\.entryMorphPreviewLatchedTabId === tabId \|\| this\.isEntryMorphOverlayCovering\(tabId\)/);
+  // The persisted URI must not be part of the card key. It arrives as the shrink finishes, and a
+  // key that changed from the live PixelMap to that file destroyed the card in the handoff frame.
+  assert.match(overlay, /hasImage \? 'image' : 'none'/);
+  assert.doesNotMatch(overlay, /uri\.length > 0 \? uri : \(hasPixelMap \? 'pm' : 'none'\)/);
   // The predicted entry target must use the painted (scaled) deck preview, not the unscaled layout
   // slot. Landing at 1.0 and then revealing the 0.98 focused card was a visible extra shrink.
   const predicted = overlay.slice(overlay.indexOf('private buildPredictedEntryTargetPreviewRect'),

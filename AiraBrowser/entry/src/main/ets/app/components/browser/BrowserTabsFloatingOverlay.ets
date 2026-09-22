@@ -87,6 +87,11 @@ import { SiteIconListRenderState } from '../../../core/siteicons/SiteIconListPre
 
 const FLOATING_TABS_HORIZONTAL_PADDING: number = 16;
 const FLOATING_TABS_TOP_PADDING: number = 28;
+// Cards dissolve into the top edge instead of being cut off by it, the same way the
+// settings pages and the bookmark/history lists do. The stops are shared by all three tab
+// layouts so a card fades out identically whichever deck the user is in.
+const FLOATING_TABS_TOP_BLUR_RADIUS: number = 20;
+const FLOATING_TABS_TOP_BLUR_STOPS: Array<[number, number]> = [[1, 0], [1, 0.05], [0, 0.14], [0, 1]];
 const FLOATING_TABS_GRID_GAP: number = 16;
 const FLOATING_TABS_EXIT_DURATION_MS: number = 280;
 const FLOATING_TABS_CLOSE_ALL_COMMIT_DELAY_MS: number = 32;
@@ -232,6 +237,15 @@ export struct BrowserTabsFloatingOverlay {
   private chromeMountTimer: number = 0;
   private entryDisplacementTargetId: string = '';
   private entryReturnTabId: string = '';
+  /**
+   * The tab whose preview has already been composited under the entering morph.
+   *
+   * Grid and the strip paint that morph above the cards, and used to zero the covered preview
+   * until the morph unmounted. The unmount frame then had no image — the card flashed. Once the
+   * overlay is up the preview stays painted, including the frame where the overlay drops before
+   * the covered-tab id clears.
+   */
+  private entryMorphPreviewLatchedTabId: string = '';
   /**
    * True only for the cold open, whose cards are mounted as the grid is first built and can
    * fly in as they appear. A resident re-open reuses an already-built grid, so it enters
@@ -667,6 +681,10 @@ export struct BrowserTabsFloatingOverlay {
       top: this.resolveContentTopPadding(),
       bottom: this.resolveContentBottomPadding()
     })
+    .linearGradientBlur(FLOATING_TABS_TOP_BLUR_RADIUS, {
+      fractionStops: FLOATING_TABS_TOP_BLUR_STOPS,
+      direction: GradientDirection.Bottom
+    })
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     .hitTestBehavior((this.interactionEnabled && !this.closeAllExitActive) ?
@@ -717,6 +735,10 @@ export struct BrowserTabsFloatingOverlay {
       left: FLOATING_TABS_HORIZONTAL_PADDING,
       right: FLOATING_TABS_HORIZONTAL_PADDING
     })
+    .linearGradientBlur(FLOATING_TABS_TOP_BLUR_RADIUS, {
+      fractionStops: FLOATING_TABS_TOP_BLUR_STOPS,
+      direction: GradientDirection.Bottom
+    })
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     .clip(false)
@@ -749,6 +771,10 @@ export struct BrowserTabsFloatingOverlay {
     // only while a card is in a vertical dismiss flight, otherwise the fly-out is cut at the stack
     // edge and reads as an instant vanish.
     .clip(this.deckSwipeTabId.length <= 0)
+    .linearGradientBlur(FLOATING_TABS_TOP_BLUR_RADIUS, {
+      fractionStops: FLOATING_TABS_TOP_BLUR_STOPS,
+      direction: GradientDirection.Bottom
+    })
     .hitTestBehavior(this.canInteractWithDeck() ? HitTestMode.Transparent : HitTestMode.None)
     .zIndex(FLOATING_TABS_CARDS_Z_INDEX)
     .gesture(
@@ -1357,13 +1383,14 @@ export struct BrowserTabsFloatingOverlay {
   // preview moves from "no image yet" to "snapshot ready" a moment later when the
   // entry capture lands. ArkUI does not rebuild an item whose key is unchanged, so
   // keying on the id alone left the already-built card on its pending placeholder
-  // forever. Including the image identity re-creates the card when the snapshot
-  // arrives.
+  // forever. The key must not include the URI itself. The persisted file arrives as
+  // the shrink finishes, and a key that changed from the live PixelMap to that URI
+  // destroyed the card and mounted a blank one in the same moment the morph left.
   private resolveCardIdentityKey(item: BrowserTabsFloatingItem): string {
     const preview = item.presentation.preview;
-    const uri = preview.sharedSnapshotImageUri.trim();
-    const hasPixelMap = preview.sharedSnapshotPixelMap !== undefined;
-    return `${item.id}|${preview.previewKind}|${uri.length > 0 ? uri : (hasPixelMap ? 'pm' : 'none')}`;
+    const hasImage = preview.sharedSnapshotImageUri.trim().length > 0 ||
+      preview.sharedSnapshotPixelMap !== undefined;
+    return `${item.id}|${preview.previewKind}|${hasImage ? 'image' : 'none'}`;
   }
 
   private isLocallyRemovedTab(tabId: string): boolean {
@@ -2007,14 +2034,38 @@ export struct BrowserTabsFloatingOverlay {
    * Hide the card surface only when the morph is not already painting in front of it.
    *
    * An in-deck morph sits one slot above the covered card and covers its preview for the whole
-   * entry. Zeroing that preview left a hole the frame the morph unmounted — the current card
-   * vanished and then popped back. Keeping it painted means unmount only removes the overlay.
+   * entry. The grid and the strip paint the same morph above the cards layer. Zeroing that
+   * preview left a hole the frame the morph unmounted — the current card vanished and then
+   * popped back. Keeping it painted means unmount only removes the overlay.
    */
   private shouldHideCardSurfaceUnderMorph(tabId: string): boolean {
     if (this.shouldMountSharedSnapshotInDeck()) {
+      this.entryMorphPreviewLatchedTabId = '';
       return false;
     }
-    return this.isMorphCoveredTab(tabId);
+    if (!this.isMorphCoveredTab(tabId)) {
+      if (this.entryMorphPreviewLatchedTabId === tabId) {
+        this.entryMorphPreviewLatchedTabId = '';
+      }
+      return false;
+    }
+    if (this.entryMorphPreviewLatchedTabId === tabId || this.isEntryMorphOverlayCovering(tabId)) {
+      this.entryMorphPreviewLatchedTabId = tabId;
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * The root overlay is up and shrinking onto this card, so the card underneath is covered.
+   */
+  private isEntryMorphOverlayCovering(tabId: string): boolean {
+    const state = this.entrySharedSnapshotState;
+    return this.entrySharedSnapshotMounted &&
+      state.direction === 'enter' &&
+      state.tabId === tabId &&
+      state.phase !== 'idle' &&
+      state.phase !== 'settled';
   }
 
   private isSelectionDisplacementActive(): boolean {

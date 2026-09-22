@@ -81,6 +81,10 @@ export interface BrowserTabPreviewCaptureRequest {
   visibleSnapshotTopCropPx?: number;
   allowWhileLocked?: boolean;
   force?: boolean;
+  // Tabs overview is covering this tab. Keep the scrolled visible-surface snapshot;
+  // a capture from here can only call webPageSnapshot on an unmounted web layer,
+  // which re-lays the document and returns the top of the page.
+  keepExistingSnapshot?: boolean;
 }
 
 export interface BrowserTabPreviewCaptureRequestBuildInput {
@@ -259,7 +263,10 @@ export class BrowserTabPreviewCoordinator {
       preferVisibleSnapshot: input.shouldCaptureNativeErrorSurface || (force && shouldUseVisibleCaptureFallbacks),
       requireSharedSnapshot: input.requireSharedSnapshot === true,
       visibleSnapshotTopCropPx: 0,
-      allowWhileLocked: force && isActiveTab,
+      allowWhileLocked: force && isActiveTab && !input.showTabsSheet,
+      // The overview card already has the scrolled surface. Do not let a hidden
+      // webPageSnapshot replace it, even when the caller forces a capture.
+      keepExistingSnapshot: isActiveTab && input.showTabsSheet,
       force: force
     };
   }
@@ -554,6 +561,13 @@ export class BrowserTabPreviewCoordinator {
 
   async capturePreview(request: BrowserTabPreviewCaptureRequest): Promise<boolean> {
     this.tabPrivacyBoundaries[request.tab.id] = this.isSessionEphemeralTab(request.tab);
+    if (request.keepExistingSnapshot === true && this.hasPreview(this.previewEntries[request.tab.id])) {
+      this.invalidateActiveCaptureRun(request.tab.id);
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        'capture skipped tab=%{public}s reason=%{public}s',
+        request.tab.id, 'tabs-overview-keeps-visible-snapshot');
+      return false;
+    }
     if (request.force !== true) {
       const activeCaptureResult = await this.waitForActiveCapture(request.tab.id);
       if (activeCaptureResult !== undefined) {
@@ -603,6 +617,9 @@ export class BrowserTabPreviewCoordinator {
       return false;
     }
     this.tabPrivacyBoundaries[tab.id] = this.isSessionEphemeralTab(tab);
+    // Drop a capture that started before this visible-surface image. Otherwise a
+    // slow webPageSnapshot of the document top finishes later and replaces it.
+    this.invalidateActiveCaptureRun(tab.id);
     const existing = this.previewEntries[tab.id];
     const normalizedTransitionSource = this.normalizeTransitionSource(transitionSource);
     if (normalizedTransitionSource === undefined) {
