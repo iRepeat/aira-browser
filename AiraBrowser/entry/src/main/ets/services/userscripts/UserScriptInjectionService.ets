@@ -103,11 +103,137 @@ ${documentTokenGuard}
   buildDocumentStartScript(requests: UserScriptInjectionRequest[], disabledHosts: string[] = []): string {
     const scripts = requests.map((request: UserScriptInjectionRequest) => this.wrapScript(request)).join('\n');
     const hostPolicyGuard = this.buildDocumentStartHostPolicyGuard(disabledHosts);
+    const headCompat = requests.length > 0 ? this.buildDocumentStartHeadCompatScript() : '';
     return `
 ;(function airaUserScriptDocumentStartBatch() {
   window.__airaUserScriptReports = window.__airaUserScriptReports || [];
 ${hostPolicyGuard}
+${headCompat}
 ${scripts}
+})();
+`;
+  }
+
+  // ArkWeb runs this before the parser creates <head>. Give scripts a detached head,
+  // then move its children into the parser-created head. Never insert a placeholder.
+  private buildDocumentStartHeadCompatScript(): string {
+    return `
+;(function airaInstallDocumentHeadCompat() {
+  try {
+  if (window.__airaDocumentHeadCompatV1 === true) {
+    return;
+  }
+  window.__airaDocumentHeadCompatV1 = true;
+  var doc = document;
+  if (!doc || doc.head || !doc.documentElement) {
+    return;
+  }
+  var nativeGet = null;
+  var owner = null;
+  var descriptor = null;
+  try {
+    var getPrototypeOf = Object.getPrototypeOf;
+    var getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+    var cursor = doc;
+    while (cursor) {
+      var found = getOwnPropertyDescriptor(cursor, 'head');
+      if (found && typeof found.get === 'function') {
+        owner = cursor;
+        descriptor = found;
+        nativeGet = found.get;
+        break;
+      }
+      cursor = getPrototypeOf(cursor);
+    }
+  } catch (_lookupError) {
+    return;
+  }
+  if (!owner || !descriptor || descriptor.configurable !== true || typeof nativeGet !== 'function') {
+    return;
+  }
+  var staging = null;
+  var restored = false;
+  var observer = null;
+  var readNativeHead = function(target) {
+    try {
+      return nativeGet.call(target);
+    } catch (_readError) {
+      return null;
+    }
+  };
+  var restore = function() {
+    if (restored) {
+      return;
+    }
+    restored = true;
+    try {
+      Object.defineProperty(owner, 'head', descriptor);
+    } catch (_restoreError) {
+    }
+    if (observer) {
+      try {
+        observer.disconnect();
+      } catch (_disconnectError) {
+      }
+      observer = null;
+    }
+  };
+  var migrate = function(real) {
+    if (!staging || !real || staging === real) {
+      return;
+    }
+    try {
+      while (staging.firstChild) {
+        real.appendChild(staging.firstChild);
+      }
+    } catch (_migrateError) {
+    }
+    staging = null;
+  };
+  var adopt = function() {
+    var real = readNativeHead(doc);
+    if (!real) {
+      return;
+    }
+    migrate(real);
+    restore();
+  };
+  try {
+    Object.defineProperty(owner, 'head', {
+      configurable: true,
+      enumerable: descriptor.enumerable === true,
+      get: function() {
+        var real = readNativeHead(this);
+        if (real) {
+          migrate(real);
+          restore();
+          return real;
+        }
+        if (!staging) {
+          try {
+            staging = this.createElement('head');
+          } catch (_createError) {
+            return null;
+          }
+        }
+        return staging;
+      }
+    });
+  } catch (_defineError) {
+    return;
+  }
+  if (typeof MutationObserver === 'function') {
+    try {
+      observer = new MutationObserver(adopt);
+      observer.observe(doc.documentElement, { childList: true });
+    } catch (_observeError) {
+    }
+  }
+  if (typeof doc.addEventListener === 'function') {
+    doc.addEventListener('DOMContentLoaded', adopt, false);
+  }
+  } catch (_compatError) {
+  }
 })();
 `;
   }

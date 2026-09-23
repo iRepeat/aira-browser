@@ -1,5 +1,7 @@
 import userScriptValueStateStoreTest from './UserScriptValueStateStore.test';
 import userScriptOverwriteInstallTest from './UserScriptOverwriteInstall.test';
+import userScriptDocumentStartHeadCompatTest from './UserScriptDocumentStartHeadCompat.test';
+import userScriptExternalImportServiceTest from './UserScriptExternalImportService.test';
 import novelReadingSessionStateTest from './NovelReadingSessionState.test';
 import readingDocumentTest from './ReadingDocument.test';
 import mediaSessionResolutionServiceTest from './MediaSessionResolutionService.test';
@@ -64,6 +66,8 @@ import communityUpdateCheckCoordinatorTest from './CommunityUpdateCheckCoordinat
 export default function tests(): void {
   userScriptValueStateStoreTest();
   userScriptOverwriteInstallTest();
+  userScriptDocumentStartHeadCompatTest();
+  userScriptExternalImportServiceTest();
   novelReadingSessionStateTest();
   readingDocumentTest();
   mediaSessionResolutionServiceTest();
