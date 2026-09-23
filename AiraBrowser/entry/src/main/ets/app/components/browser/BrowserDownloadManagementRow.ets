@@ -46,18 +46,76 @@ export struct BrowserDownloadManagementRow {
   @ObjectLink row: DownloadManagementRowState;
   @State private cardPressed: boolean = false;
   @State private contextMenuVisible: boolean = false;
+  @Prop presentation: 'card' | 'desktop_row' = 'card';
   @Prop selectionMode: boolean = false;
   @Prop selected: boolean = false;
+  @State private desktopHovered: boolean = false;
   onAction: (guid: string, action: DownloadManagementRowAction) => void =
     (_guid: string, _action: DownloadManagementRowAction): void => {};
   onToggleSelection: (guid: string) => void = (_guid: string): void => {};
 
   build() {
-    if (this.row.status === 'completed') {
+    if (this.presentation === 'desktop_row') {
+      this.buildDesktopRow()
+    } else if (this.row.status === 'completed') {
       this.buildCompletedCard()
     } else {
       this.buildActiveCard()
     }
+  }
+
+  @Builder
+  private buildDesktopRow() {
+    Row({ space: 12 }) {
+      Image(this.resolveFileTypeImage())
+        .width(28)
+        .height(28)
+        .objectFit(ImageFit.Contain)
+        .flexShrink(0)
+
+      Column({ space: 2 }) {
+        this.buildFileNameText()
+        if (this.row.status === 'completed') {
+          this.buildCompletedSubtitle()
+        } else {
+          this.buildActiveSubtitle()
+          this.buildTaskProgressBlock()
+        }
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      if (this.selectionMode) {
+        this.buildSelectionCheckbox()
+      } else if (this.row.primaryAction !== undefined && (this.row.status !== 'completed' || this.desktopHovered)) {
+        this.buildPrimaryActionButton()
+      }
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 52 })
+    .padding({ left: 18, right: 16, top: 8, bottom: 8 })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(this.resolveDesktopRowBackground())
+    .onHover((hovered: boolean): void => {
+      this.desktopHovered = hovered;
+    })
+    .onClick((): void => {
+      if (this.selectionMode) {
+        this.onToggleSelection(this.row.guid);
+        return;
+      }
+      if (this.row.status === 'completed') {
+        this.handleCompletedCardClick();
+      }
+    })
+    .bindContextMenu(this.buildContextMenu(), ResponseType.RightClick)
+  }
+
+  private resolveDesktopRowBackground(): ResourceColor {
+    if (this.selected || this.desktopHovered) {
+      return this.storedPressedBackgroundColor;
+    }
+    return $r('sys.color.ohos_id_color_background_transparent');
   }
 
   @Builder

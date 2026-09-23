@@ -8,10 +8,6 @@ import {
   createEmptyHistoryWorkspaceSnapshot
 } from '../../../core/history/HistoryWorkspaceSessionCoordinator';
 import {
-  HistoryLargeScreenLayoutPolicy,
-  HistoryLargeScreenLayoutSnapshot
-} from '../../../core/history/HistoryLargeScreenLayoutPolicy';
-import {
   HistoryDisplayVisit,
   HistorySiteGroup,
   HistoryViewMode
@@ -24,8 +20,6 @@ import {
   SiteIconListTarget
 } from '../../../core/siteicons/SiteIconListPresenter';
 import {
-  BROWSER_THEME_STORAGE_DIVIDER_KEY,
-  BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY,
   BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
@@ -36,10 +30,14 @@ import {
   sharedPreferencesRepository,
   sharedRecentlyClosedTabRepository
 } from '../../bootstrap/BrowserAppRuntime';
+import { HISTORY_LARGE_SCREEN_SEARCH_FOCUS_KEY } from './HistoryLargeScreenHeader';
 import {
-  HISTORY_LARGE_SCREEN_SEARCH_FOCUS_KEY,
-  HistoryLargeScreenHeader
-} from './HistoryLargeScreenHeader';
+  ManagementLargeScreenIconButton,
+  ManagementLargeScreenNavItem,
+  ManagementLargeScreenNavSection,
+  ManagementLargeScreenShell,
+  ManagementLargeScreenTextButton
+} from '../common/ManagementLargeScreenShell';
 import { HistoryLargeScreenTimeline } from './HistoryLargeScreenTimeline';
 import { HistoryLargeScreenSites } from './HistoryLargeScreenSites';
 import { AiraIcon } from '../common/AiraIcon';
@@ -49,10 +47,6 @@ const HISTORY_ROUTE_PUBLISH_DEBOUNCE_MS: number = 200;
 
 @Component
 export struct HistoryLargeScreenWorkspace {
-  @StorageProp(BROWSER_THEME_STORAGE_DIVIDER_KEY)
-  private storedDividerColor: string = DEFAULT_THEME_PALETTE.light.divider;
-  @StorageProp(BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY)
-  private storedPageBackgroundColor: string = DEFAULT_THEME_PALETTE.light.pageBackground;
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY)
   private storedPrimaryTextColor: string = DEFAULT_THEME_PALETTE.light.textPrimary;
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY)
@@ -74,14 +68,12 @@ export struct HistoryLargeScreenWorkspace {
     ),
     new HistoryManagementBoundary('profile_persistent', 'regular')
   );
-  private readonly layoutPolicy: HistoryLargeScreenLayoutPolicy = new HistoryLargeScreenLayoutPolicy();
   private readonly timelineDataSource: HistoryTimelineDataSource = new HistoryTimelineDataSource();
   private readonly timelineScroller: ListScroller = new ListScroller();
   private readonly sitesScroller: ListScroller = new ListScroller();
   private readonly siteIconPresenter: SiteIconListPresenter = new SiteIconListPresenter();
   @State private snapshot: HistoryWorkspaceSnapshot = createEmptyHistoryWorkspaceSnapshot();
   @State private iconStates: SiteIconListRenderState[] = [];
-  @State private viewportWidth: number = 1024;
   @State private shiftPressed: boolean = false;
   @State private controlPressed: boolean = false;
   private routePublishTimer: number = -1;
@@ -108,152 +100,27 @@ export struct HistoryLargeScreenWorkspace {
   }
 
   build() {
-    Column({ space: 0 }) {
-      Row() {
-        HistoryLargeScreenHeader({
-          query: this.snapshot.query,
-          viewMode: this.snapshot.viewMode,
-          site: this.snapshot.site,
-          visitCount: this.resolveVisibleItemCount(),
-          selectedCount: this.snapshot.selectedVisitIds.length,
-          loading: this.snapshot.loading,
-          busy: this.snapshot.busy,
-          privateMode: this.privateMode,
-          onQueryChange: (query: string): void => {
-            void this.updateQuery(query);
-          },
-          onViewModeChange: (viewMode: HistoryViewMode): void => {
-            void this.updateViewMode(viewMode);
-          },
-          onOpenSelection: (): void => {
-            this.confirmOpenSelection();
-          },
-          onDeleteSelection: (): void => {
-            this.confirmDeleteSelection();
-          },
-          onClearSelection: (): void => {
-            this.applySnapshot(this.coordinator.clearSelection());
-          },
-          onClearAll: (): void => {
-            this.confirmClearAll();
-          }
-        })
-        .width(this.resolveLayout().contentWidthVp)
+    ManagementLargeScreenShell({
+      title: this.resolveWorkspaceTitle(),
+      badge: this.resolveWorkspaceBadge(),
+      searchPlaceholder: '搜索历史记录',
+      searchQuery: this.snapshot.query,
+      searchFocusKey: HISTORY_LARGE_SCREEN_SEARCH_FOCUS_KEY,
+      onSearchChange: (query: string): void => {
+        void this.updateQuery(query);
+      },
+      sidebar: (): void => {
+        this.buildSidebar()
+      },
+      toolbarActions: (): void => {
+        this.buildToolbarActions()
+      },
+      content: (): void => {
+        this.buildWorkspaceContent()
       }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
-      .padding({ left: this.resolveLayout().horizontalPaddingVp, right: this.resolveLayout().horizontalPaddingVp })
-
-      Divider()
-        .width('100%')
-        .height(1)
-        .color(this.storedDividerColor)
-
-      Row() {
-        Column() {
-          if (this.snapshot.loading && this.resolveVisibleItemCount() === 0) {
-            this.buildLoadingState()
-          } else if (this.resolveVisibleItemCount() === 0) {
-            this.buildEmptyState()
-          } else if (this.snapshot.viewMode === 'sites') {
-            HistoryLargeScreenSites({
-              sites: this.snapshot.sites,
-              icons: this.iconStates,
-              listScroller: this.sitesScroller,
-              onOpenSite: (site: HistorySiteGroup): void => {
-                void this.openSite(site);
-              },
-              onOpenLatest: (site: HistorySiteGroup, openInNewTab: boolean): void => {
-                this.onOpenHistory(site.latestUrl, site.latestTitle, openInNewTab);
-              },
-              onCopyLink: (site: HistorySiteGroup): void => {
-                this.copyLink(site.latestUrl);
-              },
-              onDeleteSite: (site: HistorySiteGroup): void => {
-                this.confirmDeleteSite(site);
-              },
-              onReachEnd: (): void => {
-                void this.loadNextPage();
-              },
-              onIconLoadError: (
-                target: SiteIconListTarget,
-                currentUri: string,
-                sourceRevision: number
-              ): void => {
-                this.siteIconPresenter.resolvePixelMapAfterUriFailure(
-                  target,
-                  currentUri,
-                  sourceRevision,
-                  (result: SiteIconListResolvedIcon): void => this.applyResolvedIcon(result)
-                );
-              }
-            })
-          } else {
-            HistoryLargeScreenTimeline({
-              dataSource: this.timelineDataSource,
-              listScroller: this.timelineScroller,
-              icons: this.iconStates,
-              selectedVisitIds: this.snapshot.selectedVisitIds,
-              shiftPressed: this.shiftPressed,
-              controlPressed: this.controlPressed,
-              onOpenVisit: (visit: HistoryDisplayVisit, openInNewTab: boolean): void => {
-                this.onOpenHistory(visit.url, visit.title, openInNewTab);
-              },
-              onSelectVisit: (visitId: string, mode: HistoryWorkspaceSelectionMode): void => {
-                this.applySnapshot(this.coordinator.selectVisit(visitId, mode));
-              },
-              onDeleteVisit: (visit: HistoryDisplayVisit): void => {
-                this.confirmDeleteVisit(visit);
-              },
-              onDeleteSelection: (): void => {
-                this.confirmDeleteSelection();
-              },
-              onCopyLink: (visit: HistoryDisplayVisit): void => {
-                this.copyLink(visit.url);
-              },
-              onReachEnd: (): void => {
-                void this.loadNextPage();
-              },
-              onIconLoadError: (
-                target: SiteIconListTarget,
-                currentUri: string,
-                sourceRevision: number
-              ): void => {
-                this.siteIconPresenter.resolvePixelMapAfterUriFailure(
-                  target,
-                  currentUri,
-                  sourceRevision,
-                  (result: SiteIconListResolvedIcon): void => {
-                    this.applyResolvedIcon(result);
-                  }
-                );
-              }
-            })
-          }
-
-          if (this.snapshot.message.length > 0 && this.resolveVisibleItemCount() > 0) {
-            Text(this.snapshot.message)
-              .width('100%')
-              .fontSize(12)
-              .fontColor(this.storedSecondaryTextColor)
-              .textAlign(TextAlign.Center)
-              .padding({ top: 8, bottom: 8 })
-          }
-        }
-        .width(this.resolveLayout().contentWidthVp)
-        .height('100%')
-        .backgroundColor(this.storedPageBackgroundColor)
-      }
-      .layoutWeight(1)
-      .width('100%')
-      .padding({ left: this.resolveLayout().horizontalPaddingVp, right: this.resolveLayout().horizontalPaddingVp })
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Top)
-    }
+    })
     .width('100%')
     .height('100%')
-    .backgroundColor(this.storedPageBackgroundColor)
-    .clip(true)
     .focusable(true)
     .keyboardShortcut('f', [ModifierKey.CTRL], (): void => {
       this.focusSearch();
@@ -262,12 +129,176 @@ export struct HistoryLargeScreenWorkspace {
       this.applySnapshot(this.coordinator.selectAll());
     })
     .onKeyEvent((event: KeyEvent): boolean => this.handleKeyEvent(event))
-    .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      const width = Number(newArea.width);
-      if (Number.isFinite(width) && width > 0) {
-        this.viewportWidth = width;
+  }
+
+  @Builder
+  private buildSidebar() {
+    ManagementLargeScreenNavSection({ title: '视图' })
+    ManagementLargeScreenNavItem({
+      title: '时间线',
+      selected: this.snapshot.viewMode === 'timeline' && this.snapshot.site.length === 0,
+      iconId: 'browser.shortcut.history',
+      onSelect: (): void => {
+        void this.updateViewMode('timeline');
       }
     })
+    ManagementLargeScreenNavItem({
+      title: '按站点',
+      selected: this.snapshot.viewMode === 'sites',
+      iconId: 'browser.toolbar.siteInfo',
+      onSelect: (): void => {
+        void this.updateViewMode('sites');
+      }
+    })
+    if (this.snapshot.site.length > 0) {
+      ManagementLargeScreenNavSection({ title: '当前站点' })
+      ManagementLargeScreenNavItem({
+        title: this.snapshot.site,
+        selected: true,
+        showIcon: false,
+        onSelect: (): void => {
+        }
+      })
+    }
+  }
+
+  @Builder
+  private buildToolbarActions() {
+    if (this.snapshot.selectedVisitIds.length > 0) {
+      ManagementLargeScreenTextButton({
+        label: '打开',
+        enabled: !this.snapshot.busy,
+        onAction: (): void => {
+          this.confirmOpenSelection();
+        }
+      })
+      ManagementLargeScreenTextButton({
+        label: '删除',
+        enabled: !this.snapshot.busy,
+        onAction: (): void => {
+          this.confirmDeleteSelection();
+        }
+      })
+      ManagementLargeScreenTextButton({
+        label: '完成',
+        onAction: (): void => {
+          this.applySnapshot(this.coordinator.clearSelection());
+        }
+      })
+    } else {
+      if (this.snapshot.site.length > 0) {
+        ManagementLargeScreenTextButton({
+          label: '返回站点',
+          onAction: (): void => {
+            void this.updateViewMode('sites');
+          }
+        })
+      }
+      ManagementLargeScreenIconButton({
+        iconId: 'browser.tabs.delete',
+        label: '清除历史记录',
+        enabled: !this.snapshot.busy && this.resolveVisibleItemCount() > 0,
+        onAction: (): void => {
+          this.confirmClearAll();
+        }
+      })
+    }
+  }
+
+  @Builder
+  private buildWorkspaceContent() {
+    Column() {
+      if (this.snapshot.loading && this.resolveVisibleItemCount() === 0) {
+        this.buildLoadingState()
+      } else if (this.resolveVisibleItemCount() === 0) {
+        this.buildEmptyState()
+      } else if (this.snapshot.viewMode === 'sites') {
+        HistoryLargeScreenSites({
+          sites: this.snapshot.sites,
+          icons: this.iconStates,
+          listScroller: this.sitesScroller,
+          onOpenSite: (site: HistorySiteGroup): void => {
+            void this.openSite(site);
+          },
+          onOpenLatest: (site: HistorySiteGroup, openInNewTab: boolean): void => {
+            this.onOpenHistory(site.latestUrl, site.latestTitle, openInNewTab);
+          },
+          onCopyLink: (site: HistorySiteGroup): void => {
+            this.copyLink(site.latestUrl);
+          },
+          onDeleteSite: (site: HistorySiteGroup): void => {
+            this.confirmDeleteSite(site);
+          },
+          onReachEnd: (): void => {
+            void this.loadNextPage();
+          },
+          onIconLoadError: (
+            target: SiteIconListTarget,
+            currentUri: string,
+            sourceRevision: number
+          ): void => {
+            this.siteIconPresenter.resolvePixelMapAfterUriFailure(
+              target,
+              currentUri,
+              sourceRevision,
+              (result: SiteIconListResolvedIcon): void => this.applyResolvedIcon(result)
+            );
+          }
+        })
+      } else {
+        HistoryLargeScreenTimeline({
+          dataSource: this.timelineDataSource,
+          listScroller: this.timelineScroller,
+          icons: this.iconStates,
+          selectedVisitIds: this.snapshot.selectedVisitIds,
+          shiftPressed: this.shiftPressed,
+          controlPressed: this.controlPressed,
+          onOpenVisit: (visit: HistoryDisplayVisit, openInNewTab: boolean): void => {
+            this.onOpenHistory(visit.url, visit.title, openInNewTab);
+          },
+          onSelectVisit: (visitId: string, mode: HistoryWorkspaceSelectionMode): void => {
+            this.applySnapshot(this.coordinator.selectVisit(visitId, mode));
+          },
+          onDeleteVisit: (visit: HistoryDisplayVisit): void => {
+            this.confirmDeleteVisit(visit);
+          },
+          onDeleteSelection: (): void => {
+            this.confirmDeleteSelection();
+          },
+          onCopyLink: (visit: HistoryDisplayVisit): void => {
+            this.copyLink(visit.url);
+          },
+          onReachEnd: (): void => {
+            void this.loadNextPage();
+          },
+          onIconLoadError: (
+            target: SiteIconListTarget,
+            currentUri: string,
+            sourceRevision: number
+          ): void => {
+            this.siteIconPresenter.resolvePixelMapAfterUriFailure(
+              target,
+              currentUri,
+              sourceRevision,
+              (result: SiteIconListResolvedIcon): void => {
+                this.applyResolvedIcon(result);
+              }
+            );
+          }
+        })
+      }
+
+      if (this.snapshot.message.length > 0 && this.resolveVisibleItemCount() > 0) {
+        Text(this.snapshot.message)
+          .width('100%')
+          .fontSize(12)
+          .fontColor(this.storedSecondaryTextColor)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 8, bottom: 8 })
+      }
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -657,8 +688,24 @@ export struct HistoryLargeScreenWorkspace {
     return false;
   }
 
-  private resolveLayout(): HistoryLargeScreenLayoutSnapshot {
-    return this.layoutPolicy.resolve(this.viewportWidth);
+  private resolveWorkspaceTitle(): string {
+    if (this.snapshot.selectedVisitIds.length > 0) {
+      return `已选择 ${this.snapshot.selectedVisitIds.length} 项`;
+    }
+    if (this.snapshot.site.length > 0) {
+      return this.snapshot.site;
+    }
+    return '历史记录';
+  }
+
+  private resolveWorkspaceBadge(): string {
+    if (this.snapshot.selectedVisitIds.length > 0 || this.snapshot.loading) {
+      return '';
+    }
+    if (this.privateMode) {
+      return '常规历史';
+    }
+    return `${this.resolveVisibleItemCount()} 项`;
   }
 
   private scheduleRoutePublish(): void {

@@ -27,6 +27,11 @@ import { AiraIcon } from '../common/AiraIcon';
 import { AppEmptyState } from '../common/AppEmptyState';
 import { ManagementHdsScaffold } from '../common/ManagementHdsScaffold';
 import {
+  ManagementLargeScreenNavItem,
+  ManagementLargeScreenNavSection,
+  ManagementLargeScreenShell
+} from '../common/ManagementLargeScreenShell';
+import {
   createFloatingGlassMaterialIfAvailable,
   resolveFloatingGlassMaterialBackgroundColor,
   resolveFloatingGlassMaterialTintForMode,
@@ -55,6 +60,8 @@ const NOVEL_BOOKSHELF_CATEGORY_OPTIONS: SegmentedTabOption[] = [
   { id: 'comic', title: '漫画' }
 ];
 
+type NovelBookshelfDesktopView = 'all' | 'novel' | 'comic' | 'recent';
+
 @Component
 export struct NovelBookshelfScreen {
   @StorageProp(BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY)
@@ -80,8 +87,11 @@ export struct NovelBookshelfScreen {
   private readonly clipboardService: BrowserClipboardService = new BrowserClipboardService();
   private readonly shareService: WebPageShareService = new WebPageShareService();
   private readonly gridScroller: Scroller = new Scroller();
+  @Prop presentationMode: 'page' | 'native_tab' = 'page';
   @Prop persistentAccessAllowed: boolean = false;
   @Prop layoutMode: NovelBookshelfLayoutMode = 'phone';
+  @State private desktopView: NovelBookshelfDesktopView = 'all';
+  @State private desktopQuery: string = '';
   onOpenBook: (book: NovelBookshelfBook) => void = (_book: NovelBookshelfBook): void => {};
   onOpenOriginalPage: (book: NovelBookshelfBook) => void = (_book: NovelBookshelfBook): void => {};
 
@@ -90,6 +100,15 @@ export struct NovelBookshelfScreen {
   }
 
   build() {
+    if (this.presentationMode === 'native_tab') {
+      this.buildDesktopWorkspace()
+    } else {
+      this.buildPhonePage()
+    }
+  }
+
+  @Builder
+  private buildPhonePage() {
     Column() {
       ManagementHdsScaffold({
         title: '我的书架',
@@ -124,6 +143,91 @@ export struct NovelBookshelfScreen {
       [SafeAreaType.SYSTEM, SafeAreaType.CUTOUT],
       [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]
     )
+  }
+
+  @Builder
+  private buildDesktopWorkspace() {
+    ManagementLargeScreenShell({
+      title: '我的书架',
+      badge: this.resolveDesktopBadge(),
+      searchPlaceholder: '搜索书架',
+      searchQuery: this.desktopQuery,
+      onSearchChange: (value: string): void => {
+        this.desktopQuery = value;
+      },
+      sidebar: (): void => {
+        this.buildDesktopSidebar()
+      },
+      content: (): void => {
+        this.buildDesktopContent()
+      }
+    })
+  }
+
+  @Builder
+  private buildDesktopSidebar() {
+    ManagementLargeScreenNavSection({ title: '书架' })
+    ManagementLargeScreenNavItem({
+      title: '全部',
+      count: `${this.state.novels.length + this.state.comics.length}`,
+      selected: this.desktopView === 'all',
+      iconId: 'browser.toolbar.bookshelf',
+      onSelect: (): void => {
+        this.desktopView = 'all';
+      }
+    })
+    ManagementLargeScreenNavItem({
+      title: '小说',
+      count: `${this.state.novels.length}`,
+      selected: this.desktopView === 'novel',
+      iconId: 'browser.toolbar.reader',
+      onSelect: (): void => {
+        this.desktopView = 'novel';
+      }
+    })
+    ManagementLargeScreenNavItem({
+      title: '漫画',
+      count: `${this.state.comics.length}`,
+      selected: this.desktopView === 'comic',
+      iconId: 'browser.toolbar.reader',
+      onSelect: (): void => {
+        this.desktopView = 'comic';
+      }
+    })
+    ManagementLargeScreenNavItem({
+      title: '最近阅读',
+      count: `${this.state.novels.length + this.state.comics.length}`,
+      selected: this.desktopView === 'recent',
+      iconId: 'browser.shortcut.history',
+      onSelect: (): void => {
+        this.desktopView = 'recent';
+      }
+    })
+  }
+
+  @Builder
+  private buildDesktopContent() {
+    Column() {
+      if (!this.persistentAccessAllowed) {
+        this.buildStatus('隐私模式下不可用', '')
+      } else if (this.state.loading) {
+        this.buildStatus('正在加载书架', '')
+      } else if (this.state.errorMessage.length > 0) {
+        this.buildStatus('书架暂时不可用', this.state.errorMessage)
+      } else if (this.resolveDesktopBooks().length === 0) {
+        this.buildStatus(this.desktopQuery.trim().length > 0 ? '没有匹配的书' : '暂无收藏', '')
+      } else {
+        this.buildBookGrid(this.resolveDesktopBooks())
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const nextWidth = Math.max(1, Math.round(this.parseAreaDimension(newArea.width)));
+      if (nextWidth !== this.contentWidth) {
+        this.contentWidth = nextWidth;
+      }
+    })
   }
 
   @Builder
@@ -278,15 +382,15 @@ export struct NovelBookshelfScreen {
       top: this.resolveGridContentTopInset(),
       bottom: NOVEL_BOOKSHELF_BOTTOM_PADDING
     })
-    .linearGradientBlur(NOVEL_BOOKSHELF_TOP_BLUR_RADIUS, {
+    .linearGradientBlur(this.resolveTopBlurRadius(), {
       fractionStops: [[1, 0], [1, 0.05], [0, 0.14], [0, 1]],
       direction: GradientDirection.Bottom
     })
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     .scrollBar(BarState.Auto)
     .expandSafeArea(
-      [SafeAreaType.SYSTEM, SafeAreaType.CUTOUT],
-      [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]
+      this.presentationMode === 'native_tab' ? [] : [SafeAreaType.SYSTEM, SafeAreaType.CUTOUT],
+      this.presentationMode === 'native_tab' ? [] : [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]
     )
   }
 
@@ -296,7 +400,44 @@ export struct NovelBookshelfScreen {
   }
 
   private resolveGridContentTopInset(): number {
+    if (this.presentationMode === 'native_tab') {
+      return 16;
+    }
     return this.resolveTabsTopInset() + NOVEL_BOOKSHELF_TABS_HEIGHT + NOVEL_BOOKSHELF_TABS_TO_CONTENT_GAP;
+  }
+
+  private resolveTopBlurRadius(): number {
+    return this.presentationMode === 'native_tab' ? 0 : NOVEL_BOOKSHELF_TOP_BLUR_RADIUS;
+  }
+
+  private resolveDesktopBooks(): NovelBookshelfBook[] {
+    let books: NovelBookshelfBook[] = [];
+    if (this.desktopView === 'novel') {
+      books = this.state.novels;
+    } else if (this.desktopView === 'comic') {
+      books = this.state.comics;
+    } else if (this.desktopView === 'recent') {
+      books = this.state.novels.concat(this.state.comics);
+      books.sort((left: NovelBookshelfBook, right: NovelBookshelfBook): number => right.updatedAt - left.updatedAt);
+    } else {
+      books = this.state.novels.concat(this.state.comics);
+    }
+    const query = this.desktopQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      return books;
+    }
+    return books.filter((book: NovelBookshelfBook): boolean => {
+      return book.title.toLowerCase().includes(query) ||
+        book.author.toLowerCase().includes(query) ||
+        book.sourceHost.toLowerCase().includes(query);
+    });
+  }
+
+  private resolveDesktopBadge(): string {
+    if (!this.persistentAccessAllowed || this.state.loading) {
+      return '';
+    }
+    return `${this.resolveDesktopBooks().length} 本`;
   }
 
   private resolveLayoutState(): NovelBookshelfLayoutState {

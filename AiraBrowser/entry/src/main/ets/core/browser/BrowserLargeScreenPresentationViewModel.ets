@@ -42,7 +42,7 @@ export {
 export type BrowserLargeScreenTopChromeDensity = 'full' | 'compact';
 export type BrowserLargeScreenActiveTabScene =
   'home' | 'web' | 'bookmarks' | 'history' | 'settings' | 'downloads' | 'user_scripts' |
-  'app_proxy' | 'saved_pages';
+  'app_proxy' | 'saved_pages' | 'bookshelf';
 
 export interface BrowserLargeScreenActiveTabChromePresentation {
   scene: BrowserLargeScreenActiveTabScene;

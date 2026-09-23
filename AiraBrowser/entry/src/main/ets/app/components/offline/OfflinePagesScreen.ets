@@ -36,6 +36,10 @@ import {
 } from '../common/ManagementHdsScaffold';
 import { AppEmptyState } from '../common/AppEmptyState';
 import {
+  ManagementLargeScreenIconButton,
+  ManagementLargeScreenShell
+} from '../common/ManagementLargeScreenShell';
+import {
   requestOpenBrowserUrlWithRouteParams
 } from '../../../core/navigation/BrowserNativeNavigationRequestCenter';
 import { BROWSER_SHELL_ROUTE, OFFLINE_PAGE_VIEWER_ROUTE } from '../../router/AppRoutes';
@@ -71,6 +75,8 @@ export struct OfflinePagesScreen {
   onOpenOriginalPage: (url: string) => void = (_url: string): void => {};
   @State listState: OfflinePageListState = this.viewModel.buildLoadingState();
   @State iconStates: OfflinePageIconState[] = [];
+  @State desktopQuery: string = '';
+  @State hoveredItemId: string = '';
 
   aboutToAppear(): void {
     this.siteIconListPresenter.bindDomainUpdates(
@@ -87,6 +93,15 @@ export struct OfflinePagesScreen {
   }
 
   build() {
+    if (this.presentationMode === 'native_tab') {
+      this.buildDesktopWorkspace()
+    } else {
+      this.buildPhonePage()
+    }
+  }
+
+  @Builder
+  private buildPhonePage() {
     Column() {
       ManagementHdsScaffold({
         title: this.isSessionEphemeral() ? '常规离线页面' : '已保存的页面',
@@ -135,6 +150,104 @@ export struct OfflinePagesScreen {
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+  }
+
+  @Builder
+  private buildDesktopWorkspace() {
+    ManagementLargeScreenShell({
+      title: this.isSessionEphemeral() ? '常规离线页面' : '我的网页',
+      badge: this.listState.loading ? '' : `${this.resolveDesktopItems().length} 项`,
+      searchPlaceholder: '搜索网页',
+      searchQuery: this.desktopQuery,
+      showSidebar: false,
+      onSearchChange: (value: string): void => {
+        this.desktopQuery = value;
+      },
+      toolbarActions: (): void => {
+        ManagementLargeScreenIconButton({
+          iconId: 'reader.refresh',
+          label: '刷新',
+          onAction: (): void => {
+            this.refresh();
+          }
+        })
+      },
+      content: (): void => {
+        this.buildDesktopContent()
+      }
+    })
+  }
+
+  @Builder
+  private buildDesktopContent() {
+    if (this.listState.loading) {
+      this.buildStatus(this.listState.message)
+    } else if (this.resolveDesktopItems().length === 0) {
+      this.buildStatus(this.desktopQuery.trim().length > 0 ? '没有匹配的网页' : this.listState.message)
+    } else {
+      List({ space: 0 }) {
+        ForEach(this.resolveDesktopItems(), (item: OfflinePageListItem) => {
+          ListItem() {
+            this.buildDesktopItem(item)
+          }
+        }, (item: OfflinePageListItem): string => item.id)
+      }
+      .width('100%')
+      .height('100%')
+      .scrollBar(BarState.Auto)
+      .edgeEffect(EdgeEffect.None)
+    }
+  }
+
+  @Builder
+  private buildDesktopItem(item: OfflinePageListItem) {
+    Row({ space: 12 }) {
+      WebsiteIconView({
+        iconUri: this.shouldShowImageIcon(item.id) ? this.getIconPath(item.id) : '',
+        fallbackLabel: this.resolvePageFallbackLabel(item),
+        variant: 'list',
+        iconSize: 28,
+        cornerRadiusRatio: this.storedSiteIconCornerRadiusRatio,
+        fallbackFontSize: 13,
+        containerBackgroundColor: this.storedControlBackgroundColor,
+        frameBorderColor: this.storedDividerColor,
+        textColor: this.storedPrimaryTextColor
+      })
+
+      Column({ space: 2 }) {
+        Text(item.title)
+          .width('100%')
+          .fontSize(14)
+          .fontColor(this.storedPrimaryTextColor)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(`${item.siteName} · ${item.savedAtText}`)
+          .width('100%')
+          .fontSize(12)
+          .fontColor(this.storedSecondaryTextColor)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      if (this.hoveredItemId === item.id) {
+        this.buildOverflowButton(item)
+      }
+    }
+    .width('100%')
+    .height(52)
+    .padding({ left: 18, right: 12 })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(this.hoveredItemId === item.id
+      ? this.storedControlBackgroundColor
+      : $r('sys.color.ohos_id_color_background_transparent'))
+    .onHover((hovered: boolean): void => {
+      this.hoveredItemId = hovered ? item.id : '';
+    })
+    .onClick((): void => {
+      this.openOfflinePageIfAvailable(item);
+    })
   }
 
   private buildHeaderMenuActions(): ManagementHdsMenuAction[] {
@@ -407,6 +520,19 @@ export struct OfflinePagesScreen {
   private shouldShowImageIcon(pageId: string): boolean {
     const state = this.iconStates.find((item: OfflinePageIconState) => item.id === pageId);
     return state !== undefined && state.path.length > 0;
+  }
+
+  private resolveDesktopItems(): OfflinePageListItem[] {
+    const query = this.desktopQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      return this.listState.items;
+    }
+    return this.listState.items.filter((item: OfflinePageListItem): boolean => {
+      return item.title.toLowerCase().includes(query) ||
+        item.siteName.toLowerCase().includes(query) ||
+        item.host.toLowerCase().includes(query) ||
+        item.originalUrl.toLowerCase().includes(query);
+    });
   }
 
   private setIconPath(pageId: string, path: string): void {

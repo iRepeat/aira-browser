@@ -411,6 +411,11 @@ export class BrowserShellRouteCoordinator {
   }
 
   openNovelBookshelfPage(): void {
+    if (this.host.isLargeScreenShellActive()) {
+      this.host.resetTransientOverlayStateForRouteTransition();
+      this.host.openLargeScreenNativeRoute({ scene: 'bookshelf' });
+      return;
+    }
     this.pushRoute(
       NOVEL_BOOKSHELF_ROUTE,
       this.buildBoundaryRouteParams(),
@@ -574,6 +579,9 @@ export class BrowserShellRouteCoordinator {
       case 'app_proxy':
         return { url: APP_PROXY_SETTINGS_ROUTE, params: boundaryParams, failurePrefix: '打开应用内代理设置失败' };
       case 'saved_pages':
+        return { url: OFFLINE_PAGES_ROUTE, params: boundaryParams, failurePrefix: '打开已保存页面失败' };
+      case 'bookshelf':
+        return { url: NOVEL_BOOKSHELF_ROUTE, params: boundaryParams, failurePrefix: '打开我的书架失败' };
       default:
         return { url: OFFLINE_PAGES_ROUTE, params: boundaryParams, failurePrefix: '打开已保存页面失败' };
     }

@@ -39,6 +39,8 @@ import { BrowserDownloadManagementScreen } from './BrowserDownloadManagementScre
 import { UserScriptManagementHost } from '../userscripts/UserScriptManagementHost';
 import { AppProxySettingsScreen } from '../settings/AppProxySettingsScreen';
 import { OfflinePagesScreen } from '../offline/OfflinePagesScreen';
+import { NovelBookshelfScreen } from '../novel/NovelBookshelfScreen';
+import { NovelBookshelfBook } from '../../../features/novel/NovelLibraryModels';
 import { BrowserLargeScreenWebZoomNotification } from './BrowserLargeScreenWebZoomNotification';
 import {
   BrowserUserScriptApplicationAction,
@@ -387,6 +389,18 @@ export struct BrowserLargeScreenPrimarySurface {
         privacyMode: this.resolveNativeTabPrivacyMode(),
         onOpenOriginalPage: (url: string): void => {
           this.onNavigationIntent({ kind: 'open_saved_page_original', text: '', url: url });
+        }
+      })
+    } else if (this.presentation?.activeTabChrome.scene === 'bookshelf') {
+      NovelBookshelfScreen({
+        presentationMode: 'native_tab',
+        persistentAccessAllowed: this.presentation?.activeTabChrome.privateMode !== true,
+        layoutMode: 'large_screen',
+        onOpenBook: (book: NovelBookshelfBook): void => {
+          void BrowserWindowRuntime.openNovelBookshelfBook(book);
+        },
+        onOpenOriginalPage: (book: NovelBookshelfBook): void => {
+          BrowserWindowRuntime.openNovelBookshelfOriginalPage(book);
         }
       })
     } else {

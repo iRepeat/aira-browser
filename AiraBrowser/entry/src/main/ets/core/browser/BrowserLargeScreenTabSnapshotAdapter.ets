@@ -68,6 +68,9 @@ export class BrowserLargeScreenTabSnapshotAdapter {
     if (nativeScene === 'saved_pages') {
       return 'browser.toolbar.savedPages';
     }
+    if (nativeScene === 'bookshelf') {
+      return 'browser.toolbar.bookshelf';
+    }
     if (!tab.isHome) {
       return undefined;
     }

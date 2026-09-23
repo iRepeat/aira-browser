@@ -18,15 +18,11 @@ import {
 } from '../browser/BrowserDesktopContextMenu';
 import { BROWSER_DESKTOP_MENU_WIDE_WIDTH_VP } from '../../../core/browser/BrowserDesktopMenuPresentationTokens';
 import {
-  RECORD_LIST_CARD_RADIUS,
-  RECORD_LIST_ROW_RADIUS,
   RECORD_LIST_ROW_SUBTITLE_SIZE,
   RECORD_LIST_ROW_TITLE_SIZE
 } from '../common/RecordListTokens';
 
-const HISTORY_SITE_ROW_HEIGHT: number = 64;
-const HISTORY_SITE_LIST_PADDING: number = 16;
-const HISTORY_SITE_GROUP_PADDING: number = 4;
+const HISTORY_SITE_ROW_HEIGHT: number = 52;
 
 @Component
 export struct HistoryLargeScreenSites {
@@ -60,19 +56,14 @@ export struct HistoryLargeScreenSites {
     List({ scroller: this.listScroller, space: 0 }) {
       ForEach(this.sites, (site: HistorySiteGroup, index: number) => {
         ListItem() {
-          this.buildSiteRow(site, index === 0, index >= this.sites.length - 1)
+          this.buildSiteRow(site, index >= this.sites.length - 1)
         }
         .width('100%')
       }, (site: HistorySiteGroup): string => site.key)
     }
     .width('100%')
     .height('100%')
-    .padding({
-      left: HISTORY_SITE_LIST_PADDING,
-      right: HISTORY_SITE_LIST_PADDING,
-      top: HISTORY_SITE_GROUP_PADDING,
-      bottom: HISTORY_SITE_GROUP_PADDING
-    })
+    .padding({ top: 8, bottom: 8 })
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
     .scrollBar(BarState.Auto)
     .cachedCount(8)
@@ -80,7 +71,7 @@ export struct HistoryLargeScreenSites {
   }
 
   @Builder
-  private buildSiteRow(site: HistorySiteGroup, isFirst: boolean, isLast: boolean) {
+  private buildSiteRow(site: HistorySiteGroup, isLast: boolean) {
     Column() {
       Row({ space: 12 }) {
         WebsiteIconView({
@@ -127,7 +118,7 @@ export struct HistoryLargeScreenSites {
       .backgroundColor(this.hoveredSiteKey === site.key
         ? this.storedControlBackgroundColor
         : this.storedSurfaceBackgroundColor)
-      .borderRadius(RECORD_LIST_ROW_RADIUS)
+      .borderRadius(0)
       .onHover((hovered: boolean): void => {
         this.hoveredSiteKey = hovered ? site.key : '';
       })
@@ -141,20 +132,7 @@ export struct HistoryLargeScreenSites {
       }
     }
     .width('100%')
-    .padding({
-      left: HISTORY_SITE_GROUP_PADDING,
-      right: HISTORY_SITE_GROUP_PADDING,
-      top: isFirst ? HISTORY_SITE_GROUP_PADDING : 0,
-      bottom: isLast ? HISTORY_SITE_GROUP_PADDING : 0
-    })
-    .backgroundColor(this.storedSurfaceBackgroundColor)
-    .borderRadius({
-      topLeft: isFirst ? RECORD_LIST_CARD_RADIUS : 0,
-      topRight: isFirst ? RECORD_LIST_CARD_RADIUS : 0,
-      bottomLeft: isLast ? RECORD_LIST_CARD_RADIUS : 0,
-      bottomRight: isLast ? RECORD_LIST_CARD_RADIUS : 0
-    })
-    .clip(true)
+    .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
   }
 
   @Builder

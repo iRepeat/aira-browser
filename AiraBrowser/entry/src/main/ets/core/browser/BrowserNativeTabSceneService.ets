@@ -3,7 +3,7 @@ import { BookmarkStorageScope } from '../../common/models/BrowserModels';
 import { SettingsCenterDestination } from '../settings/SettingsCenterViewModel';
 
 export type BrowserNativeTabScene =
-  'bookmarks' | 'history' | 'settings' | 'downloads' | 'user_scripts' | 'app_proxy' | 'saved_pages';
+  'bookmarks' | 'history' | 'settings' | 'downloads' | 'user_scripts' | 'app_proxy' | 'saved_pages' | 'bookshelf';
 
 export const BOOKMARK_NATIVE_TAB_URL: string = 'aira://system/bookmarks';
 export const BOOKMARK_NATIVE_TAB_TITLE: string = '书签';
@@ -18,7 +18,9 @@ export const USER_SCRIPTS_NATIVE_TAB_TITLE: string = '用户脚本';
 export const APP_PROXY_NATIVE_TAB_URL: string = 'aira://system/app-proxy';
 export const APP_PROXY_NATIVE_TAB_TITLE: string = '应用内代理';
 export const SAVED_PAGES_NATIVE_TAB_URL: string = 'aira://system/saved_pages';
-export const SAVED_PAGES_NATIVE_TAB_TITLE: string = '已保存的页面';
+export const SAVED_PAGES_NATIVE_TAB_TITLE: string = '我的网页';
+export const BOOKSHELF_NATIVE_TAB_URL: string = 'aira://system/bookshelf';
+export const BOOKSHELF_NATIVE_TAB_TITLE: string = '我的书架';
 
 export interface BookmarkNativeTabRouteState {
   folderId: string;
@@ -79,6 +81,9 @@ export class BrowserNativeTabSceneService {
       if (protocol === 'aira' && host === 'system' && path === '/saved_pages') {
         return 'saved_pages';
       }
+      if (protocol === 'aira' && host === 'system' && path === '/bookshelf') {
+        return 'bookshelf';
+      }
     } catch (_error) {
       const baseUrl = normalizedUrl.split('?')[0].toLowerCase();
       if (baseUrl === BOOKMARK_NATIVE_TAB_URL) {
@@ -99,7 +104,10 @@ export class BrowserNativeTabSceneService {
       if (baseUrl === APP_PROXY_NATIVE_TAB_URL) {
         return 'app_proxy';
       }
-      return baseUrl === SAVED_PAGES_NATIVE_TAB_URL ? 'saved_pages' : undefined;
+      if (baseUrl === SAVED_PAGES_NATIVE_TAB_URL) {
+        return 'saved_pages';
+      }
+      return baseUrl === BOOKSHELF_NATIVE_TAB_URL ? 'bookshelf' : undefined;
     }
     return undefined;
   }
@@ -126,6 +134,8 @@ export class BrowserNativeTabSceneService {
         return APP_PROXY_NATIVE_TAB_TITLE;
       case 'saved_pages':
         return SAVED_PAGES_NATIVE_TAB_TITLE;
+      case 'bookshelf':
+        return BOOKSHELF_NATIVE_TAB_TITLE;
       default:
         return undefined;
     }

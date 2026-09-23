@@ -49,6 +49,8 @@ import {
   DOWNLOADS_NATIVE_TAB_URL,
   HISTORY_NATIVE_TAB_TITLE,
   HISTORY_NATIVE_TAB_URL,
+  BOOKSHELF_NATIVE_TAB_TITLE,
+  BOOKSHELF_NATIVE_TAB_URL,
   SAVED_PAGES_NATIVE_TAB_TITLE,
   SAVED_PAGES_NATIVE_TAB_URL,
   SETTINGS_NATIVE_TAB_TITLE,
@@ -117,6 +119,7 @@ export type BrowserLargeScreenNavigationIntentKind =
   'open_user_scripts' |
   'open_app_proxy' |
   'open_saved_pages' |
+  'open_bookshelf' |
   'close_active_tab' |
   'open_bookmark_node' |
   'open_history_visit' |
@@ -309,7 +312,7 @@ export class BrowserLargeScreenShellIntentApplication {
   private resolveNativeSceneIntentKind(
     scene: BrowserNativeTabScene
   ): 'open_bookmarks' | 'open_history' | 'open_settings' | 'open_downloads' | 'open_user_scripts' |
-    'open_app_proxy' | 'open_saved_pages' {
+    'open_app_proxy' | 'open_saved_pages' | 'open_bookshelf' {
     if (scene === 'history') {
       return 'open_history';
     }
@@ -327,6 +330,9 @@ export class BrowserLargeScreenShellIntentApplication {
     }
     if (scene === 'saved_pages') {
       return 'open_saved_pages';
+    }
+    if (scene === 'bookshelf') {
+      return 'open_bookshelf';
     }
     return 'open_bookmarks';
   }
@@ -541,6 +547,10 @@ export class BrowserLargeScreenShellIntentApplication {
     }
     if (intent.kind === 'open_saved_pages') {
       this.openNativeTab(SAVED_PAGES_NATIVE_TAB_URL, SAVED_PAGES_NATIVE_TAB_TITLE, facts.windowId);
+      return;
+    }
+    if (intent.kind === 'open_bookshelf') {
+      this.openNativeTab(BOOKSHELF_NATIVE_TAB_URL, BOOKSHELF_NATIVE_TAB_TITLE, facts.windowId);
       return;
     }
     if (intent.kind === 'close_active_tab') {

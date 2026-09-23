@@ -64,6 +64,13 @@ import { FloatingGlassMaterialSurface } from '../common/FloatingGlassMaterialSur
 import { resolveFloatingGlassMaterialTintForMode } from '../common/FloatingGlassMaterialTokens';
 import { BROWSER_WINDOW_SAFE_TOP_INSET_STORAGE_KEY } from '../../../core/browser/BrowserWindowAvoidAreaCoordinator';
 import { FloatingSelectionToolbar } from '../common/FloatingSelectionToolbar';
+import {
+  ManagementLargeScreenIconButton,
+  ManagementLargeScreenNavItem,
+  ManagementLargeScreenNavSection,
+  ManagementLargeScreenShell,
+  ManagementLargeScreenTextButton
+} from '../common/ManagementLargeScreenShell';
 
 interface HiddenDownloadTaskSnapshot {
   guid: string;
@@ -126,6 +133,7 @@ export struct BrowserDownloadManagementScreen {
   @State downloadListState: DownloadManagementListState = createEmptyDownloadManagementListState();
   @State isSessionEphemeral: boolean = false;
   @State selectedGroup: DownloadQueryGroup = 'in_progress';
+  @State desktopQuery: string = '';
   @State statusText: string = '';
   @State cancelConfirmGuid: string = '';
   @State cancelConfirmFileName: string = '';
@@ -213,6 +221,15 @@ export struct BrowserDownloadManagementScreen {
   }
 
   build() {
+    if (this.presentationMode === 'native_tab') {
+      this.buildDesktopWorkspace()
+    } else {
+      this.buildPhoneWorkspace()
+    }
+  }
+
+  @Builder
+  private buildPhoneWorkspace() {
     Stack({ alignContent: Alignment.Bottom }) {
       this.buildManagementScaffold()
 
@@ -226,6 +243,123 @@ export struct BrowserDownloadManagementScreen {
       this.presentCancelDialogIfNeeded();
       this.presentCompletedDeleteDialogIfNeeded();
     })
+  }
+
+  @Builder
+  private buildDesktopWorkspace() {
+    ManagementLargeScreenShell({
+      title: this.resolveScreenTitle(),
+      badge: this.resolveDesktopBadge(),
+      searchPlaceholder: '搜索下载',
+      searchQuery: this.desktopQuery,
+      onSearchChange: (value: string): void => {
+        this.desktopQuery = value;
+      },
+      sidebar: (): void => {
+        this.buildDesktopSidebar()
+      },
+      toolbarActions: (): void => {
+        this.buildDesktopToolbarActions()
+      },
+      content: (): void => {
+        this.buildDesktopContent()
+      }
+    })
+    .onAppear(() => {
+      this.presentCancelDialogIfNeeded();
+      this.presentCompletedDeleteDialogIfNeeded();
+    })
+  }
+
+  @Builder
+  private buildDesktopSidebar() {
+    ManagementLargeScreenNavSection({ title: '下载' })
+    ForEach(this.downloadListState.groups, (group: DownloadManagementGroupState) => {
+      ManagementLargeScreenNavItem({
+        title: group.label,
+        count: `${group.count}`,
+        selected: this.selectedGroup === group.group,
+        iconId: group.group === 'completed' ? 'browser.shortcut.downloads' : 'settings.downloads',
+        onSelect: (): void => {
+          this.selectGroup(group.group);
+        }
+      })
+    }, (group: DownloadManagementGroupState): string => group.group)
+  }
+
+  @Builder
+  private buildDesktopToolbarActions() {
+    if (this.isSelectionMode) {
+      ManagementLargeScreenTextButton({
+        label: '全选',
+        onAction: (): void => {
+          this.selectAllVisibleRows();
+        }
+      })
+      ManagementLargeScreenTextButton({
+        label: '删除',
+        enabled: this.selectedGuids.length > 0,
+        onAction: (): void => {
+          this.confirmDeleteSelectedRows();
+        }
+      })
+      ManagementLargeScreenTextButton({
+        label: '完成',
+        onAction: (): void => {
+          this.exitSelectionMode();
+        }
+      })
+    } else if (this.shouldShowLargeScreenDownloadSettings()) {
+      ManagementLargeScreenIconButton({
+        iconId: 'settings.general',
+        label: '下载设置',
+        onAction: (): void => {
+          this.openDownloadSettingsDialog();
+        }
+      })
+    }
+  }
+
+  @Builder
+  private buildDesktopContent() {
+    Column() {
+      if (this.isSessionEphemeral) {
+        Text('当前只显示这个私密窗口里的下载。')
+          .width('100%')
+          .fontSize(12)
+          .fontColor(this.storedSecondaryTextColor)
+          .padding({ left: 22, right: 22, top: 12 })
+      }
+      if (this.resolveDesktopRows().length === 0) {
+        this.buildEmptyState()
+      } else {
+        List({ space: 0 }) {
+          ForEach(this.resolveDesktopRows(), (row: DownloadManagementRowState) => {
+            ListItem() {
+              BrowserDownloadManagementRow({
+                row: row,
+                presentation: 'desktop_row',
+                selectionMode: this.isSelectionMode,
+                selected: this.isRowSelected(row.guid),
+                onAction: (guid: string, action: DownloadManagementRowAction): void => {
+                  this.handleRowAction(guid, action);
+                },
+                onToggleSelection: (guid: string): void => {
+                  this.toggleRowSelection(guid);
+                }
+              })
+            }
+          }, (row: DownloadManagementRowState): string =>
+            `${row.guid}:${this.isRowSelected(row.guid) ? 'selected' : 'idle'}:${this.isSelectionMode ? 'edit' : 'browse'}`)
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .scrollBar(BarState.Auto)
+        .edgeEffect(EdgeEffect.None)
+      }
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -1433,6 +1567,22 @@ export struct BrowserDownloadManagementScreen {
   private getRowsForGroup(group: DownloadQueryGroup): DownloadManagementRowState[] {
     const matchedGroup = this.downloadListState.groups.find((item: DownloadManagementGroupState) => item.group === group);
     return matchedGroup === undefined ? [] : matchedGroup.rows;
+  }
+
+  private resolveDesktopRows(): DownloadManagementRowState[] {
+    const query = this.desktopQuery.trim().toLowerCase();
+    const rows = this.getRowsForGroup(this.selectedGroup);
+    if (query.length === 0) {
+      return rows;
+    }
+    return rows.filter((row: DownloadManagementRowState): boolean => row.fileName.toLowerCase().includes(query));
+  }
+
+  private resolveDesktopBadge(): string {
+    if (this.isSelectionMode) {
+      return '';
+    }
+    return `${this.resolveDesktopRows().length} 项`;
   }
 
   private findVisibleRowByGuid(guid: string): DownloadManagementRowState | undefined {

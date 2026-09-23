@@ -38,6 +38,11 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { AiraIcon } from '../common/AiraIcon';
 import {
+  ManagementLargeScreenActionGroup,
+  ManagementLargeScreenIconButton,
+  ManagementLargeScreenShell
+} from '../common/ManagementLargeScreenShell';
+import {
   BrowserDesktopContextMenu,
   BrowserDesktopContextMenuItem
 } from '../browser/BrowserDesktopContextMenu';
@@ -53,11 +58,7 @@ import {
 } from '../../../services/bookmarks/BookmarkHtmlTransferApplicationService';
 import { bookmarkWorkspaceSessionRuntime } from '../../runtime/BookmarkWorkspaceSessionRuntime';
 
-const BOOKMARK_WORKSPACE_HEADER_HEIGHT: number = 64;
-const BOOKMARK_WORKSPACE_COMPACT_SIDEBAR_WIDTH: number = 240;
-const BOOKMARK_WORKSPACE_FULL_SIDEBAR_WIDTH: number = 290;
 const BOOKMARK_WORKSPACE_COMPACT_SEARCH_BREAKPOINT: number = 840;
-const BOOKMARK_WORKSPACE_FULL_SIDEBAR_BREAKPOINT: number = 600;
 const BOOKMARK_WORKSPACE_ROW_HEIGHT: number = 52;
 const BOOKMARK_WORKSPACE_ROW_RADIUS: number = 10;
 const BOOKMARK_WORKSPACE_SEARCH_FOCUS_KEY: string = 'bookmark-large-screen-search';
@@ -160,33 +161,29 @@ export struct BookmarkLargeScreenWorkspace {
   }
 
   build() {
-    Column({ space: 0 }) {
-      this.buildHeader()
-
-      Divider()
-        .width('100%')
-        .height(1)
-        .color(this.storedDividerColor)
-
-      Row({ space: 0 }) {
+    ManagementLargeScreenShell({
+      title: this.resolveWorkspaceTitle(),
+      badge: this.resolveWorkspaceBadge(),
+      searchPlaceholder: '搜索书签',
+      searchQuery: this.snapshot.query,
+      searchFocusKey: BOOKMARK_WORKSPACE_SEARCH_FOCUS_KEY,
+      showSearch: this.shouldShowFullSearch(),
+      onSearchChange: (value: string): void => {
+        this.snapshot = this.coordinator.setQuery(value);
+        this.scheduleRoutePublish();
+      },
+      sidebar: (): void => {
         this.buildFolderTree()
-
-        Divider()
-          .width(1)
-          .height('100%')
-          .color(this.storedDividerColor)
-
+      },
+      toolbarActions: (): void => {
+        this.buildToolbarActions()
+      },
+      content: (): void => {
         this.buildRecordWorkspace()
       }
-      .layoutWeight(1)
-      .width('100%')
-      .alignItems(VerticalAlign.Top)
-      .clip(true)
-    }
+    })
     .width('100%')
     .height('100%')
-    .backgroundColor(this.storedPageBackgroundColor)
-    .clip(true)
     .focusable(true)
     .keyboardShortcut('f', [ModifierKey.CTRL], (): void => {
       this.focusSearchInput();
@@ -207,195 +204,83 @@ export struct BookmarkLargeScreenWorkspace {
   }
 
   @Builder
-  private buildHeader() {
-    Row({ space: 14 }) {
-      Text('书签')
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.storedPrimaryTextColor)
-
-      if (this.privateMode) {
-        Text('私密')
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.storedAccentColor)
-          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .backgroundColor(this.storedControlBackgroundColor)
-          .borderRadius(10)
-      }
-
-      Row() {
-        if (this.shouldShowFullSearch()) {
-          this.buildSearchField()
-        }
-      }
-      .layoutWeight(1)
-      .height(40)
-      .alignItems(VerticalAlign.Center)
-
-      if (!this.shouldShowFullSearch()) {
-        Button() {
-          AiraIcon({
-            airaIconId: 'settings.search',
-            iconSize: 17,
-            iconColor: this.storedPrimaryTextColor
-          })
-        }
-        .width(38)
-        .height(38)
-        .type(ButtonType.Circle)
-        .buttonStyle(ButtonStyleMode.TEXTUAL)
-        .backgroundColor(this.storedControlBackgroundColor)
-        .accessibilityText('搜索书签')
-        .onClick((): void => {
+  private buildToolbarActions() {
+    if (!this.shouldShowFullSearch()) {
+      ManagementLargeScreenIconButton({
+        iconId: 'settings.search',
+        label: '搜索书签',
+        onAction: (): void => {
           this.compactSearchVisible = true;
           this.focusSearchInput();
-        })
-      }
-
-      Button() {
-        Row({ space: 8 }) {
-          AiraIcon({
-            airaIconId: 'browser.tabs.add',
-            iconSize: 16,
-            iconColor: this.storedPrimaryTextColor
-          })
-          Text('新建文件夹')
-            .fontSize(14)
-            .fontColor(this.storedPrimaryTextColor)
         }
-      }
-      .height(38)
-      .type(ButtonType.Normal)
-      .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .backgroundColor(this.storedControlBackgroundColor)
-      .borderRadius(10)
-      .enabled(this.snapshot.currentFolderId.length > 0 && !this.snapshot.busy)
-      .accessibilityText('新建文件夹')
-      .onClick((): void => {
-        this.newFolderTitle = this.coordinator.buildNextFolderTitle();
-        this.createFolderDialogController.open();
       })
-
-      Button() {
-        AiraIcon({
-          airaIconId: 'browser.toolbar.more',
-          iconSize: 18,
-          iconColor: this.storedPrimaryTextColor
-        })
-      }
-      .width(38)
-      .height(38)
-      .type(ButtonType.Circle)
-      .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .backgroundColor(this.storedControlBackgroundColor)
-      .accessibilityText('书签操作')
-      .bindMenu([
-        {
-          value: '多项选择',
-          action: (): void => {
-            this.snapshot = this.coordinator.selectAllRows();
-          }
-        },
-        {
-          value: '删除所选',
-          action: (): void => {
-            this.confirmDeleteSelection();
-          }
-        },
-        {
-          value: '导入书签',
-          action: (): void => {
-            void this.importBookmarkHtml();
-          }
-        },
-        {
-          value: '导出书签',
-          action: (): void => {
-            void this.exportBookmarkHtml();
-          }
-        }
-      ])
     }
-    .width('100%')
-    .height(BOOKMARK_WORKSPACE_HEADER_HEIGHT)
-    .padding({ left: 24, right: 24 })
-    .backgroundColor(this.storedPageBackgroundColor)
-    .alignItems(VerticalAlign.Center)
-  }
 
-  @Builder
-  private buildSearchField() {
-    Row({ space: 8 }) {
+    ManagementLargeScreenActionGroup() {
+      ManagementLargeScreenIconButton({
+        iconId: 'browser.tabs.add',
+        label: '新建文件夹',
+        grouped: true,
+        enabled: this.snapshot.currentFolderId.length > 0 && !this.snapshot.busy,
+        onAction: (): void => {
+          this.newFolderTitle = this.coordinator.buildNextFolderTitle();
+          this.createFolderDialogController.open();
+        }
+      })
+    }
+
+    Button() {
       AiraIcon({
-        airaIconId: 'settings.search',
-        iconSize: 17,
-        iconColor: this.storedSecondaryTextColor
+        airaIconId: 'browser.toolbar.more',
+        iconSize: 16,
+        iconColor: this.storedPrimaryTextColor
       })
-
-      TextInput({ text: this.snapshot.query, placeholder: '搜索书签' })
-        .key(BOOKMARK_WORKSPACE_SEARCH_FOCUS_KEY)
-        .layoutWeight(1)
-        .height(38)
-        .fontSize(14)
-        .fontColor(this.storedPrimaryTextColor)
-        .placeholderColor(this.storedSecondaryTextColor)
-        .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
-        .padding({ left: 0, right: 0 })
-        .onChange((value: string): void => {
-          this.snapshot = this.coordinator.setQuery(value);
-          this.scheduleRoutePublish();
-        })
-
-      if (this.snapshot.query.length > 0) {
-        Button() {
-          AiraIcon({
-            airaIconId: 'browser.toolbar.clearInput',
-            iconSize: 15,
-            iconColor: this.storedSecondaryTextColor
-          })
-        }
-        .width(30)
-        .height(30)
-        .type(ButtonType.Circle)
-        .buttonStyle(ButtonStyleMode.TEXTUAL)
-        .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
-        .accessibilityText('清除搜索')
-        .onClick((): void => {
-          this.snapshot = this.coordinator.setQuery('');
-          this.publishRouteNow();
-        })
-      }
     }
-    .width('100%')
-    .constraintSize({ maxWidth: 560 })
-    .height(40)
-    .padding({ left: 12, right: 8 })
+    .width(34)
+    .height(34)
+    .type(ButtonType.Normal)
+    .buttonStyle(ButtonStyleMode.TEXTUAL)
+    .stateEffect(false)
     .backgroundColor(this.storedControlBackgroundColor)
-    .borderRadius(10)
-    .alignItems(VerticalAlign.Center)
+    .borderRadius(9)
+    .accessibilityText('书签操作')
+    .bindMenu([
+      {
+        value: '多项选择',
+        action: (): void => {
+          this.snapshot = this.coordinator.selectAllRows();
+        }
+      },
+      {
+        value: '删除所选',
+        action: (): void => {
+          this.confirmDeleteSelection();
+        }
+      },
+      {
+        value: '导入书签',
+        action: (): void => {
+          void this.importBookmarkHtml();
+        }
+      },
+      {
+        value: '导出书签',
+        action: (): void => {
+          void this.exportBookmarkHtml();
+        }
+      }
+    ])
   }
 
   @Builder
   private buildFolderTree() {
-    Scroll() {
-      Column({ space: 3 }) {
-        ForEach(this.snapshot.folders, (folder: BookmarkWorkspaceFolderRow) => {
-          this.buildFolderRow(folder)
-        }, (folder: BookmarkWorkspaceFolderRow) => `bookmark-folder-${folder.id}`)
-      }
-      .width('100%')
-      .constraintSize({ minHeight: '100%' })
-      .padding({ top: 14, bottom: 14 })
-      .alignItems(HorizontalAlign.Start)
-      .justifyContent(FlexAlign.Start)
+    Column({ space: 3 }) {
+      ForEach(this.snapshot.folders, (folder: BookmarkWorkspaceFolderRow) => {
+        this.buildFolderRow(folder)
+      }, (folder: BookmarkWorkspaceFolderRow) => `bookmark-folder-${folder.id}`)
     }
-    .width(this.resolveSidebarWidth())
-    .height('100%')
-    .padding({ left: 12, right: 12 })
-    .scrollBar(BarState.Auto)
-    .edgeEffect(EdgeEffect.None)
-    .clip(true)
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -425,10 +310,8 @@ export struct BookmarkLargeScreenWorkspace {
 
         AiraIcon({
           airaIconId: 'bookmarks.folder',
-          iconSize: 19,
-          iconColor: this.snapshot.currentFolderId === folder.id
-            ? this.storedAccentColor
-            : this.storedSecondaryTextColor
+          iconSize: 16,
+          iconColor: this.storedSecondaryTextColor
         })
 
         Text(folder.title)
@@ -445,7 +328,7 @@ export struct BookmarkLargeScreenWorkspace {
           .fontColor(this.storedSecondaryTextColor)
     }
     .width('100%')
-    .height(42)
+    .height(34)
     .padding({ left: 8 + Math.min(folder.depth, 5) * 14, right: 12 })
     .alignItems(VerticalAlign.Center)
     .backgroundColor(this.resolveFolderBackground(folder.id))
@@ -473,28 +356,6 @@ export struct BookmarkLargeScreenWorkspace {
   @Builder
   private buildRecordWorkspace() {
     Column({ space: 0 }) {
-      Row({ space: 10 }) {
-        Text(this.snapshot.query.length > 0 ? '搜索结果' : this.snapshot.currentFolderTitle)
-          .layoutWeight(1)
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.storedPrimaryTextColor)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Text(this.snapshot.selectedNodeIds.length > 0
-          ? `已选择 ${this.snapshot.selectedNodeIds.length} 项`
-          : `${this.snapshot.rows.length} 项`)
-          .fontSize(13)
-          .fontColor(this.snapshot.selectedNodeIds.length > 0
-            ? this.storedAccentColor
-            : this.storedSecondaryTextColor)
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 24, right: 24 })
-      .alignItems(VerticalAlign.Center)
-
       if (this.snapshot.message.length > 0) {
         Text(this.snapshot.message)
           .width('100%')
@@ -973,10 +834,24 @@ export struct BookmarkLargeScreenWorkspace {
       this.compactSearchVisible || this.snapshot.query.length > 0;
   }
 
-  private resolveSidebarWidth(): number {
-    return this.viewportWidth < BOOKMARK_WORKSPACE_FULL_SIDEBAR_BREAKPOINT
-      ? BOOKMARK_WORKSPACE_COMPACT_SIDEBAR_WIDTH
-      : BOOKMARK_WORKSPACE_FULL_SIDEBAR_WIDTH;
+  private resolveWorkspaceTitle(): string {
+    if (this.snapshot.selectedNodeIds.length > 0) {
+      return `已选择 ${this.snapshot.selectedNodeIds.length} 项`;
+    }
+    if (this.snapshot.query.length > 0) {
+      return '搜索结果';
+    }
+    return this.snapshot.currentFolderTitle.length > 0 ? this.snapshot.currentFolderTitle : '书签';
+  }
+
+  private resolveWorkspaceBadge(): string {
+    if (this.snapshot.selectedNodeIds.length > 0) {
+      return '';
+    }
+    if (this.privateMode) {
+      return '私密';
+    }
+    return `${this.snapshot.rows.length} 项`;
   }
 
   private focusSearchInput(): void {

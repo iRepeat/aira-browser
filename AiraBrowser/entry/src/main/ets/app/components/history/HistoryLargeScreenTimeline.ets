@@ -28,21 +28,17 @@ import {
 import { HistoryWorkspaceSelectionMode } from '../../../core/history/HistoryWorkspaceSessionCoordinator';
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import {
-  RECORD_LIST_CARD_RADIUS,
-  RECORD_LIST_GROUP_SPACE,
   RECORD_LIST_GROUP_TITLE_BOTTOM_PADDING,
   RECORD_LIST_GROUP_TITLE_LEFT_INSET,
   RECORD_LIST_GROUP_TITLE_RIGHT_INSET,
   RECORD_LIST_GROUP_TITLE_SIZE,
   RECORD_LIST_GROUP_TITLE_TOP_PADDING,
   RECORD_LIST_ROW_HEIGHT,
-  RECORD_LIST_ROW_RADIUS,
   RECORD_LIST_ROW_SUBTITLE_SIZE,
   RECORD_LIST_ROW_TITLE_SIZE
 } from '../common/RecordListTokens';
 
 const HISTORY_DESKTOP_ROW_HEIGHT: number = RECORD_LIST_ROW_HEIGHT;
-const HISTORY_DESKTOP_LIST_PADDING: number = 16;
 const HISTORY_DESKTOP_GROUP_PADDING: number = 4;
 
 @Component
@@ -87,7 +83,7 @@ export struct HistoryLargeScreenTimeline {
 
   build() {
     List({ scroller: this.listScroller, space: 0 }) {
-      LazyForEach(this.dataSource, (group: HistoryTimelineGroup, groupIndex: number) => {
+      LazyForEach(this.dataSource, (group: HistoryTimelineGroup) => {
         ListItemGroup({ header: this.buildDateHeader(group) }) {
           LazyForEach(group.itemDataSource, (visit: HistoryDisplayVisit, itemIndex: number) => {
             ListItem() {
@@ -97,21 +93,12 @@ export struct HistoryLargeScreenTimeline {
           }, (visit: HistoryDisplayVisit): string => visit.id)
         }
         .width('100%')
-        .margin({ top: groupIndex > 0 ? RECORD_LIST_GROUP_SPACE : 0 })
-        .padding({ bottom: HISTORY_DESKTOP_GROUP_PADDING })
-        .backgroundColor(this.storedSurfaceBackgroundColor)
-        .borderRadius(RECORD_LIST_CARD_RADIUS)
-        .clip(true)
+        .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
       }, (group: HistoryTimelineGroup): string => group.key)
     }
     .width('100%')
     .height('100%')
-    .padding({
-      left: HISTORY_DESKTOP_LIST_PADDING,
-      right: HISTORY_DESKTOP_LIST_PADDING,
-      top: HISTORY_DESKTOP_GROUP_PADDING,
-      bottom: HISTORY_DESKTOP_GROUP_PADDING
-    })
+    .padding({ top: 8, bottom: 8 })
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
     .scrollBar(BarState.Auto)
     .cachedCount(4)
@@ -196,7 +183,7 @@ export struct HistoryLargeScreenTimeline {
       .padding({ left: 12, right: 12 })
       .alignItems(VerticalAlign.Center)
       .backgroundColor(this.resolveRowBackground(visit.id))
-      .borderRadius(RECORD_LIST_ROW_RADIUS)
+      .borderRadius(0)
       .clip(true)
       .onHover((hovered: boolean): void => {
         this.hoveredVisitId = hovered ? visit.id : '';
