@@ -9,6 +9,7 @@ import {
   BROWSER_LARGE_SCREEN_MODAL_HEADER_TITLE_FONT_SIZE_FP
 } from '../../../core/browser/BrowserModalPresentationTokens';
 import {
+  BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY,
   BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
@@ -20,6 +21,8 @@ export struct BrowserLargeScreenModalHeader {
   private storedPrimaryTextColor: string = '#111318';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY)
   private storedSecondaryTextColor: string = '#5F6875';
+  @StorageProp(BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY)
+  private storedFloatingSurfaceColor: string = '#FFFFFF';
   @Prop title: string = '';
   @Prop dialogMode: boolean = false;
   @Prop showBackButton: boolean = false;
@@ -61,7 +64,7 @@ export struct BrowserLargeScreenModalHeader {
         right: BROWSER_LARGE_SCREEN_MODAL_HEADER_RIGHT_PADDING_VP
       })
       .alignItems(VerticalAlign.Center)
-      .backgroundColor(Color.Transparent)
+      .backgroundColor(this.resolveHeaderBackground())
 
       Divider()
         .width('100%')
@@ -69,6 +72,12 @@ export struct BrowserLargeScreenModalHeader {
         .color(Color.Transparent)
     }
     .width('100%')
+    .backgroundColor(this.resolveHeaderBackground())
+    .zIndex(this.dialogMode ? 1 : 0)
+  }
+
+  private resolveHeaderBackground(): ResourceColor {
+    return this.dialogMode ? this.storedFloatingSurfaceColor : Color.Transparent;
   }
 
   @Builder

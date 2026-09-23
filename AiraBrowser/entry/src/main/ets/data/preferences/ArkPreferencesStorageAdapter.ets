@@ -778,7 +778,9 @@ export class ArkPreferencesStorageAdapter implements PreferencesStorageAdapter {
     try {
       const parsed = JSON.parse(value) as BrowserDownloadSettings;
       return {
-        defaultLocation: this.normalizeDownloadLocation(parsed.defaultLocation, defaultValue.defaultLocation),
+        defaultLocation: this.normalizeStoredDownloadLocation(parsed),
+        customLocationUri: this.normalizeStoredCustomDownloadLocationUri(parsed),
+        customLocationLabel: this.normalizeStoredCustomDownloadLocationLabel(parsed),
         askBeforeDownload: typeof parsed.askBeforeDownload === 'boolean'
           ? parsed.askBeforeDownload
           : defaultValue.askBeforeDownload,
@@ -808,7 +810,50 @@ export class ArkPreferencesStorageAdapter implements PreferencesStorageAdapter {
     value: BrowserDownloadLocation | string | undefined,
     defaultValue: BrowserDownloadLocation
   ): BrowserDownloadLocation {
-    return value === 'system_downloads' ? 'system_downloads' : defaultValue;
+    if (value === 'custom' || value === 'system_downloads') {
+      return value;
+    }
+    return defaultValue;
+  }
+
+  private normalizeStoredDownloadLocation(parsed: BrowserDownloadSettings): BrowserDownloadLocation {
+    const location = this.normalizeDownloadLocation(parsed.defaultLocation, 'system_downloads');
+    return location === 'custom' && this.normalizeCustomDownloadLocationUri(parsed.customLocationUri).length > 0
+      ? 'custom'
+      : 'system_downloads';
+  }
+
+  private normalizeStoredCustomDownloadLocationUri(parsed: BrowserDownloadSettings): string {
+    return this.normalizeStoredDownloadLocation(parsed) === 'custom'
+      ? this.normalizeCustomDownloadLocationUri(parsed.customLocationUri)
+      : '';
+  }
+
+  private normalizeStoredCustomDownloadLocationLabel(parsed: BrowserDownloadSettings): string {
+    return this.normalizeStoredDownloadLocation(parsed) === 'custom'
+      ? this.normalizeCustomDownloadLocationLabel(parsed.customLocationLabel)
+      : '';
+  }
+
+  private normalizeCustomDownloadLocationUri(value: string | undefined): string {
+    if (typeof value !== 'string') {
+      return '';
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed.length > 2048 || trimmed.indexOf('://') <= 0) {
+      return '';
+    }
+    if (trimmed.indexOf('\n') >= 0 || trimmed.indexOf('\r') >= 0) {
+      return '';
+    }
+    return trimmed;
+  }
+
+  private normalizeCustomDownloadLocationLabel(value: string | undefined): string {
+    if (typeof value !== 'string') {
+      return '';
+    }
+    return value.trim().slice(0, 80);
   }
 
   private normalizeDownloadAutoClearPolicy(

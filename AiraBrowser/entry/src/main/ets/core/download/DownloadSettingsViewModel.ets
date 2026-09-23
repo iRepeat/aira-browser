@@ -18,6 +18,8 @@ export interface DownloadSettingsSectionState {
   helperText: string;
   defaultLocation: BrowserDownloadLocation;
   defaultLocationLabel: string;
+  customLocationUri: string;
+  customLocationLabel: string;
   askBeforeDownload: boolean;
   allowCellularDownloads: boolean;
   autoResumeAfterRestart: boolean;
@@ -99,7 +101,9 @@ export class DownloadSettingsViewModel {
       summaryText: this.buildSummaryText(settings),
       helperText: this.buildHelperText(settings),
       defaultLocation: settings.defaultLocation,
-      defaultLocationLabel: this.getLocationLabel(settings.defaultLocation),
+      defaultLocationLabel: this.getLocationLabel(settings),
+      customLocationUri: settings.customLocationUri,
+      customLocationLabel: settings.customLocationLabel,
       askBeforeDownload: settings.askBeforeDownload,
       allowCellularDownloads: settings.allowCellularDownloads,
       autoResumeAfterRestart: settings.autoResumeAfterRestart,
@@ -120,6 +124,8 @@ export class DownloadSettingsViewModel {
   ): BrowserDownloadSettings {
     return {
       defaultLocation: patch.defaultLocation ?? currentSettings.defaultLocation,
+      customLocationUri: patch.customLocationUri ?? currentSettings.customLocationUri,
+      customLocationLabel: patch.customLocationLabel ?? currentSettings.customLocationLabel,
       askBeforeDownload: patch.askBeforeDownload ?? currentSettings.askBeforeDownload,
       allowCellularDownloads: patch.allowCellularDownloads ?? currentSettings.allowCellularDownloads,
       autoResumeAfterRestart: patch.autoResumeAfterRestart ?? currentSettings.autoResumeAfterRestart,
@@ -134,7 +140,7 @@ export class DownloadSettingsViewModel {
     const askBeforeDownloadLabel = settings.askBeforeDownload ? '下载前询问' : '直接下载';
     const networkLabel = settings.allowCellularDownloads ? '可用移动数据' : '仅 WLAN';
     const resumeLabel = settings.autoResumeAfterRestart ? '启动后恢复' : '手动恢复';
-    return `${this.getLocationLabel(settings.defaultLocation)} · ${askBeforeDownloadLabel} · ${networkLabel} · ${resumeLabel}`;
+    return `${this.getLocationLabel(settings)} · ${askBeforeDownloadLabel} · ${networkLabel} · ${resumeLabel}`;
   }
 
   private buildHelperText(settings: BrowserDownloadSettings): string {
@@ -150,8 +156,11 @@ export class DownloadSettingsViewModel {
     return '记录会按规则收起';
   }
 
-  private getLocationLabel(location: BrowserDownloadLocation): string {
-    return location === 'system_downloads' ? '我的手机/Download/Aira' : location;
+  private getLocationLabel(settings: BrowserDownloadSettings): string {
+    if (settings.defaultLocation === 'custom' && settings.customLocationLabel.trim().length > 0) {
+      return settings.customLocationLabel.trim();
+    }
+    return '我的手机/Download/Aira';
   }
 
 }

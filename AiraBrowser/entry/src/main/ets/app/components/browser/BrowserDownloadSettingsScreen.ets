@@ -1,10 +1,10 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import router from '@ohos.router';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { common } from '@kit.AbilityKit';
 import {
   BrowserDownloadAutoClearPolicy,
   BrowserHlsSegmentConcurrency,
-  BrowserDownloadLocation,
   BrowserPrivateDownloadFilePolicy,
   BrowserPrivateDownloadRecordPolicy,
   BrowserDownloadSettings,
@@ -24,6 +24,7 @@ import {
 import { DownloadSettingsScreenController } from '../../../core/download/DownloadSettingsScreenController';
 import { DownloadTaskBoundary } from '../../../domain/download/DownloadTypes';
 import { sharedDownloadPolicyService } from '../../bootstrap/BrowserAppRuntime';
+import { DownloadLocationDirectoryService } from '../../../services/download/DownloadLocationDirectoryService';
 import { DEFAULT_BROWSER_DOWNLOAD_SETTINGS } from '../../../data/preferences/PreferencesRepository';
 import { SettingsNavigationCoordinator } from '../../router/SettingsNavigationCoordinator';
 import { BrowserBoundaryRouteState } from '../../../common/utils/RouteParamUtils';
@@ -31,7 +32,6 @@ import { BrowserWindowRuntime } from '../../runtime/BrowserWindowRuntime';
 import {
   SettingsNavigationRow,
   SettingsOptionRow,
-  SettingsStaticValueRow,
   SettingsSwitchRow
 } from '../settings/SettingsRows';
 import { SettingsHdsScaffold } from '../settings/SettingsHdsScaffold';
@@ -102,6 +102,11 @@ export struct BrowserDownloadSettingsScreen {
   @Prop boundary: DownloadTaskBoundary | undefined = undefined;
   @Prop revealTargetId: string = '';
   @Prop revealRevision: number = 0;
+  @Prop @Watch('reloadVisibleSettings') refreshRevision: number = 0;
+  @Prop embeddedInDialog: boolean = false;
+  onOpenEmbeddedSubpage?: (subpage: BrowserDownloadSettingsSubpage) => void;
+  /** Lets an embedded host own the folder picker, since the picker cannot run over the dialog. */
+  onFolderChangeRequested?: () => void = undefined;
   private downloadSettingsViewModel: DownloadSettingsViewModel = new DownloadSettingsViewModel();
   private navigationCoordinator: SettingsNavigationCoordinator = new SettingsNavigationCoordinator();
   private privateBoundaryNavigationService: BrowserPrivateBoundaryNavigationService =
@@ -155,11 +160,18 @@ export struct BrowserDownloadSettingsScreen {
     this.controller?.setBackHandler(undefined);
   }
 
+  private reloadVisibleSettings(): void {
+    if (!this.settingsReady) {
+      return;
+    }
+    this.applySettingsState(readDownloadSettings(this.settingsBoundary));
+  }
+
   build() {
     SettingsHdsScaffold({
       title: this.resolveHeaderTitle(DOWNLOAD_SETTINGS_MAIN_DESTINATION),
       backIconKind: 'back',
-      pageBackground: this.storedPageBackgroundColor,
+      pageBackground: this.resolvePageBackground(),
       headerButtonBackground: this.storedPressedBackgroundColor,
       primaryTextColor: this.storedPrimaryTextColor,
       dividerColor: this.storedDividerColor,
@@ -167,6 +179,7 @@ export struct BrowserDownloadSettingsScreen {
       showBackButton: this.showBackButton,
       showTitleBar: this.showTitleBar,
       useTopSafeInset: this.useTopSafeInset,
+      desktopPresentation: this.embeddedInDialog,
       onBack: () => {
         this.handleBack(DOWNLOAD_SETTINGS_MAIN_DESTINATION);
       }
@@ -176,6 +189,7 @@ export struct BrowserDownloadSettingsScreen {
           SettingsScrollBody({
             topPadding: 16,
             bottomPadding: 22,
+            clipContent: this.embeddedInDialog,
             scroller: this.settingsScroller
           }) {
             BrowserDownloadSettingsContent({
@@ -187,7 +201,7 @@ export struct BrowserDownloadSettingsScreen {
               privateFilePolicy: this.privateFilePolicy,
               privateRecordPolicy: this.privateRecordPolicy,
               dividerColor: this.storedDividerColor,
-              surfaceBackground: this.storedSurfaceBackgroundColor,
+              surfaceBackground: this.resolveCardSurface(),
               primaryTextColor: this.storedPrimaryTextColor,
               secondaryTextColor: this.storedSecondaryTextColor,
               accentColor: this.storedAccentColor,
@@ -205,6 +219,15 @@ export struct BrowserDownloadSettingsScreen {
               },
               onOpenSubpage: (subpage: BrowserDownloadSettingsSubpage) => {
                 this.openSubpage(subpage);
+              },
+              onRequestFolderChange: (): void => {
+                // Route through the screen's own method: it delegates to an
+                // embedded host when present and otherwise opens the picker
+                // itself, which is what the phone page path needs.
+                this.onRequestFolderChange();
+              },
+              onResetToSystemDownloadLocation: (): void => {
+                this.resetToSystemDownloadLocation();
               }
             })
           }
@@ -212,8 +235,16 @@ export struct BrowserDownloadSettingsScreen {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(this.storedPageBackgroundColor)
+      .backgroundColor(this.resolvePageBackground())
     }
+  }
+
+  private resolvePageBackground(): ResourceColor {
+    return this.embeddedInDialog ? Color.Transparent : this.storedPageBackgroundColor;
+  }
+
+  private resolveCardSurface(): ResourceColor {
+    return this.embeddedInDialog ? this.storedPageBackgroundColor : this.storedSurfaceBackgroundColor;
   }
 
   private resolveHeaderTitle(subpage: BrowserDownloadSettingsSubpage): string {
@@ -240,7 +271,51 @@ export struct BrowserDownloadSettingsScreen {
   }
 
   private openSubpage(subpage: BrowserDownloadSettingsSubpage): void {
+    if (this.onOpenEmbeddedSubpage !== undefined) {
+      this.onOpenEmbeddedSubpage(subpage);
+      return;
+    }
     this.navigationCoordinator.openDownloadSettingsOption(subpage, this.buildBoundaryState());
+  }
+
+  /**
+   * The main page no longer routes through the option subpage. When an embedded
+   * host owns the picker it takes over; otherwise the phone path picks directly.
+   * Devices without folder selection simply keep the current location, because
+   * this content has no toast surface of its own.
+   */
+  private onRequestFolderChange(): void {
+    if (!new DownloadLocationDirectoryService().isFolderSelectionSupported()) {
+      this.showToast('当前设备不支持选择文件夹。');
+      return;
+    }
+    if (this.onFolderChangeRequested !== undefined) {
+      this.onFolderChangeRequested();
+      return;
+    }
+    void this.chooseCustomDownloadLocation();
+  }
+
+  /**
+   * The way back to the system folder. It also releases the persisted grant on
+   * the folder being abandoned, so the app does not keep authorization for a
+   * location it no longer uses.
+   */
+  private resetToSystemDownloadLocation(): void {
+    const currentSettings = readDownloadSettings(this.settingsBoundary);
+    if (currentSettings.defaultLocation !== 'custom') {
+      return;
+    }
+    const previousUri = currentSettings.customLocationUri;
+    const nextSettings = this.downloadSettingsViewModel.buildSettingsPatch(currentSettings, {
+      defaultLocation: 'system_downloads',
+      customLocationUri: '',
+      customLocationLabel: ''
+    });
+    this.saveDownloadSettings(nextSettings, '下载位置保存失败');
+    if (previousUri.length > 0) {
+      void new DownloadLocationDirectoryService().releaseDirectory(previousUri);
+    }
   }
 
   private buildBoundaryState(): BrowserBoundaryRouteState {
@@ -280,7 +355,11 @@ export struct BrowserDownloadSettingsScreen {
 
 
 
-  private saveDownloadSettings(settings: BrowserDownloadSettings, failurePrefix: string): void {
+  private saveDownloadSettings(
+    settings: BrowserDownloadSettings,
+    failurePrefix: string,
+    silentOnSuccess: boolean = false
+  ): void {
     const previousSettings = readDownloadSettings(this.settingsBoundary);
     this.viewState = this.downloadSettingsViewModel.buildState(settings);
     this.askBeforeDownload = settings.askBeforeDownload;
@@ -292,7 +371,11 @@ export struct BrowserDownloadSettingsScreen {
     sharedDownloadPolicyService.updateSettings(
       this.settingsBoundary,
       settings
-    ).catch((error: Error) => {
+    ).then(() => {
+      if (!silentOnSuccess) {
+        this.showToast('已保存');
+      }
+    }).catch((error: Error) => {
       this.viewState = this.downloadSettingsViewModel.buildState(previousSettings);
       this.askBeforeDownload = previousSettings.askBeforeDownload;
       this.allowCellularDownloads = previousSettings.allowCellularDownloads;
@@ -320,6 +403,68 @@ export struct BrowserDownloadSettingsScreen {
       return error;
     }
     return JSON.stringify(error);
+  }
+
+  /**
+   * Picks and persists a custom download folder from the main settings page.
+   * It passes `silentOnSuccess` because the branches below give a more specific
+   * message about the folder that was just adopted than a bare "已保存".
+   */
+  private async chooseCustomDownloadLocation(): Promise<void> {
+    const directoryService = new DownloadLocationDirectoryService();
+    try {
+      if (!directoryService.isFolderSelectionSupported()) {
+        this.showToast('当前设备不支持选择文件夹，将使用系统下载目录。');
+        return;
+      }
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const result = await directoryService.selectDirectory(context);
+      if (result.status !== 'selected' || result.selection === undefined) {
+        if (result.status === 'unusable_folder') {
+          this.showToast('这个文件夹不可用，请换一个再试。');
+        }
+        return;
+      }
+      const selection = result.selection;
+      // The probe is advisory. It can report a false negative (URI encoding,
+      // transient grants), and the export path already falls back on its own,
+      // so it must never discard the folder the user just picked.
+      const isWritable = await directoryService.verifyDirectoryWritable(selection.uri);
+      const currentSettings = readDownloadSettings(this.settingsBoundary);
+      const previousUri = currentSettings.customLocationUri;
+      const nextSettings = this.downloadSettingsViewModel.buildSettingsPatch(currentSettings, {
+        defaultLocation: 'custom',
+        customLocationUri: selection.uri,
+        customLocationLabel: selection.label
+      });
+      this.saveDownloadSettings(nextSettings, '下载位置保存失败', true);
+      if (previousUri.length > 0 && previousUri !== selection.uri) {
+        void directoryService.releaseDirectory(previousUri);
+      }
+      if (!isWritable) {
+        this.showToast('已选择该文件夹。若下载时无法写入，将回退到系统下载目录。');
+      } else if (!result.isPersisted) {
+        this.showToast('已选择该文件夹。重启应用后需要重新授权。');
+      }
+    } catch (error) {
+      this.showToast('选择下载位置失败');
+      hilog.error(
+        DOWNLOAD_SETTINGS_DOMAIN,
+        DOWNLOAD_SETTINGS_TAG,
+        'choose download location failed: %{public}s',
+        this.stringifyError(error)
+      );
+    }
+  }
+
+  private showToast(message: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({
+        message: message,
+        duration: 1800
+      });
+    } catch (_error) {
+    }
   }
 
   private applySettingsState(settings: BrowserDownloadSettings): void {
@@ -367,6 +512,14 @@ export struct BrowserDownloadSettingsContent {
   onAllowCellularDownloadsChange: (value: boolean) => void = (_value: boolean) => {};
   onAutoResumeAfterRestartChange: (value: boolean) => void = (_value: boolean) => {};
   onOpenSubpage: (subpage: BrowserDownloadSettingsSubpage) => void = (_subpage: BrowserDownloadSettingsSubpage) => {};
+  /** Restores the system download folder; the way back from a custom folder. */
+  onResetToSystemDownloadLocation: () => void = (): void => {};
+  /**
+   * Opens the folder picker directly from the main settings page. The embedded
+   * dialog host routes this back out to its own owner so the picker runs while
+   * the dialog is closed, then the dialog is restored.
+   */
+  onRequestFolderChange: () => void = (): void => {};
 
   aboutToAppear(): void {
     this.revealController.bindScroller(this.scroller);
@@ -401,8 +554,23 @@ export struct BrowserDownloadSettingsContent {
         desktopPresentation: this.desktopPresentation
       }) {
         this.buildDownloadLocationRow()
+        if (this.isUsingCustomDownloadLocation()) {
+          SettingsGroupDivider({ dividerColor: this.resolveDividerColor() })
+          this.buildRestoreSystemLocationRow()
+        }
       }
+      SettingsFooterText({
+        text: this.isUsingCustomDownloadLocation()
+          ? '下载完成后保存到选定的文件夹。私密下载仍按私密设置处理。'
+          : '下载完成后保存到这里。私密下载仍按私密设置处理。',
+        secondaryTextColor: this.resolveSecondaryTextColor()
+      })
     }
+  }
+
+  private isUsingCustomDownloadLocation(): boolean {
+    return this.viewState.defaultLocation === 'custom' &&
+      this.viewState.customLocationUri.trim().length > 0;
   }
 
   @Builder
@@ -507,13 +675,35 @@ export struct BrowserDownloadSettingsContent {
         this.revealController.rememberTargetArea(targetId, area);
       }
     }) {
-      SettingsStaticValueRow({
+      SettingsNavigationRow({
         title: '下载位置',
         desktopPresentation: this.desktopPresentation,
         value: this.viewState.defaultLocationLabel,
-        rowPosition: 'single'
+        rowPosition: this.isUsingCustomDownloadLocation() ? 'first' : 'single',        // One tap straight into the system folder picker. The intermediate
+        // "system vs custom" radio page only added a step: both choices end in a
+        // folder, and the row already shows which one is active.
+        onAction: (): void => {
+          this.onRequestFolderChange();
+        }
       })
     }
+  }
+
+  /**
+   * Keeps the way back to the system folder now that the option subpage is gone.
+   * Without it, choosing a custom folder would be a one-way door.
+   */
+  @Builder
+  private buildRestoreSystemLocationRow() {
+    SettingsNavigationRow({
+      title: '恢复系统下载目录',
+      desktopPresentation: this.desktopPresentation,
+      value: '',
+      rowPosition: 'last',
+      onAction: (): void => {
+        this.onResetToSystemDownloadLocation();
+      }
+    })
   }
 
   @Builder
@@ -724,9 +914,11 @@ export struct BrowserDownloadSettingsOptionScreen {
   private privateBoundaryNavigationService: BrowserPrivateBoundaryNavigationService =
     new BrowserPrivateBoundaryNavigationService();
   subpage: BrowserDownloadSettingsSubpage = 'auto_clear';
+  @Prop boundary: DownloadTaskBoundary | undefined = undefined;
   @Prop showBackButton: boolean = true;
   @Prop showTitleBar: boolean = true;
   @Prop useTopSafeInset: boolean = true;
+  @Prop embeddedInDialog: boolean = false;
   onBack?: () => void;
   onSettingsChanged?: () => void;
   @State isSessionEphemeral: boolean = false;
@@ -744,9 +936,14 @@ export struct BrowserDownloadSettingsOptionScreen {
     this.isSelectingOption = false;
     this.isLeaving = false;
     this.settingsReady = false;
-    const routeParams = router.getParams() as BrowserPrivateBoundaryRouteParams | undefined;
-    this.isSessionEphemeral = this.privateBoundaryNavigationService.isSessionEphemeralRoute(routeParams);
-    this.settingsBoundary = buildDownloadSettingsBoundary(routeParams);
+    if (this.boundary !== undefined) {
+      this.settingsBoundary = this.boundary;
+      this.isSessionEphemeral = this.boundary.privacyMode === 'private';
+    } else {
+      const routeParams = router.getParams() as BrowserPrivateBoundaryRouteParams | undefined;
+      this.isSessionEphemeral = this.privateBoundaryNavigationService.isSessionEphemeralRoute(routeParams);
+      this.settingsBoundary = buildDownloadSettingsBoundary(routeParams);
+    }
     this.refreshState();
   }
 
@@ -754,7 +951,7 @@ export struct BrowserDownloadSettingsOptionScreen {
     SettingsHdsScaffold({
       title: this.resolveHeaderTitle(),
       backIconKind: 'back',
-      pageBackground: this.storedPageBackgroundColor,
+      pageBackground: this.embeddedInDialog ? Color.Transparent : this.storedPageBackgroundColor,
       headerButtonBackground: this.storedPressedBackgroundColor,
       primaryTextColor: this.storedPrimaryTextColor,
       dividerColor: this.storedDividerColor,
@@ -762,7 +959,7 @@ export struct BrowserDownloadSettingsOptionScreen {
       showBackButton: this.showBackButton,
       showTitleBar: this.showTitleBar,
       useTopSafeInset: this.useTopSafeInset,
-      desktopPresentation: this.desktopPresentation,
+      desktopPresentation: this.embeddedInDialog || this.desktopPresentation,
       onBack: () => {
         this.handleBack();
       }
@@ -778,10 +975,11 @@ export struct BrowserDownloadSettingsOptionScreen {
     SettingsPresentationScrollBody({
       desktopPresentation: this.desktopPresentation,
       topPadding: 16,
-      bottomPadding: 22
+      bottomPadding: 22,
+      clipContent: this.embeddedInDialog
     }) {
       SettingsGroupCard({
-        surfaceColor: this.storedSurfaceBackgroundColor,
+        surfaceColor: this.embeddedInDialog ? this.storedPageBackgroundColor : this.storedSurfaceBackgroundColor,
         desktopPresentation: this.desktopPresentation
       }) {
         ForEach(this.resolveOptions(), (option: DownloadSettingsOptionView<string>, index: number) => {
@@ -904,9 +1102,10 @@ export struct BrowserDownloadSettingsOptionScreen {
     }
   }
 
+
   private updateAutoClearPolicy(policy: BrowserDownloadAutoClearPolicy): void {
     if (this.downloadSettingsState.autoClearPolicy === policy) {
-      this.handleBack();
+      this.isSelectingOption = false;
       return;
     }
     const nextSettings = this.downloadSettingsViewModel.buildSettingsPatch(
@@ -918,7 +1117,7 @@ export struct BrowserDownloadSettingsOptionScreen {
 
   private updateHlsSegmentConcurrency(concurrency: BrowserHlsSegmentConcurrency): void {
     if (this.downloadSettingsState.hlsSegmentConcurrency === concurrency) {
-      this.handleBack();
+      this.isSelectingOption = false;
       return;
     }
     const nextSettings = this.downloadSettingsViewModel.buildSettingsPatch(
@@ -932,7 +1131,7 @@ export struct BrowserDownloadSettingsOptionScreen {
 
   private updatePrivateFilePolicy(policy: BrowserPrivateDownloadFilePolicy): void {
     if (this.downloadSettingsState.privateFilePolicy === policy) {
-      this.handleBack();
+      this.isSelectingOption = false;
       return;
     }
     const nextSettings = this.downloadSettingsViewModel.buildSettingsPatch(
@@ -944,7 +1143,7 @@ export struct BrowserDownloadSettingsOptionScreen {
 
   private updatePrivateRecordPolicy(policy: BrowserPrivateDownloadRecordPolicy): void {
     if (this.downloadSettingsState.privateRecordPolicy === policy) {
-      this.handleBack();
+      this.isSelectingOption = false;
       return;
     }
     const nextSettings = this.downloadSettingsViewModel.buildSettingsPatch(
@@ -961,7 +1160,11 @@ export struct BrowserDownloadSettingsOptionScreen {
     ).then(() => {
       this.refreshState();
       this.onSettingsChanged?.();
-      this.handleBack();
+      // Stay on the option page. Popping back used to hide the outcome, so the
+      // user could not tell whether the choice took effect. The refreshed
+      // selection mark plus a toast is the confirmation now.
+      this.isSelectingOption = false;
+      this.showToast('已保存');
     }).catch((error: Error) => {
       this.isSelectingOption = false;
       hilog.error(
@@ -983,6 +1186,16 @@ export struct BrowserDownloadSettingsOptionScreen {
     this.isLeaving = true;
     this.onBack?.();
     return true;
+  }
+
+  private showToast(message: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({
+        message: message,
+        duration: 1800
+      });
+    } catch (_error) {
+    }
   }
 
   private stringifyError(error: Error | Object | string): string {

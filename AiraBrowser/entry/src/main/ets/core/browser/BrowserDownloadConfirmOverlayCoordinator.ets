@@ -19,7 +19,7 @@ export interface BrowserDownloadConfirmOverlayFacts {
 }
 
 export interface BrowserDownloadConfirmOverlayAction {
-  type: 'confirm' | 'cancel' | 'reset';
+  type: 'confirm' | 'cancel' | 'reset' | 'change_location';
   guid?: string;
   fileName?: string;
 }
@@ -42,6 +42,7 @@ export class BrowserDownloadConfirmOverlayCoordinator {
   private readonly webPageLifecycleApplicationCoordinator: BrowserWebPageLifecycleApplicationCoordinator;
   private leaseCoordinator: BrowserDownloadPromptLeaseCoordinator = new BrowserDownloadPromptLeaseCoordinator();
   private pendingPrompt?: PendingDownloadPromptState = undefined;
+  private downloadLocationPicker?: () => Promise<boolean> = undefined;
   private pendingPromptTabId: string = '';
   private activeLeaseId: string = '';
   /** Prompt guids whose one allowed navigation rewind has already been applied. */
@@ -156,6 +157,19 @@ export class BrowserDownloadConfirmOverlayCoordinator {
     return result.guid;
   }
 
+  /**
+   * Injected by the shell instead of being added to the host interface.
+   *
+   * Picking a folder is a shell capability (it needs the UIAbility context and
+   * the system picker), but the prompt host is deliberately capped at three
+   * callbacks so it stays a facts/publish/toast surface. This seam lets the
+   * coordinator own the "change location, keep the download pending" narrative
+   * while the shell only supplies the picker.
+   */
+  setDownloadLocationPicker(picker: () => Promise<boolean>): void {
+    this.downloadLocationPicker = picker;
+  }
+
   handleAction(action: BrowserDownloadConfirmOverlayAction): void {
     if (action.type === 'confirm') {
       if (action.guid !== undefined) {
@@ -169,7 +183,37 @@ export class BrowserDownloadConfirmOverlayCoordinator {
       }
       return;
     }
+    if (action.type === 'change_location') {
+      void this.changeLocation();
+      return;
+    }
     this.reset(false);
+  }
+
+  /**
+   * Changing the save folder must not decide the download. The pending request
+   * stays captured while the picker is open, and once the folder is stored the
+   * prompt is re-published so the location row shows the new target. Only an
+   * explicit cancel/confirm ends the decision, which also keeps the decision
+   * waiter alive for callers blocked in presentAndWaitForDecision.
+   */
+  private async changeLocation(): Promise<void> {
+    if (this.downloadLocationPicker === undefined) {
+      return;
+    }
+    const prompt = this.pendingPrompt ?? this.downloadService.getPendingDownloadPrompt();
+    if (prompt === undefined) {
+      return;
+    }
+    const changed = await this.downloadLocationPicker();
+    if (!changed) {
+      return;
+    }
+    const refreshed = this.downloadService.getPendingDownloadPrompt();
+    if (refreshed === undefined || refreshed.guid !== prompt.guid) {
+      return;
+    }
+    this.publishPendingPrompt(refreshed);
   }
 
   reset(syncPromptFromService: boolean): void {

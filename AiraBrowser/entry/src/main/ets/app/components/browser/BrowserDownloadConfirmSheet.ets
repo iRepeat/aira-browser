@@ -1,7 +1,10 @@
+import { resolveDownloadFileType } from '../../../core/download/DownloadFileTypeResolver';
 import { PendingDownloadPromptState } from '../../../services/download/DownloadRuntimeService';
+import { resolveDownloadFileTypeImage } from './DownloadFileTypeIcon';
 import { BrowserDownloadConfirmOverlayAction } from '../../../core/browser/BrowserDownloadConfirmOverlayCoordinator';
 import {
   BROWSER_THEME_STORAGE_ACCENT_KEY,
+  BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY,
   BROWSER_THEME_STORAGE_DIVIDER_KEY,
   BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
@@ -14,82 +17,57 @@ import {
 } from '../common/CenteredDialogSurface';
 
 const DOWNLOAD_FILE_NAME_MAX_LENGTH: number = 180;
+const DOWNLOAD_CONFIRM_FILE_ICON_SIZE: number = 64;
+const DOWNLOAD_CONFIRM_ROW_HEIGHT: number = 46;
 
 @CustomDialog
 struct BrowserDownloadConfirmDialog {
   @StorageProp(BROWSER_THEME_STORAGE_ACCENT_KEY) private storedAccentColor: string = '#0A59F7';
+  @StorageProp(BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY) private storedControlBackgroundColor: string = '#EEF2F6';
   @StorageProp(BROWSER_THEME_STORAGE_DIVIDER_KEY) private storedDividerColor: string = '#E3E8EF';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY) private storedPrimaryTextColor: string = '#111318';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY) private storedSecondaryTextColor: string = '#5F6875';
   controller?: CustomDialogController;
-  @Link prompt: PendingDownloadPromptState | undefined;
+  @Link @Watch('resetEditingForPrompt') prompt: PendingDownloadPromptState | undefined;
   @Link fileNameDraft: string;
+  @State private editingFileName: boolean = false;
   onAction: (action: BrowserDownloadConfirmOverlayAction) => void =
     (_action: BrowserDownloadConfirmOverlayAction): void => {};
+  private boundPromptGuid: string = '';
+
+  aboutToAppear(): void {
+    this.resetEditingForPrompt();
+  }
 
   build() {
-    Column({ space: 16 }) {
+    Column() {
       if (this.prompt !== undefined) {
         this.buildContent(this.prompt!)
       }
     }
     .attributeModifier(CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER)
-    .alignItems(HorizontalAlign.Start)
+    .alignItems(HorizontalAlign.Center)
   }
 
+  /**
+   * Centered file mark, then one list: name, size, source, save location.
+   * The name stays a value until tapped, so a long name can keep its extension
+   * instead of being clipped by a single-line field.
+   */
   @Builder
   private buildContent(prompt: PendingDownloadPromptState) {
-    Text(prompt.title)
-      .width('100%')
-      .fontSize(20)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(this.storedPrimaryTextColor)
-      .textAlign(TextAlign.Center)
+    this.buildFileIcon()
 
-    Column({ space: 7 }) {
-      Text('文件名')
-        .width('100%')
-        .fontSize(13)
-        .fontColor(this.storedSecondaryTextColor)
-
-      TextInput({ text: this.fileNameDraft, placeholder: '文件名' })
-        .width('100%')
-        .height(46)
-        .fontSize(15)
-        .fontColor(this.storedPrimaryTextColor)
-        .placeholderColor(this.storedSecondaryTextColor)
-        .caretColor(this.storedAccentColor)
-        .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
-        .border({ width: { bottom: 1 }, color: this.storedDividerColor })
-        .borderRadius(0)
-        .padding({ left: 0, right: 0 })
-        .maxLength(DOWNLOAD_FILE_NAME_MAX_LENGTH)
-        .onChange((value: string) => {
-          this.fileNameDraft = value;
-        })
+    Column() {
+      this.buildFileNameRow()
+      if (prompt.totalBytes > 0) {
+        this.buildValueRow('大小', this.formatBytes(prompt.totalBytes), EllipsisMode.END)
+      }
+      this.buildValueRow('来源', this.resolveSourceText(prompt), EllipsisMode.CENTER)
+      this.buildLocationRow(prompt)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-
-    Row({ space: 14 }) {
-      if (prompt.totalBytes > 0) {
-        Text(`大小 ${this.formatBytes(prompt.totalBytes)}`)
-          .fontSize(13)
-          .fontColor(this.storedSecondaryTextColor)
-          .maxLines(1)
-      }
-
-      Blank()
-
-      Text(this.resolveSourceText(prompt))
-        .constraintSize({ maxWidth: 190 })
-        .fontSize(13)
-        .fontColor(this.storedSecondaryTextColor)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
 
     Column({ space: 10 }) {
       BrowserSheetActionButton({
@@ -120,7 +98,170 @@ struct BrowserDownloadConfirmDialog {
       })
     }
     .width('100%')
+    .margin({ top: 16 })
     .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private buildFileIcon() {
+    Image(this.resolveFileTypeImage())
+      .width(DOWNLOAD_CONFIRM_FILE_ICON_SIZE)
+      .height(DOWNLOAD_CONFIRM_FILE_ICON_SIZE)
+      .margin({ bottom: 18 })
+      .objectFit(ImageFit.Contain)
+      .accessibilityText(this.resolveFileNameDisplay())
+  }
+
+  @Builder
+  private buildFileNameRow() {
+    Row({ space: 12 }) {
+      this.buildRowLabel('文件名')
+
+      if (this.editingFileName) {
+        TextInput({ text: this.fileNameDraft, placeholder: '文件名' })
+          .layoutWeight(1)
+          .height(32)
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.storedPrimaryTextColor)
+          .placeholderColor(this.storedSecondaryTextColor)
+          .caretColor(this.storedAccentColor)
+          .textAlign(TextAlign.End)
+          .style(TextInputStyle.Inline)
+          .backgroundColor(this.storedControlBackgroundColor)
+          .border({ width: 1, color: this.storedAccentColor })
+          .borderRadius(8)
+          .padding({ left: 8, right: 8 })
+          .maxLength(DOWNLOAD_FILE_NAME_MAX_LENGTH)
+          .enterKeyType(EnterKeyType.Done)
+          .defaultFocus(true)
+          .onChange((value: string) => {
+            this.fileNameDraft = value;
+          })
+          .onBlur(() => {
+            this.finishFileNameEdit();
+          })
+          .onSubmit(() => {
+            this.finishFileNameEdit();
+          })
+      } else {
+        Text(this.resolveFileNameDisplay())
+          .layoutWeight(1)
+          .constraintSize({ minWidth: 0 })
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.resolveFileNameColor())
+          .textAlign(TextAlign.End)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .ellipsisMode(EllipsisMode.CENTER)
+      }
+    }
+    .width('100%')
+    .height(DOWNLOAD_CONFIRM_ROW_HEIGHT)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      if (!this.editingFileName) {
+        this.editingFileName = true;
+      }
+    })
+  }
+
+  @Builder
+  private buildValueRow(label: string, value: string, ellipsisMode: EllipsisMode) {
+    Row({ space: 12 }) {
+      this.buildRowLabel(label)
+      Text(value)
+        .layoutWeight(1)
+        .constraintSize({ minWidth: 0 })
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.storedPrimaryTextColor)
+        .textAlign(TextAlign.End)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .ellipsisMode(ellipsisMode)
+    }
+    .width('100%')
+    .height(DOWNLOAD_CONFIRM_ROW_HEIGHT)
+    .alignItems(VerticalAlign.Center)
+    .border({ width: { top: 1 }, color: this.storedDividerColor })
+  }
+
+  @Builder
+  private buildRowLabel(label: string) {
+    Text(label)
+      .fontSize(14)
+      .fontColor(this.storedSecondaryTextColor)
+      .maxLines(1)
+      .flexShrink(0)
+  }
+
+  @Builder
+  private buildLocationRow(prompt: PendingDownloadPromptState) {
+    Row({ space: 12 }) {
+      this.buildRowLabel('保存到')
+
+      Text(prompt.locationPath)
+        .layoutWeight(1)
+        .constraintSize({ minWidth: 0 })
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.storedPrimaryTextColor)
+        .textAlign(TextAlign.End)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .ellipsisMode(EllipsisMode.START)
+
+      if (prompt.canChangeLocation) {
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor([this.storedSecondaryTextColor])
+      }
+    }
+    .width('100%')
+    .height(DOWNLOAD_CONFIRM_ROW_HEIGHT)
+    .alignItems(VerticalAlign.Center)
+    .border({ width: { top: 1 }, color: this.storedDividerColor })
+    .enabled(prompt.canChangeLocation)
+    .onClick(() => {
+      if (prompt.canChangeLocation) {
+        this.onAction({ type: 'change_location', guid: prompt.guid });
+      }
+    })
+  }
+
+  private resetEditingForPrompt(): void {
+    const guid = this.prompt === undefined ? '' : this.prompt.guid;
+    if (guid === this.boundPromptGuid) {
+      return;
+    }
+    this.boundPromptGuid = guid;
+    this.editingFileName = false;
+  }
+
+  private finishFileNameEdit(): void {
+    if (!this.editingFileName) {
+      return;
+    }
+    this.editingFileName = false;
+  }
+
+  private resolveFileNameDisplay(): string {
+    const draft = this.fileNameDraft.trim();
+    return draft.length > 0 ? this.fileNameDraft : '文件名';
+  }
+
+  private resolveFileNameColor(): ResourceColor {
+    return this.fileNameDraft.trim().length > 0 ? this.storedPrimaryTextColor : this.storedSecondaryTextColor;
+  }
+
+  private resolveFileTypeImage(): Resource {
+    return resolveDownloadFileTypeImage(resolveDownloadFileType(
+      this.fileNameDraft,
+      this.prompt?.mimeType
+    ));
   }
 
   private resolveSourceText(prompt: PendingDownloadPromptState): string {
@@ -200,6 +341,9 @@ export struct BrowserDownloadConfirmOverlay {
       this.closeDialog();
       return;
     }
+    // Only seed the draft when the prompt identity changes. A location change
+    // re-publishes the same prompt, and resetting the draft there would throw
+    // away a filename the user had already typed.
     if (this.currentPrompt?.guid !== nextPrompt.guid) {
       this.fileNameDraft = nextPrompt.fileName;
     }
@@ -225,6 +369,12 @@ export struct BrowserDownloadConfirmOverlay {
   }
 
   private commitAction(action: BrowserDownloadConfirmOverlayAction): void {
+    // Changing the location is not a decision: the dialog stays open so the user
+    // can then confirm or cancel with the new folder in view.
+    if (action.type === 'change_location') {
+      this.onAction(action);
+      return;
+    }
     if (this.decisionCommitted) {
       return;
     }

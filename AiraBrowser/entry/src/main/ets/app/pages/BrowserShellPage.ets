@@ -151,6 +151,7 @@ import {
   sharedClientUpdatePolicyService,
   sharedAiraCloudBookmarkV4BootstrapRuntime,
   sharedBrowserGestureOnboardingPromptCoordinator,
+  sharedDownloadPolicyService,
   syncBrowserThemeAppStorage
 } from '../bootstrap/BrowserAppRuntime';
 import {
@@ -1036,6 +1037,8 @@ import {
   PendingDownloadPromptState
 } from '../../services/download/DownloadRuntimeService';
 import { DownloadTaskBoundary } from '../../domain/download/DownloadTypes';
+import { DownloadLocationDirectoryService } from '../../services/download/DownloadLocationDirectoryService';
+import { DownloadSettingsViewModel } from '../../core/download/DownloadSettingsViewModel';
 import {
   ExternalNavigationPolicyService
 } from '../../services/web/ExternalNavigationPolicyService';
@@ -6280,6 +6283,9 @@ struct BrowserShellPage {
   @State elementInspectionPresentation: ElementInspectionPresentation =
     this.elementInspectionSessionCoordinator.snapshot();
   aboutToAppear(): void {
+    this.browserDownloadConfirmOverlayCoordinator.setDownloadLocationPicker(
+      (): Promise<boolean> => this.changeDownloadLocationFromPrompt()
+    );
     this.clientUpdatePolicyUnsubscribe = sharedClientUpdatePolicyService.subscribe(
       (state: ClientUpdatePolicyState): void => {
         this.clientUpdatePolicyState = state;
@@ -9911,6 +9917,55 @@ struct BrowserShellPage {
       dataScope: this.tabScopedEventContextCoordinator.resolveCurrentBoundary().dataScope,
       sourcePageUrl: this.currentUrl
     };
+  }
+
+  /**
+   * Backs the download prompt's location row.
+   *
+   * This persists the folder as the new global download location, matching the
+   * settings surface — the prompt does not carry a per-download override. The
+   * pending download is deliberately left untouched so the user can still
+   * confirm or cancel it afterwards.
+   */
+  private async changeDownloadLocationFromPrompt(): Promise<boolean> {
+    const directoryService = new DownloadLocationDirectoryService();
+    if (!directoryService.isFolderSelectionSupported()) {
+      this.showNativeToast('当前设备不支持选择文件夹。');
+      return false;
+    }
+    const boundary = this.getCurrentDownloadBoundary();
+    try {
+      const result = await directoryService.selectDirectory(this.getAbilityContext());
+      if (result.status === 'unusable_folder') {
+        this.showNativeToast('这个文件夹不可用，请换一个再试。');
+        return false;
+      }
+      if (result.status !== 'selected' || result.selection === undefined) {
+        return false;
+      }
+      const selection = result.selection;
+      const currentSettings = sharedDownloadPolicyService.readSettings(boundary);
+      const nextSettings = new DownloadSettingsViewModel().buildSettingsPatch(currentSettings, {
+        defaultLocation: 'custom',
+        customLocationUri: selection.uri,
+        customLocationLabel: selection.label
+      });
+      await sharedDownloadPolicyService.updateSettings(boundary, nextSettings);
+      if (currentSettings.customLocationUri.length > 0 &&
+        currentSettings.customLocationUri !== selection.uri) {
+        void directoryService.releaseDirectory(currentSettings.customLocationUri);
+      }
+      return true;
+    } catch (error) {
+      hilog.error(
+        LOG_DOMAIN,
+        LOG_TAG,
+        'change download location from prompt failed: %{public}s',
+        JSON.stringify(error)
+      );
+      this.showNativeToast('选择下载位置失败');
+      return false;
+    }
   }
 
   private submitRootBottomAddressInput(rawInput: string): void {

@@ -17,6 +17,7 @@ import {
 import { AiraRenderableIconId } from '../../../core/resources/GeneratedAiraIconCatalog';
 import { SettingsDetailOption } from '../../../core/settings/SettingsDetailViewModel';
 import { AiraIcon } from '../common/AiraIcon';
+import { SettingsColoredIconBackground } from './SettingsColoredIconBackground';
 import {
   createFloatingGlassMaterialIfAvailable,
   resolveFloatingGlassMaterialBackgroundColor,
@@ -380,10 +381,10 @@ export struct SettingsNavigationRow {
         this.customLeading()
       } else if (this.icon || this.airaIconId !== undefined) {
         Stack({ alignContent: Alignment.Center }) {
-          Circle()
-            .width(SETTINGS_ROW_ICON_SIZE)
-            .height(SETTINGS_ROW_ICON_SIZE)
-            .fill(this.resolveIconBackgroundColor())
+          SettingsColoredIconBackground({
+            color: this.resolveIconBackgroundColor(),
+            iconSize: SETTINGS_ROW_ICON_SIZE
+          })
 
           if (this.airaIconId !== undefined) {
             AiraIcon({
@@ -768,10 +769,10 @@ export struct SettingsStaticValueRow {
     Row({ space: SETTINGS_ROW_SPACE }) {
       if (this.airaIconId !== undefined || this.icon) {
         Stack({ alignContent: Alignment.Center }) {
-          Circle()
-            .width(SETTINGS_ROW_ICON_SIZE)
-            .height(SETTINGS_ROW_ICON_SIZE)
-            .fill(this.resolveIconBackgroundColor())
+          SettingsColoredIconBackground({
+            color: this.resolveIconBackgroundColor(),
+            iconSize: SETTINGS_ROW_ICON_SIZE
+          })
 
           if (this.airaIconId !== undefined) {
             AiraIcon({
@@ -951,10 +952,10 @@ export struct SettingsSwitchRow {
     Row({ space: SETTINGS_ROW_SPACE }) {
       if (this.icon || this.imageIcon !== undefined) {
         Stack({ alignContent: Alignment.Center }) {
-          Circle()
-            .width(SETTINGS_ROW_ICON_SIZE)
-            .height(SETTINGS_ROW_ICON_SIZE)
-            .fill(this.resolveIconBackgroundColor())
+          SettingsColoredIconBackground({
+            color: this.resolveIconBackgroundColor(),
+            iconSize: SETTINGS_ROW_ICON_SIZE
+          })
 
           if (this.imageIcon !== undefined) {
             Image(this.imageIcon as Resource)

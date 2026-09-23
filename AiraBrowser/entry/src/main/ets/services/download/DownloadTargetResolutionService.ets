@@ -13,6 +13,7 @@ import {
   DownloadPolicyService,
   DownloadSavePolicy
 } from './DownloadPolicyService';
+import { resolveCustomDownloadDirectory } from './DownloadLocationDirectoryService';
 
 export type DownloadTargetStorageMode =
   'app_temp_then_export' |
@@ -117,15 +118,31 @@ export class DownloadTargetResolutionService {
       tempFilePath: temporaryTarget.targetPath,
       partialFilePath: temporaryTarget.targetPath,
       tempDisplayPath: tempDisplayPath,
-      initialDisplayPath: completionExportPolicy === 'prompt_after_completion'
-        ? '完成后选择系统下载位置'
-        : tempDisplayPath,
+      initialDisplayPath: this.resolveInitialDisplayPath(fileName, savePolicy, completionExportPolicy, tempDisplayPath),
       storageMode: storageMode,
       completionExportPolicy: completionExportPolicy,
       conflictAction: this.filenameConflictService.buildOriginalPlan(fileName).conflictAction,
       reason: reason,
       isPrivateSession: savePolicy.isPrivateSession
     };
+  }
+
+  private resolveInitialDisplayPath(
+    fileName: string,
+    savePolicy: DownloadSavePolicy,
+    completionExportPolicy: DownloadCompletionExportPolicy,
+    tempDisplayPath: string
+  ): string {
+    if (completionExportPolicy !== 'prompt_after_completion') {
+      return tempDisplayPath;
+    }
+    if (!savePolicy.isPrivateSession) {
+      const customDirectory = resolveCustomDownloadDirectory(savePolicy.settings);
+      if (customDirectory !== undefined) {
+        return `${customDirectory.label}/${fileName}`;
+      }
+    }
+    return '完成后选择系统下载位置';
   }
 
   private resolvePlanReason(savePolicy: DownloadSavePolicy): DownloadTargetPlanReason {

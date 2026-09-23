@@ -29,6 +29,7 @@ import {
 } from './DownloadFileResolutionService';
 import { DownloadFollowupExecutionResult, DownloadFollowupService, DownloadFollowupTask } from './DownloadFollowupService';
 import { DownloadPolicyService, DownloadSavePolicy, DownloadSessionCleanupPolicy } from './DownloadPolicyService';
+import { resolveCustomDownloadDirectory } from './DownloadLocationDirectoryService';
 import {
   DownloadV2CompletedFileRemovalResult,
   DownloadV2Service,
@@ -55,6 +56,13 @@ interface DownloadV2FollowupTaskSnapshot {
   finalFileUri?: string;
 }
 
+interface PendingPromptLocationState {
+  /** The path (or "chosen at save time" text) shown on the location row. */
+  path: string;
+  /** False for private sessions, which never honour the custom folder. */
+  canChange: boolean;
+}
+
 export interface PendingDownloadPromptState {
   guid: string;
   fileName: string;
@@ -68,6 +76,14 @@ export interface PendingDownloadPromptState {
   message: string;
   confirmLabel: string;
   cancelLabel: string;
+  /**
+   * Where the finished file will land, resolved from live settings at prompt
+   * time (never cached) so changing the folder from the prompt is reflected
+   * immediately. Shown verbatim on the prompt's location row.
+   */
+  locationPath: string;
+  /** Whether the prompt may offer a folder change action at all. */
+  canChangeLocation: boolean;
 }
 
 export interface ManualDownloadRequestInput {
@@ -504,6 +520,7 @@ export class DownloadRuntimeService {
   getPendingDownloadPrompt(): PendingDownloadPromptState | undefined {
     const v2Prompt = this.downloadV2Service.getPendingPrompt();
     if (v2Prompt !== undefined) {
+      const location = this.resolvePendingPromptLocation(v2Prompt);
       return {
         guid: v2Prompt.guid,
         fileName: v2Prompt.fileName,
@@ -516,7 +533,9 @@ export class DownloadRuntimeService {
         title: v2Prompt.title,
         message: v2Prompt.message,
         confirmLabel: v2Prompt.confirmLabel,
-        cancelLabel: v2Prompt.cancelLabel
+        cancelLabel: v2Prompt.cancelLabel,
+        locationPath: location.path,
+        canChangeLocation: location.canChange
       };
     }
     return undefined;
@@ -601,20 +620,7 @@ export class DownloadRuntimeService {
     if (prompt === undefined) {
       return undefined;
     }
-    return {
-      guid: prompt.guid,
-      fileName: prompt.fileName,
-      sourceHost: prompt.sourceHost,
-      url: prompt.url,
-      totalBytes: prompt.totalBytes,
-      mimeType: prompt.mimeType,
-      contentDisposition: prompt.contentDisposition,
-      riskLevel: 'warning',
-      title: prompt.title,
-      message: prompt.message,
-      confirmLabel: prompt.confirmLabel,
-      cancelLabel: prompt.cancelLabel
-    };
+    return this.withPromptLocation(prompt);
   }
 
   requestManualDownload(input: ManualDownloadRequestInput): ManualDownloadRequestResult | undefined {
@@ -655,6 +661,18 @@ export class DownloadRuntimeService {
     if (prompt === undefined) {
       return undefined;
     }
+    return this.withPromptLocation(prompt);
+  }
+
+  /**
+   * Fills in the save-location fields for a prompt.
+   *
+   * The location is read from live settings on every call rather than baked
+   * into the captured request, because the user can change the folder from the
+   * prompt itself and a cached path would go stale immediately.
+   */
+  private withPromptLocation(prompt: DownloadV2Prompt): PendingDownloadPromptState {
+    const location = this.resolvePendingPromptLocation(prompt);
     return {
       guid: prompt.guid,
       fileName: prompt.fileName,
@@ -667,7 +685,64 @@ export class DownloadRuntimeService {
       title: prompt.title,
       message: prompt.message,
       confirmLabel: prompt.confirmLabel,
-      cancelLabel: prompt.cancelLabel
+      cancelLabel: prompt.cancelLabel,
+      locationPath: location.path,
+      canChangeLocation: location.canChange
+    };
+  }
+
+  /**
+   * A private session saves through the system save dialog and deliberately
+   * ignores the custom folder, so the prompt must say "choose each time"
+   * instead of naming a location that will not be used. Changing the folder
+   * from a private-session prompt is therefore not offered.
+   */
+  private resolvePendingPromptLocation(prompt: DownloadV2Prompt): PendingPromptLocationState {
+    const boundary = this.resolvePromptBoundary(prompt);
+    let savePolicy: DownloadSavePolicy;
+    try {
+      savePolicy = this.downloadPolicyService.resolveSavePolicy(boundary);
+    } catch (_error) {
+      return {
+        path: '我的手机/Download/Aira',
+        canChange: false
+      };
+    }
+    if (savePolicy.isPrivateSession) {
+      return {
+        path: '下载时选择保存位置',
+        canChange: false
+      };
+    }
+    const customDirectory = resolveCustomDownloadDirectory(savePolicy.settings);
+    if (customDirectory !== undefined) {
+      return {
+        path: customDirectory.label,
+        canChange: true
+      };
+    }
+    return {
+      path: '我的手机/Download/Aira',
+      canChange: true
+    };
+  }
+
+  /**
+   * The captured request carries the boundary it was captured under, which is
+   * what the location has to be resolved against. The active boundary can have
+   * moved on (tab switch, window change) by the time the prompt is rendered.
+   */
+  private resolvePromptBoundary(prompt: DownloadV2Prompt): DownloadTaskBoundary {
+    const request = this.downloadV2Service.getCapturedRequest(prompt.guid);
+    if (request === undefined) {
+      return this.activeBoundary;
+    }
+    return {
+      windowId: request.boundary.windowId ?? '',
+      profileId: request.boundary.profileId,
+      privacyMode: request.boundary.privacyMode,
+      dataScope: request.boundary.dataScope,
+      sourcePageUrl: request.boundary.sourcePageUrl
     };
   }
 

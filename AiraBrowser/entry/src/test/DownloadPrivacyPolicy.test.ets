@@ -37,9 +37,12 @@ export default function downloadPrivacyPolicyTest(): void {
       const initialSettings = downloadPolicy.readSettings(privateBoundary);
       const nextSettings: BrowserDownloadSettings = {
         defaultLocation: initialSettings.defaultLocation,
+        customLocationUri: initialSettings.customLocationUri,
+        customLocationLabel: initialSettings.customLocationLabel,
         askBeforeDownload: false,
         allowCellularDownloads: initialSettings.allowCellularDownloads,
         autoResumeAfterRestart: initialSettings.autoResumeAfterRestart,
+        hlsSegmentConcurrency: initialSettings.hlsSegmentConcurrency,
         autoClearPolicy: initialSettings.autoClearPolicy,
         privateFilePolicy: initialSettings.privateFilePolicy,
         privateRecordPolicy: initialSettings.privateRecordPolicy
@@ -65,9 +68,12 @@ export default function downloadPrivacyPolicyTest(): void {
       const cleanupPolicy: DownloadSessionCleanupPolicy = downloadPolicy.resolveSessionCleanupPolicy(privateBoundary);
       const tempOnlySettings: BrowserDownloadSettings = {
         defaultLocation: exportPolicy.settings.defaultLocation,
+        customLocationUri: exportPolicy.settings.customLocationUri,
+        customLocationLabel: exportPolicy.settings.customLocationLabel,
         askBeforeDownload: exportPolicy.settings.askBeforeDownload,
         allowCellularDownloads: exportPolicy.settings.allowCellularDownloads,
         autoResumeAfterRestart: exportPolicy.settings.autoResumeAfterRestart,
+        hlsSegmentConcurrency: exportPolicy.settings.hlsSegmentConcurrency,
         autoClearPolicy: exportPolicy.settings.autoClearPolicy,
         privateFilePolicy: 'session_temp_only',
         privateRecordPolicy: exportPolicy.settings.privateRecordPolicy
@@ -201,6 +207,22 @@ class FakeDownloadFileResolutionService implements DownloadFileResolutionAdapter
       status: 'exported',
       finalFileUri: 'file://system-downloads/private-export.bin',
       finalDisplayPath: 'Download/private-export.bin',
+      isExported: true
+    };
+  }
+
+  async persistToDirectory(
+    localPath: string,
+    _suggestedFileName: string,
+    _directoryUri: string,
+    _directoryLabel: string
+  ): Promise<DownloadPersistResult | undefined> {
+    this.exportedPaths.push(localPath);
+    return {
+      status: 'exported',
+      finalFileUri: 'file://custom-downloads/private-export.bin',
+      finalDisplayPath: 'Custom/private-export.bin',
+      destinationLabel: 'Custom',
       isExported: true
     };
   }

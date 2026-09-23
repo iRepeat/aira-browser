@@ -1,5 +1,5 @@
 import { fileIo } from '@kit.CoreFileKit';
-import buffer from '@ohos.buffer';
+import { util } from '@kit.ArkTS';
 import { TabRecord } from '../../common/models/BrowserModels';
 import { BrowserWebLoadDataPayload } from '../../core/browser/BrowserWebLoadCoordinator';
 import { MarkdownDocumentViewerService } from '../markdown/MarkdownDocumentViewerService';
@@ -55,7 +55,7 @@ interface DocumentViewerHtmlInput {
   documentClass: string;
 }
 
-const DOCUMENT_VIEWER_MAX_BYTES: number = 5 * 1024 * 1024;
+const DOCUMENT_VIEWER_READ_CHUNK_BYTES: number = 1024 * 1024;
 const DOCUMENT_VIEWER_CHROME_POLICY_CACHE_LIMIT: number = 32;
 
 export class DocumentViewerService {
@@ -326,17 +326,33 @@ export class DocumentViewerService {
     if (stat.isDirectory()) {
       throw new Error('请选择文件。');
     }
-    if (stat.size <= 0) {
+    const totalBytes = Math.max(0, Math.floor(stat.size));
+    if (totalBytes <= 0) {
       return '';
     }
-    if (stat.size > DOCUMENT_VIEWER_MAX_BYTES) {
-      throw new Error('文件超过 5 MB，暂不支持查看。');
-    }
+    const decoder = util.TextDecoder.create('utf-8');
     const file = await fileIo.open(uri, fileIo.OpenMode.READ_ONLY);
     try {
-      const data = new ArrayBuffer(Math.max(1, Math.floor(stat.size)));
-      const readLength = await fileIo.read(file.fd, data);
-      return readLength > 0 ? buffer.from(data, 0, readLength).toString('utf8') : '';
+      const textParts: string[] = [];
+      let offset = 0;
+      let streamOpen = false;
+      while (offset < totalBytes) {
+        const chunkBytes = Math.min(DOCUMENT_VIEWER_READ_CHUNK_BYTES, totalBytes - offset);
+        const chunk = new ArrayBuffer(chunkBytes);
+        const readLength = await fileIo.read(file.fd, chunk, { offset: offset, length: chunkBytes });
+        if (readLength <= 0) {
+          break;
+        }
+        offset += readLength;
+        streamOpen = offset < totalBytes;
+        textParts.push(decoder.decodeWithStream(new Uint8Array(chunk, 0, readLength), {
+          stream: streamOpen
+        }));
+      }
+      if (streamOpen) {
+        textParts.push(decoder.decodeWithStream(new Uint8Array(0), { stream: false }));
+      }
+      return textParts.join('');
     } finally {
       await fileIo.close(file);
     }

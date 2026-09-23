@@ -1,4 +1,5 @@
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit';
+import { DownloadLocationDirectoryService } from './DownloadLocationDirectoryService';
 import { fileManagerService } from '@kit.FileManagerServiceKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -41,6 +42,7 @@ export interface DownloadPersistResult {
   status: 'exported' | 'user_canceled' | 'failed';
   finalFileUri?: string;
   finalDisplayPath: string;
+  destinationLabel?: string;
   isExported: boolean;
 }
 
@@ -56,6 +58,12 @@ export interface DownloadFileResolutionAdapter {
   persistToSystemDownloads(
     localPath: string,
     suggestedFileName: string
+  ): Promise<DownloadPersistResult | undefined>;
+  persistToDirectory(
+    localPath: string,
+    suggestedFileName: string,
+    directoryUri: string,
+    directoryLabel: string
   ): Promise<DownloadPersistResult | undefined>;
 }
 
@@ -158,6 +166,63 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
     }
   }
 
+  async persistToDirectory(
+    localPath: string,
+    suggestedFileName: string,
+    directoryUri: string,
+    directoryLabel: string
+  ): Promise<DownloadPersistResult | undefined> {
+    const savedFileName = this.sanitizeFileName(suggestedFileName);
+    const directoryService = new DownloadLocationDirectoryService();
+    try {
+      // Activation only refreshes a persisted grant. When it reports failure the
+      // folder may still be writable through the live picker grant, so the write
+      // below is what actually decides. Bailing out here is what silently threw
+      // away the user's chosen folder and fell back to the system save dialog.
+      const activation = await directoryService.activateDirectory(directoryUri);
+      if (!activation.usable) {
+        hilog.warn(
+          DOWNLOAD_FILE_RESOLUTION_DOMAIN,
+          DOWNLOAD_FILE_RESOLUTION_TAG,
+          'directory activation unavailable, attempting write anyway uri=%{public}s detail=%{public}s',
+          directoryUri,
+          activation.diagnosticMessage
+        );
+      }
+      const exportResolution = this.buildExportResolution(savedFileName, directoryUri);
+      const targetUri = await this.copyLocalPathWithoutOverwrite(
+        localPath,
+        exportResolution.targetUri,
+        exportResolution.conflictResolvedUri
+      );
+      const label = directoryLabel.trim().length > 0
+        ? directoryLabel.trim()
+        : directoryService.buildDirectoryLocationLabel(directoryUri);
+      return {
+        status: 'exported',
+        finalFileUri: targetUri,
+        finalDisplayPath: `${label}/${savedFileName}`,
+        destinationLabel: label,
+        isExported: true
+      };
+    } catch (error) {
+      const diagnosticMessage = this.stringifyError(error);
+      hilog.error(
+        DOWNLOAD_FILE_RESOLUTION_DOMAIN,
+        DOWNLOAD_FILE_RESOLUTION_TAG,
+        'persist directory failed file=%{public}s uri=%{public}s error=%{public}s',
+        savedFileName,
+        directoryUri,
+        diagnosticMessage
+      );
+      return {
+        status: 'failed',
+        finalDisplayPath: this.buildTemporaryDisplayPath(savedFileName),
+        isExported: false
+      };
+    }
+  }
+
   async persistToSystemDownloads(localPath: string, suggestedFileName: string): Promise<DownloadPersistResult | undefined> {
     try {
       const savedFileName = this.sanitizeFileName(suggestedFileName);
@@ -247,7 +312,9 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
 
   private async uriExists(uri: string): Promise<boolean> {
     try {
-      return await fileIo.access(uri);
+      // Same reason as verifyDirectoryWritable: convert the URI to a path before
+      // handing it to fileIo, rather than passing an app-concatenated URI.
+      return await fileIo.access(new fileUri.FileUri(uri).path);
     } catch (_error) {
       return false;
     }

@@ -1,8 +1,13 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
-import { showCenteredAlertDialog } from '../common/CenteredDialogSurface';
+import {
+  CENTERED_DIALOG_CORNER_RADIUS_VP,
+  resolveCenteredDialogSurfaceColor,
+  showCenteredAlertDialog
+} from '../common/CenteredDialogSurface';
 import router from '@ohos.router';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { common } from '@kit.AbilityKit';
 import {
   BrowserPrivateBoundaryRouteParams,
   BrowserPrivateBoundaryNavigationService
@@ -17,6 +22,9 @@ import {
   DownloadManagementListState,
   DownloadManagerViewModel
 } from '../../../core/download/DownloadManagerViewModel';
+import { DownloadSettingsViewModel } from '../../../core/download/DownloadSettingsViewModel';
+import { sharedDownloadPolicyService } from '../../bootstrap/BrowserAppRuntime';
+import { DownloadLocationDirectoryService } from '../../../services/download/DownloadLocationDirectoryService';
 import {
   buildDownloadSelectionTitle,
   canSelectDownloadTask,
@@ -42,10 +50,7 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { sharedDownloadRuntimeService } from '../../bootstrap/BrowserAppRuntime';
 import { BrowserDownloadManagementRow } from './BrowserDownloadManagementRow';
-import { BrowserDownloadSettingsScreen } from './BrowserDownloadSettingsScreen';
-import {
-  BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP
-} from '../../../core/browser/BrowserModalPresentationTokens';
+import { BrowserDownloadSettingsDialog } from './BrowserDownloadSettingsDialog';
 import { DOWNLOAD_SETTINGS_ROUTE } from '../../router/AppRoutes';
 import { BrowserWindowRuntime } from '../../runtime/BrowserWindowRuntime';
 import { AppEmptyState } from '../common/AppEmptyState';
@@ -56,7 +61,6 @@ import {
 import { SegmentedTabOption, SegmentedTabs } from '../common/SegmentedTabs';
 import { FloatingGlassMaterialSurface } from '../common/FloatingGlassMaterialSurface';
 import { resolveFloatingGlassMaterialTintForMode } from '../common/FloatingGlassMaterialTokens';
-import { AppWindowModalLayoutService } from '../../../services/layout/AppWindowModalLayoutService';
 import { BROWSER_WINDOW_SAFE_TOP_INSET_STORAGE_KEY } from '../../../core/browser/BrowserWindowAvoidAreaCoordinator';
 import { FloatingSelectionToolbar } from '../common/FloatingSelectionToolbar';
 
@@ -82,9 +86,6 @@ const DOWNLOAD_MANAGEMENT_INTERACTION_QUIET_MS: number = 700;
 const DOWNLOAD_MANAGEMENT_PROGRESS_BROADCAST_PAUSE_OWNER = 'download_management_interaction';
 const LARGE_SCREEN_DOWNLOAD_FILTER_ITEM_WIDTH_VP: number = 112;
 const LARGE_SCREEN_DOWNLOAD_SETTINGS_BUTTON_HEIGHT_VP: number = 34;
-const LARGE_SCREEN_DOWNLOAD_SETTINGS_POPUP_WIDTH_VP: number = 440;
-const LARGE_SCREEN_DOWNLOAD_SETTINGS_POPUP_HEIGHT_VP: number = 600;
-const LARGE_SCREEN_DOWNLOAD_SETTINGS_POPUP_RESERVED_TOP_VP: number = 112;
 const DOWNLOAD_IMMERSIVE_TITLE_TOP_INSET: number = 8;
 const DOWNLOAD_IMMERSIVE_TITLE_HEIGHT: number = 40;
 const DOWNLOAD_IMMERSIVE_TITLE_TO_FILTER_GAP: number = 12;
@@ -133,13 +134,36 @@ export struct BrowserDownloadManagementScreen {
   @State locallyHiddenTasks: HiddenDownloadTaskSnapshot[] = [];
   @State isSelectionMode: boolean = false;
   @State selectedGuids: string[] = [];
-  @State private downloadSettingsPopupVisible: boolean = false;
-  @State private viewportWidthVp: number = 0;
-  @State private viewportHeightVp: number = 0;
+  @State private downloadSettingsDialogRevision: number = 0;
   @LocalStorageProp(BROWSER_WINDOW_SAFE_TOP_INSET_STORAGE_KEY) private topSafeInsetVp: number = 0;
+  private downloadSettingsDialogOpen: boolean = false;
+  private pageActive: boolean = true;
+  private downloadSettingsDialogController: CustomDialogController = new CustomDialogController({
+    builder: BrowserDownloadSettingsDialog({
+      openRevision: $downloadSettingsDialogRevision,
+      resolveBoundary: (): DownloadTaskBoundary => {
+        return this.getCurrentDownloadBoundary();
+      },
+      onClose: (): void => {
+        this.closeDownloadSettingsDialog();
+      },
+      onChooseCustomLocation: (): void => {
+        this.pickCustomDownloadLocationFromDialog();
+      }
+    }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    customStyle: false,
+    backgroundColor: resolveCenteredDialogSurfaceColor(),
+    backgroundBlurStyle: BlurStyle.NONE,
+    cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
+      this.downloadSettingsDialogOpen = false;
+      dismissDialogAction.dismiss();
+    }
+  });
   private groupSwiperController: SwiperController = new SwiperController();
   private optimisticControlByGuid: Map<string, OptimisticControlSnapshot> = new Map();
-  private readonly modalLayoutService: AppWindowModalLayoutService = new AppWindowModalLayoutService();
 
   aboutToAppear(): void {
     try {
@@ -177,6 +201,8 @@ export struct BrowserDownloadManagementScreen {
   }
 
   aboutToDisappear(): void {
+    this.pageActive = false;
+    this.closeDownloadSettingsDialog();
     this.logDownloadManagementLifecycle('about_to_disappear');
     this.stopAutoRefreshTimer();
     this.stopDeferredRefreshTimer();
@@ -194,9 +220,6 @@ export struct BrowserDownloadManagementScreen {
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
     .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], this.resolveSystemSafeAreaEdges())
-    .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      this.updateViewportSize(newArea);
-    })
     .onAppear(() => {
       this.presentCancelDialogIfNeeded();
       this.presentCompletedDeleteDialogIfNeeded();
@@ -366,71 +389,85 @@ export struct BrowserDownloadManagementScreen {
       .border({ width: 1, color: this.storedDividerColor })
       .borderRadius(LARGE_SCREEN_DOWNLOAD_SETTINGS_BUTTON_HEIGHT_VP / 2)
       .stateEffect(true)
-      .accessibilityText('展开下载设置')
+      .accessibilityText('打开下载设置')
       .onClick((): void => {
-        this.downloadSettingsPopupVisible = !this.downloadSettingsPopupVisible;
+        this.openDownloadSettingsDialog();
       })
-      .bindPopup(this.downloadSettingsPopupVisible, {
-        builder: this.buildLargeScreenDownloadSettingsPopup,
-        placement: Placement.BottomRight,
-        popupColor: this.storedPageBackgroundColor,
-        enableArrow: false,
-        autoCancel: true,
-        mask: false,
-        targetSpace: 8,
-        width: this.resolveDownloadSettingsPopupWidth(),
-        radius: BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP,
-        shadow: {
-          radius: 20,
-          color: $r('app.color.elevation_shadow'),
-          offsetX: 0,
-          offsetY: 8
-        },
-        onStateChange: (event: PopupStateChangeParam): void => {
-          this.downloadSettingsPopupVisible = event.isVisible;
+  }
+
+  private openDownloadSettingsDialog(): void {
+    if (this.downloadSettingsDialogOpen) {
+      return;
+    }
+    this.downloadSettingsDialogRevision += 1;
+    this.downloadSettingsDialogOpen = true;
+    this.downloadSettingsDialogController.open();
+  }
+
+  private closeDownloadSettingsDialog(): void {
+    if (!this.downloadSettingsDialogOpen) {
+      return;
+    }
+    this.downloadSettingsDialogOpen = false;
+    try {
+      this.downloadSettingsDialogController.close();
+    } catch (_error) {
+    }
+  }
+
+  private pickCustomDownloadLocationFromDialog(): void {
+    this.closeDownloadSettingsDialog();
+    setTimeout((): void => {
+      void this.chooseCustomDownloadLocationAfterDialog();
+    }, 180);
+  }
+
+  private async chooseCustomDownloadLocationAfterDialog(): Promise<void> {
+    const directoryService = new DownloadLocationDirectoryService();
+    const settingsViewModel = new DownloadSettingsViewModel();
+    try {
+      if (!directoryService.isFolderSelectionSupported()) {
+        this.showToast('当前设备不支持选择文件夹，将使用系统下载目录。');
+      } else {
+        const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+        const result = await directoryService.selectDirectory(context);
+        if (result.status === 'unusable_folder') {
+          this.showToast('这个文件夹不可用，请换一个再试。');
+        } else if (result.status === 'selected' && result.selection !== undefined) {
+          const selection = result.selection;
+          // Advisory probe: a false negative must not discard the user's pick,
+          // because the export path handles a real write failure on its own.
+          const isWritable = await directoryService.verifyDirectoryWritable(selection.uri);
+          const boundary = this.getCurrentDownloadBoundary();
+          const currentSettings = sharedDownloadPolicyService.readSettings(boundary);
+          const nextSettings = settingsViewModel.buildSettingsPatch(currentSettings, {
+            defaultLocation: 'custom',
+            customLocationUri: selection.uri,
+            customLocationLabel: selection.label
+          });
+          await sharedDownloadPolicyService.updateSettings(boundary, nextSettings);
+          if (currentSettings.customLocationUri.length > 0 &&
+            currentSettings.customLocationUri !== selection.uri) {
+            void directoryService.releaseDirectory(currentSettings.customLocationUri);
+          }
+          if (!isWritable) {
+            this.showToast('已选择该文件夹。若下载时无法写入，将回退到系统下载目录。');
+          } else if (!result.isPersisted) {
+            this.showToast('已选择该文件夹。重启应用后需要重新授权。');
+          }
         }
-      })
-  }
-
-  @Builder
-  private buildLargeScreenDownloadSettingsPopup() {
-    Column() {
-      BrowserDownloadSettingsScreen({
-        showBackButton: false,
-        showTitleBar: false,
-        useTopSafeInset: false,
-        boundary: this.getCurrentDownloadBoundary()
-      })
+      }
+    } catch (error) {
+      this.showToast('选择下载位置失败');
+      hilog.error(
+        DOWNLOAD_MANAGEMENT_DOMAIN,
+        DOWNLOAD_MANAGEMENT_TAG,
+        'choose download location failed: %{public}s',
+        this.stringifyError(error)
+      );
     }
-    .width(this.resolveDownloadSettingsPopupWidth())
-    .height(this.resolveDownloadSettingsPopupHeight())
-    .borderRadius(BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP)
-    .clip(true)
-  }
-
-  private resolveDownloadSettingsPopupWidth(): number {
-    return this.modalLayoutService.resolvePopupWidth(
-      this.viewportWidthVp,
-      LARGE_SCREEN_DOWNLOAD_SETTINGS_POPUP_WIDTH_VP
-    );
-  }
-
-  private resolveDownloadSettingsPopupHeight(): number {
-    return this.modalLayoutService.resolvePopupHeight(
-      this.viewportHeightVp,
-      LARGE_SCREEN_DOWNLOAD_SETTINGS_POPUP_HEIGHT_VP,
-      LARGE_SCREEN_DOWNLOAD_SETTINGS_POPUP_RESERVED_TOP_VP
-    );
-  }
-
-  private updateViewportSize(area: Area): void {
-    const width = Number(area.width);
-    const height = Number(area.height);
-    if (Number.isFinite(width) && width > 0 && width !== this.viewportWidthVp) {
-      this.viewportWidthVp = width;
-    }
-    if (Number.isFinite(height) && height > 0 && height !== this.viewportHeightVp) {
-      this.viewportHeightVp = height;
+    if (this.pageActive) {
+      this.openDownloadSettingsDialog();
     }
   }
 

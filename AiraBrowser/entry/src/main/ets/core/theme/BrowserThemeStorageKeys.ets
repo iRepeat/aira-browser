@@ -7,6 +7,7 @@ export const BROWSER_THEME_STORAGE_ON_ACCENT_KEY: string = 'browserThemeOnAccent
 export const BROWSER_THEME_STORAGE_ON_PRIMARY_KEY: string = 'browserThemeOnPrimaryColor';
 export const BROWSER_THEME_STORAGE_RESOLVED_MODE_KEY: string = 'browserThemeResolvedMode';
 export const BROWSER_THEME_STORAGE_SETTINGS_ICON_FOREGROUND_KEY: string = 'browserThemeSettingsIconForegroundColor';
+export const BROWSER_THEME_STORAGE_PALETTE_ID_KEY: string = 'browserThemePaletteId';
 export const BROWSER_THEME_STORAGE_APP_PROXY_ACTIVE_BACKGROUND_KEY: string =
   'browserThemeAppProxyActiveBackgroundColor';
 export const BROWSER_THEME_STORAGE_PRESSED_BACKGROUND_KEY: string = 'browserThemePressedBackgroundColor';

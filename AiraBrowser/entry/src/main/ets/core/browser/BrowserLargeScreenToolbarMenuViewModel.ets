@@ -5,8 +5,179 @@ import {
 } from './BrowserBottomAddressPanelViewModel';
 import { BrowserBottomPanelActionSnapshot } from './BrowserBottomPanelActionPresentationCoordinator';
 import { BrowserLargeScreenInputProfile } from './BrowserLargeScreenTabStripViewModel';
+import {
+  BROWSER_DESKTOP_MENU_ITEM_HEIGHT_VP,
+  BROWSER_DESKTOP_MENU_VERTICAL_INSET_VP
+} from './BrowserDesktopMenuPresentationTokens';
 
-/** Projects the existing phone-toolbar action snapshot into one desktop menu. */
+export const BROWSER_LARGE_SCREEN_PAGE_TOOLS_TITLE: string = '页面工具';
+export const BROWSER_LARGE_SCREEN_SCRIPT_MANAGEMENT_TITLE: string = '管理用户脚本';
+export const BROWSER_LARGE_SCREEN_PRIVACY_MODE_TITLE: string = '隐私模式';
+export const BROWSER_LARGE_SCREEN_WEB_ZOOM_TITLE: string = '网页缩放';
+
+export type BrowserLargeScreenToolbarMenuSectionId = 'destinations' | 'page' | 'preferences';
+export type BrowserLargeScreenToolbarMenuPageToolGroupId = 'reading' | 'media' | 'development' | 'more';
+export type BrowserLargeScreenToolbarMenuActivation = 'browser_action' | 'web_zoom' | 'user_script_management';
+
+export interface BrowserLargeScreenToolbarMenuEntry {
+  action: BrowserBottomAddressPanelAction;
+  showsSelection: boolean;
+  activation: BrowserLargeScreenToolbarMenuActivation;
+}
+
+export interface BrowserLargeScreenToolbarMenuPageToolGroup {
+  id: BrowserLargeScreenToolbarMenuPageToolGroupId;
+  title: string;
+  items: BrowserLargeScreenToolbarMenuEntry[];
+}
+
+export interface BrowserLargeScreenToolbarMenuSection {
+  id: BrowserLargeScreenToolbarMenuSectionId;
+  items: BrowserLargeScreenToolbarMenuEntry[];
+  pageTools: BrowserLargeScreenToolbarMenuPageToolGroup[];
+}
+
+export interface BrowserLargeScreenToolbarMenuPlan {
+  sections: BrowserLargeScreenToolbarMenuSection[];
+}
+
+export interface BrowserLargeScreenToolbarMenuHeight {
+  contentHeightVp: number;
+  maxHeightVp: number;
+  heightVp: number;
+  scrollable: boolean;
+}
+
+interface BrowserLargeScreenToolbarMenuPageToolGroupSpec {
+  id: BrowserLargeScreenToolbarMenuPageToolGroupId;
+  title: string;
+  actionIds: BrowserBottomAddressPanelActionId[];
+}
+
+const DESTINATION_ACTION_IDS: BrowserBottomAddressPanelActionId[] = [
+  'history',
+  'openBookmarks',
+  'downloads',
+  'novel'
+];
+const PAGE_ACTION_IDS: BrowserBottomAddressPanelActionId[] = [
+  'copyLink',
+  'share',
+  'print'
+];
+const PREFERENCE_ACTION_IDS: BrowserBottomAddressPanelActionId[] = [
+  'scanQr',
+  'appProxySettings',
+  'newPrivateTab',
+  'settings'
+];
+export const BROWSER_LARGE_SCREEN_OVERFLOW_MENU_SECTION_GAP_VP: number = 8;
+export const BROWSER_LARGE_SCREEN_OVERFLOW_MENU_GROUP_HEADER_HEIGHT_VP: number = 28;
+const OVERFLOW_MENU_BOTTOM_MARGIN_VP: number = 8;
+const EMPTY_PAGE_TOOLS: BrowserLargeScreenToolbarMenuPageToolGroup[] = [];
+const EMPTY_MENU_PLAN: BrowserLargeScreenToolbarMenuPlan = { sections: [] };
+
+const PAGE_TOOL_GROUP_SPECS: BrowserLargeScreenToolbarMenuPageToolGroupSpec[] = [
+  { id: 'reading', title: '阅读', actionIds: ['find', 'textZoom', 'reader', 'translate'] },
+  { id: 'media', title: '媒体', actionIds: ['video', 'offline'] },
+  { id: 'development', title: '开发', actionIds: ['scripts', 'elementInspection', 'manualElementHide', 'userAgent'] },
+  { id: 'more', title: '', actionIds: ['addToDesktop', 'themeMode', 'reportSite', 'savedPages'] }
+];
+
+/**
+ * Pointer shells use a fixed desktop menu. Phone toolbar customization still owns the touch
+ * projection, but it must not decide desktop order or which desktop rows exist.
+ */
+export function projectBrowserLargeScreenPointerToolbarMenu(
+  actions: BrowserBottomAddressPanelAction[],
+  webZoomAvailable: boolean
+): BrowserLargeScreenToolbarMenuPlan {
+  const sections: BrowserLargeScreenToolbarMenuSection[] = [];
+  const destinations: BrowserLargeScreenToolbarMenuEntry[] =
+    projectEntries(actions, DESTINATION_ACTION_IDS, webZoomAvailable);
+  if (destinations.length > 0) {
+    sections.push({
+      id: 'destinations',
+      items: destinations,
+      pageTools: EMPTY_PAGE_TOOLS
+    });
+  }
+  const pageItems: BrowserLargeScreenToolbarMenuEntry[] =
+    projectEntries(actions, PAGE_ACTION_IDS, webZoomAvailable);
+  const pageTools: BrowserLargeScreenToolbarMenuPageToolGroup[] =
+    projectPageToolGroups(actions, webZoomAvailable);
+  if (pageItems.length > 0 || pageTools.length > 0) {
+    sections.push({
+      id: 'page',
+      items: pageItems,
+      pageTools: pageTools
+    });
+  }
+  const preferences: BrowserLargeScreenToolbarMenuEntry[] =
+    projectEntries(actions, PREFERENCE_ACTION_IDS, webZoomAvailable);
+  if (preferences.length > 0) {
+    sections.push({
+      id: 'preferences',
+      items: preferences,
+      pageTools: EMPTY_PAGE_TOOLS
+    });
+  }
+  return { sections: sections };
+}
+
+/**
+ * The system Menu sizes to its rows and does not scroll. Pointer overflow uses this
+ * height instead: content is the rows, headers and section gaps; the cap is the
+ * space under the toolbar. A shorter window scrolls rather than dropping rows.
+ */
+export function resolveBrowserLargeScreenOverflowMenuHeight(
+  plan: BrowserLargeScreenToolbarMenuPlan,
+  viewportHeightVp: number,
+  reservedTopVp: number
+): BrowserLargeScreenToolbarMenuHeight {
+  const contentHeightVp = measureOverflowMenuContentHeight(plan);
+  if (!Number.isFinite(viewportHeightVp) || viewportHeightVp <= 0) {
+    return {
+      contentHeightVp: contentHeightVp,
+      maxHeightVp: contentHeightVp,
+      heightVp: contentHeightVp,
+      scrollable: false
+    };
+  }
+  const availableHeightVp = viewportHeightVp - Math.max(0, reservedTopVp) - OVERFLOW_MENU_BOTTOM_MARGIN_VP;
+  const minimumHeightVp = BROWSER_DESKTOP_MENU_ITEM_HEIGHT_VP + BROWSER_DESKTOP_MENU_VERTICAL_INSET_VP * 2;
+  const maxHeightVp = Math.max(minimumHeightVp, availableHeightVp);
+  const heightVp = Math.min(contentHeightVp, maxHeightVp);
+  return {
+    contentHeightVp: contentHeightVp,
+    maxHeightVp: maxHeightVp,
+    heightVp: heightVp,
+    scrollable: contentHeightVp > maxHeightVp
+  };
+}
+
+function measureOverflowMenuContentHeight(plan: BrowserLargeScreenToolbarMenuPlan): number {
+  let itemCount = 0;
+  let headerCount = 0;
+  let blockCount = 0;
+  plan.sections.forEach((section: BrowserLargeScreenToolbarMenuSection): void => {
+    if (section.items.length > 0 || section.pageTools.length > 0) {
+      blockCount += 1;
+    }
+    itemCount += section.items.length;
+    section.pageTools.forEach((group: BrowserLargeScreenToolbarMenuPageToolGroup): void => {
+      itemCount += group.items.length;
+      if (group.title.length > 0) {
+        headerCount += 1;
+      }
+    });
+  });
+  return BROWSER_DESKTOP_MENU_VERTICAL_INSET_VP * 2 +
+    itemCount * BROWSER_DESKTOP_MENU_ITEM_HEIGHT_VP +
+    headerCount * BROWSER_LARGE_SCREEN_OVERFLOW_MENU_GROUP_HEADER_HEIGHT_VP +
+    Math.max(0, blockCount - 1) * BROWSER_LARGE_SCREEN_OVERFLOW_MENU_SECTION_GAP_VP;
+}
+
 export class BrowserLargeScreenToolbarMenuViewModel {
   private readonly bottomPanelViewModel: BrowserBottomAddressPanelViewModel =
     new BrowserBottomAddressPanelViewModel();
@@ -32,6 +203,28 @@ export class BrowserLargeScreenToolbarMenuViewModel {
         this.isAvailableForPointerShell(action.id))
       .map((action: BrowserBottomAddressPanelAction): BrowserBottomAddressPanelAction =>
         this.projectPointerAction(action, webZoomAvailable));
+  }
+
+  resolvePointerMenu(
+    snapshot: BrowserBottomPanelActionSnapshot | undefined,
+    webZoomAvailable: boolean
+  ): BrowserLargeScreenToolbarMenuPlan {
+    if (snapshot === undefined) {
+      return EMPTY_MENU_PLAN;
+    }
+    return projectBrowserLargeScreenPointerToolbarMenu(
+      this.resolveCatalogActions(snapshot),
+      webZoomAvailable
+    );
+  }
+
+  private resolveCatalogActions(
+    snapshot: BrowserBottomPanelActionSnapshot
+  ): BrowserBottomAddressPanelAction[] {
+    return this.mergeUniqueActions(
+      this.bottomPanelViewModel.buildPrimaryActions(snapshot.actionInput, 8),
+      this.bottomPanelViewModel.buildSecondaryActions(snapshot.actionInput, [])
+    );
   }
 
   private mergeUniqueActions(
@@ -65,7 +258,7 @@ export class BrowserLargeScreenToolbarMenuViewModel {
     }
     return {
       id: action.id,
-      title: '网页缩放',
+      title: BROWSER_LARGE_SCREEN_WEB_ZOOM_TITLE,
       trailingText: action.trailingText,
       icon: action.icon,
       imageIcon: action.imageIcon,
@@ -76,4 +269,108 @@ export class BrowserLargeScreenToolbarMenuViewModel {
       renderVersion: action.renderVersion
     };
   }
+}
+
+function projectPageToolGroups(
+  actions: BrowserBottomAddressPanelAction[],
+  webZoomAvailable: boolean
+): BrowserLargeScreenToolbarMenuPageToolGroup[] {
+  const groups: BrowserLargeScreenToolbarMenuPageToolGroup[] = [];
+  PAGE_TOOL_GROUP_SPECS.forEach((spec: BrowserLargeScreenToolbarMenuPageToolGroupSpec): void => {
+    const items: BrowserLargeScreenToolbarMenuEntry[] = projectEntries(actions, spec.actionIds, webZoomAvailable);
+    if (items.length === 0) {
+      return;
+    }
+    groups.push({
+      id: spec.id,
+      title: spec.title,
+      items: items
+    });
+  });
+  return groups;
+}
+
+function projectEntries(
+  actions: BrowserBottomAddressPanelAction[],
+  actionIds: BrowserBottomAddressPanelActionId[],
+  webZoomAvailable: boolean
+): BrowserLargeScreenToolbarMenuEntry[] {
+  const entries: BrowserLargeScreenToolbarMenuEntry[] = [];
+  actionIds.forEach((actionId: BrowserBottomAddressPanelActionId): void => {
+    const action = findAction(actions, actionId);
+    if (action === undefined) {
+      return;
+    }
+    entries.push(projectEntry(action, webZoomAvailable));
+  });
+  return entries;
+}
+
+function projectEntry(
+  action: BrowserBottomAddressPanelAction,
+  webZoomAvailable: boolean
+): BrowserLargeScreenToolbarMenuEntry {
+  if (action.id === 'textZoom') {
+    return {
+      action: copyAction(
+        action,
+        BROWSER_LARGE_SCREEN_WEB_ZOOM_TITLE,
+        webZoomAvailable,
+        webZoomAvailable ? '' : '当前页面暂不可缩放'
+      ),
+      showsSelection: false,
+      activation: 'web_zoom'
+    };
+  }
+  if (action.id === 'scripts') {
+    return {
+      action: copyAction(action, BROWSER_LARGE_SCREEN_SCRIPT_MANAGEMENT_TITLE, action.enabled, action.disabledMessage),
+      showsSelection: false,
+      activation: 'user_script_management'
+    };
+  }
+  if (action.id === 'newPrivateTab') {
+    return {
+      action: copyAction(action, BROWSER_LARGE_SCREEN_PRIVACY_MODE_TITLE, action.enabled, action.disabledMessage),
+      showsSelection: true,
+      activation: 'browser_action'
+    };
+  }
+  return {
+    action: action,
+    showsSelection: false,
+    activation: 'browser_action'
+  };
+}
+
+function copyAction(
+  action: BrowserBottomAddressPanelAction,
+  title: string,
+  enabled: boolean,
+  disabledMessage: string
+): BrowserBottomAddressPanelAction {
+  return {
+    id: action.id,
+    title: title,
+    trailingText: action.trailingText,
+    icon: action.icon,
+    imageIcon: action.imageIcon,
+    airaIconId: action.airaIconId,
+    enabled: enabled,
+    disabledMessage: disabledMessage,
+    selected: action.selected,
+    renderVersion: action.renderVersion
+  };
+}
+
+function findAction(
+  actions: BrowserBottomAddressPanelAction[],
+  actionId: BrowserBottomAddressPanelActionId
+): BrowserBottomAddressPanelAction | undefined {
+  for (let index = 0; index < actions.length; index += 1) {
+    if (actions[index].id === actionId) {
+      return actions[index];
+    }
+  }
+  return undefined;
 }

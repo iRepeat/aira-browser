@@ -45,7 +45,8 @@ import {
 } from '../../common/models/RuntimeDiagnosticModels';
 import {
   DownloadFileResolutionAdapter,
-  DownloadFileResolutionService
+  DownloadFileResolutionService,
+  DownloadPersistResult
 } from '../download/DownloadFileResolutionService';
 import { DownloadFileNameService } from '../download/DownloadFileNameService';
 import { DownloadPolicyService } from '../download/DownloadPolicyService';
@@ -67,6 +68,7 @@ import {
 } from './DownloadHtmlRedirectResolverService';
 import { ActivityTracker } from '../activity/ActivityTracker';
 import { DownloadTaskBoundary } from '../../domain/download/DownloadTypes';
+import { resolveCustomDownloadDirectory } from '../download/DownloadLocationDirectoryService';
 import { DownloadV2SystemNotificationService } from './DownloadV2SystemNotificationService';
 
 const DOWNLOAD_V2_SERVICE_DOMAIN = 0x0000;
@@ -399,6 +401,15 @@ export class DownloadV2Service {
     return this.requestCapture.getPendingPrompt();
   }
 
+  /**
+   * Exposes the captured request behind a prompt so callers can resolve facts
+   * (such as the save location) against the boundary the request was captured
+   * under, instead of whichever boundary happens to be active later.
+   */
+  getCapturedRequest(guid: string): DownloadV2CapturedRequest | undefined {
+    return this.requestCapture.getPendingRequest(guid);
+  }
+
   clearPendingPrompt(guid?: string): void {
     const currentPrompt = this.requestCapture.getPendingPrompt();
     if (guid !== undefined && currentPrompt?.guid !== guid) {
@@ -471,7 +482,13 @@ export class DownloadV2Service {
     if (localPath.length <= 0) {
       return false;
     }
-    const persisted = await this.fileResolutionService.persistToSystemDownloads(localPath, task.suggestedFileName);
+    const persisted = await this.persistFinishedDownload(localPath, task.suggestedFileName, {
+      windowId: task.windowId,
+      profileId: task.profileId,
+      privacyMode: task.privacyMode,
+      dataScope: task.dataScope,
+      sourcePageUrl: task.request.sourcePageUrl
+    });
     if (persisted === undefined || !persisted.isExported || (persisted.finalFileUri?.trim().length ?? 0) <= 0) {
       if (persisted !== undefined) {
         this.persistCompletionLocalDisplayPath(task, persisted.finalDisplayPath);
@@ -531,7 +548,7 @@ export class DownloadV2Service {
       });
       await this.repository.flushPersistence();
     }
-    this.callbacks.onInfo?.(`已保存到系统下载目录：${task.suggestedFileName}。`);
+    this.callbacks.onInfo?.(this.buildSavedLocationMessage('已保存到', task.suggestedFileName, persisted));
     return true;
   }
 
@@ -1655,7 +1672,13 @@ export class DownloadV2Service {
       }
       return;
     }
-    const persisted = await this.fileResolutionService.persistToSystemDownloads(localPath, suggestedFileName);
+    const persisted = await this.persistFinishedDownload(localPath, suggestedFileName, {
+      windowId: currentTask.windowId,
+      profileId: currentTask.profileId,
+      privacyMode: currentTask.privacyMode,
+      dataScope: currentTask.dataScope,
+      sourcePageUrl: currentTask.request.sourcePageUrl
+    });
     if (persisted === undefined || !persisted.isExported || (persisted.finalFileUri?.trim().length ?? 0) <= 0) {
       this.completedPersistenceGuids[guid] = true;
       this.recordDownloadActivityOnce(guid);
@@ -1723,8 +1746,42 @@ export class DownloadV2Service {
       await this.repository.flushPersistence();
     }
     if (!silent) {
-      this.callbacks.onInfo?.(`下载完成，已保存到系统下载目录：${suggestedFileName}。`);
+      this.callbacks.onInfo?.(this.buildSavedLocationMessage('下载完成，已保存到', suggestedFileName, persisted));
     }
+  }
+
+  private async persistFinishedDownload(
+    localPath: string,
+    suggestedFileName: string,
+    boundary: DownloadTaskBoundary
+  ): Promise<DownloadPersistResult | undefined> {
+    const savePolicy = this.downloadPolicyService.resolveSavePolicy(boundary);
+    if (!savePolicy.isPrivateSession) {
+      const customDirectory = resolveCustomDownloadDirectory(savePolicy.settings);
+      if (customDirectory !== undefined) {
+        const persisted = await this.fileResolutionService.persistToDirectory(
+          localPath,
+          suggestedFileName,
+          customDirectory.uri,
+          customDirectory.label
+        );
+        if (persisted !== undefined && persisted.isExported) {
+          return persisted;
+        }
+      }
+    }
+    return this.fileResolutionService.persistToSystemDownloads(localPath, suggestedFileName);
+  }
+
+  private buildSavedLocationMessage(
+    prefix: string,
+    fileName: string,
+    persisted: DownloadPersistResult | undefined
+  ): string {
+    const location = persisted?.destinationLabel !== undefined && persisted.destinationLabel.length > 0
+      ? persisted.destinationLabel
+      : '系统下载目录';
+    return `${prefix}${location}：${fileName}。`;
   }
 
   private persistCompletionLocalDisplayPath(task: DownloadV2TaskEntity, displayPath: string): void {

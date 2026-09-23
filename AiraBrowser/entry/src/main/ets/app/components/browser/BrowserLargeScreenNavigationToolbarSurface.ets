@@ -24,7 +24,17 @@ import {
   resolveBrowserBottomAddressPanelActionAiraIconId
 } from '../../../core/browser/BrowserBottomAddressPanelViewModel';
 import { BrowserBottomPanelActionSnapshot } from '../../../core/browser/BrowserBottomPanelActionPresentationCoordinator';
-import { BrowserLargeScreenToolbarMenuViewModel } from '../../../core/browser/BrowserLargeScreenToolbarMenuViewModel';
+import {
+  BROWSER_LARGE_SCREEN_OVERFLOW_MENU_GROUP_HEADER_HEIGHT_VP,
+  BROWSER_LARGE_SCREEN_OVERFLOW_MENU_SECTION_GAP_VP,
+  BrowserLargeScreenToolbarMenuEntry,
+  BrowserLargeScreenToolbarMenuHeight,
+  BrowserLargeScreenToolbarMenuPageToolGroup,
+  BrowserLargeScreenToolbarMenuPlan,
+  BrowserLargeScreenToolbarMenuSection,
+  BrowserLargeScreenToolbarMenuViewModel,
+  resolveBrowserLargeScreenOverflowMenuHeight
+} from '../../../core/browser/BrowserLargeScreenToolbarMenuViewModel';
 import { BrowserLargeScreenInputProfile } from '../../../core/browser/BrowserLargeScreenTabStripViewModel';
 import {
   BrowserBookmarkActionSessionSnapshot,
@@ -61,6 +71,8 @@ import {
 } from '../../../core/browser/BrowserModalPresentationTokens';
 import {
   BROWSER_DESKTOP_MENU_CORNER_RADIUS_VP,
+  BROWSER_DESKTOP_MENU_DIVIDER_HORIZONTAL_MARGIN_VP,
+  BROWSER_DESKTOP_MENU_DIVIDER_WIDTH_VP,
   BROWSER_DESKTOP_MENU_HORIZONTAL_INSET_VP,
   BROWSER_DESKTOP_MENU_ITEM_CORNER_RADIUS_VP,
   BROWSER_DESKTOP_MENU_ITEM_HEIGHT_VP,
@@ -185,6 +197,7 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
   @State private siteInfoPopupVisible: boolean = false;
   @State private crossDeviceTabsPopupVisible: boolean = false;
   @State private hoveredOverflowActionId: string = '';
+  @State private overflowMenuVisible: boolean = false;
   private toolbarMenuViewModel: BrowserLargeScreenToolbarMenuViewModel =
     new BrowserLargeScreenToolbarMenuViewModel();
   private readonly modalLayoutService: AppWindowModalLayoutService = new AppWindowModalLayoutService();
@@ -520,6 +533,13 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
       }
       .width('100%')
       .layoutWeight(1)
+
+      Divider()
+        .color(this.storedDividerColor)
+        .strokeWidth(BROWSER_DESKTOP_MENU_DIVIDER_WIDTH_VP)
+        .margin({ left: 16, right: 16 })
+
+      this.buildCrossDeviceScanRow()
     }
     .width(this.resolvePopupWidth(LARGE_SCREEN_CROSS_DEVICE_TABS_POPUP_WIDTH_VP))
     .height(this.resolvePopupHeight(LARGE_SCREEN_CROSS_DEVICE_TABS_POPUP_HEIGHT_VP))
@@ -601,6 +621,15 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
 
   @Builder
   private buildOverflowButton() {
+    if (this.inputProfile === 'touch') {
+      this.buildTouchOverflowButton()
+    } else {
+      this.buildPointerOverflowButton()
+    }
+  }
+
+  @Builder
+  private buildTouchOverflowButton() {
     Button({ type: ButtonType.Circle }) {
       AiraIcon({
         airaIconId: 'browser.toolbar.more',
@@ -629,11 +658,78 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
   }
 
   @Builder
+  private buildPointerOverflowButton() {
+    Button({ type: ButtonType.Circle }) {
+      AiraIcon({
+        airaIconId: 'browser.toolbar.more',
+        iconSize: LARGE_SCREEN_NAVIGATION_ICON_SIZE_VP,
+        iconColor: this.storedPrimaryTextColor
+      })
+    }
+    .width(LARGE_SCREEN_NAVIGATION_BUTTON_SIZE_VP)
+    .height(LARGE_SCREEN_NAVIGATION_BUTTON_SIZE_VP)
+    .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
+    .stateEffect(true)
+    .accessibilityText('更多浏览器工具')
+    .onClick((): void => {
+      this.overflowMenuVisible = true;
+    })
+    .bindPopup(this.overflowMenuVisible, {
+      builder: this.buildPointerOverflowPopup,
+      placement: Placement.BottomRight,
+      popupColor: this.storedSurfaceBackgroundColor,
+      enableArrow: false,
+      autoCancel: true,
+      mask: false,
+      targetSpace: BROWSER_DESKTOP_MENU_VERTICAL_INSET_VP,
+      width: LARGE_SCREEN_OVERFLOW_MENU_WIDTH_VP,
+      radius: BROWSER_DESKTOP_MENU_CORNER_RADIUS_VP,
+      showInSubWindow: false,
+      focusable: true,
+      shadow: {
+        radius: 24,
+        color: $r('app.color.elevation_shadow'),
+        offsetX: 0,
+        offsetY: 8
+      },
+      onStateChange: (event: PopupStateChangeParam): void => {
+        this.overflowMenuVisible = event.isVisible;
+      }
+    })
+  }
+
+  @Builder
+  private buildCrossDeviceScanRow() {
+    Row({ space: 10 }) {
+      AiraIcon({
+        airaIconId: 'browser.toolbar.scanQr',
+        iconSize: 18,
+        iconColor: this.storedPrimaryTextColor
+      })
+      Text('扫一扫')
+        .layoutWeight(1)
+        .fontSize(BROWSER_DESKTOP_MENU_TEXT_SIZE_FP)
+        .fontColor(this.storedPrimaryTextColor)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('100%')
+    .height(BROWSER_DESKTOP_MENU_ITEM_HEIGHT_VP)
+    .margin({ bottom: 8 })
+    .padding({ left: 16, right: 16 })
+    .alignItems(VerticalAlign.Center)
+    .hoverEffect(HoverEffect.Highlight)
+    .accessibilityText('扫一扫')
+    .onClick((): void => {
+      this.crossDeviceTabsPopupVisible = false;
+      this.onIntent({ kind: 'open_browser_action', text: '', actionId: 'scanQr' });
+    })
+  }
+
+  @Builder
   private buildOverflowMenu() {
     Menu() {
-      ForEach(this.resolveOverflowActions(), (item: BrowserBottomAddressPanelAction) => {
-        this.buildOverflowMenuItem(item)
-      }, (item: BrowserBottomAddressPanelAction) => this.buildOverflowMenuItemKey(item))
+      this.buildTouchOverflowItems()
     }
     .width(LARGE_SCREEN_OVERFLOW_MENU_WIDTH_VP)
     .padding({
@@ -646,9 +742,121 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
   }
 
   @Builder
+  private buildTouchOverflowItems() {
+    ForEach(this.resolveOverflowActions(), (item: BrowserBottomAddressPanelAction) => {
+      this.buildOverflowMenuItem(item)
+    }, (item: BrowserBottomAddressPanelAction) => this.buildOverflowMenuItemKey(item))
+  }
+
+  @Builder
+  private buildPointerOverflowPopup() {
+    Scroll() {
+      Column() {
+        ForEach(this.resolvePointerMenu().sections, (section: BrowserLargeScreenToolbarMenuSection, index: number) => {
+          if (index > 0) {
+            this.buildPointerOverflowSectionGap()
+          }
+          this.buildPointerOverflowSection(section)
+        }, (section: BrowserLargeScreenToolbarMenuSection) => section.id)
+      }
+      .width('100%')
+      .padding({
+        left: BROWSER_DESKTOP_MENU_HORIZONTAL_INSET_VP,
+        right: BROWSER_DESKTOP_MENU_HORIZONTAL_INSET_VP,
+        top: BROWSER_DESKTOP_MENU_VERTICAL_INSET_VP,
+        bottom: BROWSER_DESKTOP_MENU_VERTICAL_INSET_VP
+      })
+    }
+    .width(LARGE_SCREEN_OVERFLOW_MENU_WIDTH_VP)
+    .height(this.resolvePointerOverflowMenuHeight().heightVp)
+    .scrollable(ScrollDirection.Vertical)
+    .scrollBar(this.resolvePointerOverflowMenuHeight().scrollable ? BarState.Auto : BarState.Off)
+    .edgeEffect(EdgeEffect.None)
+    .align(Alignment.Top)
+    .clip(true)
+  }
+
+  @Builder
+  private buildPointerOverflowSection(section: BrowserLargeScreenToolbarMenuSection) {
+    Column() {
+      ForEach(section.items, (entry: BrowserLargeScreenToolbarMenuEntry) => {
+        this.buildPointerOverflowRow(entry)
+      }, (entry: BrowserLargeScreenToolbarMenuEntry) => this.buildPointerOverflowMenuItemKey(entry))
+      ForEach(section.pageTools, (group: BrowserLargeScreenToolbarMenuPageToolGroup) => {
+        this.buildPointerOverflowToolGroup(group)
+      }, (group: BrowserLargeScreenToolbarMenuPageToolGroup) => group.id)
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private buildPointerOverflowToolGroup(group: BrowserLargeScreenToolbarMenuPageToolGroup) {
+    Column() {
+      if (group.title.length > 0) {
+        Row() {
+          Text(group.title)
+            .fontSize(12)
+            .fontColor(this.storedSecondaryTextColor)
+            .maxLines(1)
+        }
+        .width('100%')
+        .height(BROWSER_LARGE_SCREEN_OVERFLOW_MENU_GROUP_HEADER_HEIGHT_VP)
+        .padding({
+          left: BROWSER_DESKTOP_MENU_ITEM_HORIZONTAL_PADDING_VP,
+          right: BROWSER_DESKTOP_MENU_ITEM_HORIZONTAL_PADDING_VP
+        })
+        .alignItems(VerticalAlign.Center)
+      }
+      ForEach(group.items, (entry: BrowserLargeScreenToolbarMenuEntry) => {
+        this.buildPointerOverflowRow(entry)
+      }, (entry: BrowserLargeScreenToolbarMenuEntry) => this.buildPointerOverflowMenuItemKey(entry))
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private buildPointerOverflowSectionGap() {
+    Column() {
+      Divider()
+        .strokeWidth(BROWSER_DESKTOP_MENU_DIVIDER_WIDTH_VP)
+        .color(this.storedDividerColor)
+        .margin({
+          left: BROWSER_DESKTOP_MENU_DIVIDER_HORIZONTAL_MARGIN_VP,
+          right: BROWSER_DESKTOP_MENU_DIVIDER_HORIZONTAL_MARGIN_VP
+        })
+    }
+    .width('100%')
+    .height(BROWSER_LARGE_SCREEN_OVERFLOW_MENU_SECTION_GAP_VP)
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  private buildPointerOverflowRow(entry: BrowserLargeScreenToolbarMenuEntry) {
+    Row() {
+      this.buildOverflowMenuItemContent(entry.action, entry.showsSelection)
+    }
+    .width('100%')
+    .height(BROWSER_DESKTOP_MENU_ITEM_HEIGHT_VP)
+    .backgroundColor(this.resolveOverflowMenuItemBackground(entry.action))
+    .borderRadius(BROWSER_DESKTOP_MENU_ITEM_CORNER_RADIUS_VP)
+    .clip(true)
+    .hoverEffect(HoverEffect.None)
+    .onHover((hovered: boolean): void => {
+      this.hoveredOverflowActionId = hovered
+        ? entry.action.id
+        : (this.hoveredOverflowActionId === entry.action.id ? '' : this.hoveredOverflowActionId);
+    })
+    .onClick((): void => {
+      this.hoveredOverflowActionId = '';
+      this.overflowMenuVisible = false;
+      this.dispatchOverflowEntry(entry);
+    })
+  }
+
+  @Builder
   private buildOverflowMenuItem(item: BrowserBottomAddressPanelAction) {
     MenuItem(() => {
-      this.buildOverflowMenuItemContent(item)
+      this.buildOverflowMenuItemContent(item, false)
     })
     .padding(0)
     .backgroundColor(this.resolveOverflowMenuItemBackground(item))
@@ -667,7 +875,7 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
   }
 
   @Builder
-  private buildOverflowMenuItemContent(item: BrowserBottomAddressPanelAction) {
+  private buildOverflowMenuItemContent(item: BrowserBottomAddressPanelAction, showsSelection: boolean) {
     Row({ space: 10 }) {
       AiraIcon({
         airaIconId: item.airaIconId ?? resolveBrowserBottomAddressPanelActionAiraIconId(item.id),
@@ -681,6 +889,12 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
         .fontColor(this.storedPrimaryTextColor)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      if (showsSelection && item.selected === true) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(16)
+          .fontColor([this.storedAccentColor])
+      }
     }
     .width('100%')
     .height(BROWSER_DESKTOP_MENU_ITEM_HEIGHT_VP)
@@ -749,12 +963,31 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
     );
   }
 
+  private resolvePointerMenu(): BrowserLargeScreenToolbarMenuPlan {
+    return this.toolbarMenuViewModel.resolvePointerMenu(
+      this.actionSnapshot,
+      this.webZoomSnapshot.available
+    );
+  }
+
+  private resolvePointerOverflowMenuHeight(): BrowserLargeScreenToolbarMenuHeight {
+    return resolveBrowserLargeScreenOverflowMenuHeight(
+      this.resolvePointerMenu(),
+      this.viewportHeightVp,
+      this.popupReservedTopVp
+    );
+  }
+
   private shouldShowBookmarkButton(): boolean {
     return this.inputProfile !== 'touch' && this.activeTabChrome.scene === 'web';
   }
 
   private buildOverflowMenuItemKey(item: BrowserBottomAddressPanelAction): string {
     return `${item.id}:${item.renderVersion ?? 0}:${item.selected === true ? 1 : 0}:${item.enabled ? 1 : 0}`;
+  }
+
+  private buildPointerOverflowMenuItemKey(entry: BrowserLargeScreenToolbarMenuEntry): string {
+    return `${entry.activation}:${entry.showsSelection ? 1 : 0}:${this.buildOverflowMenuItemKey(entry.action)}:${entry.action.title}`;
   }
 
   private resolveOverflowMenuItemBackground(item: BrowserBottomAddressPanelAction): ResourceColor {
@@ -773,6 +1006,26 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
     }
     if (this.inputProfile !== 'touch' && item.id === 'textZoom') {
       this.onIntent({ kind: 'open_web_zoom_dialog', text: '' });
+      return;
+    }
+    this.onIntent({ kind: 'open_browser_action', text: '', actionId: item.id });
+  }
+
+  private dispatchOverflowEntry(entry: BrowserLargeScreenToolbarMenuEntry): void {
+    const item = entry.action;
+    if (!item.enabled) {
+      const message = item.disabledMessage.trim();
+      if (message.length > 0) {
+        this.getUIContext().getPromptAction().showToast({ message: message, duration: 1500 });
+      }
+      return;
+    }
+    if (entry.activation === 'web_zoom') {
+      this.onIntent({ kind: 'open_web_zoom_dialog', text: '' });
+      return;
+    }
+    if (entry.activation === 'user_script_management') {
+      this.onIntent({ kind: 'open_user_scripts', text: '' });
       return;
     }
     this.onIntent({ kind: 'open_browser_action', text: '', actionId: item.id });

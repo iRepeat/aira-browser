@@ -10,9 +10,14 @@ struct DownloadSettingsPage {
   @StorageProp(BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY) private storedPageBackgroundColor: string = DEFAULT_THEME_PALETTE.light.pageBackground;
   private controller: DownloadSettingsScreenController = new DownloadSettingsScreenController();
   @State private settingsRevealTargetId: string = '';
+  @State private settingsRefreshRevision: number = 0;
 
   aboutToAppear(): void {
     this.settingsRevealTargetId = readSettingsTargetRouteState().settingsRevealTargetId;
+  }
+
+  onPageShow(): void {
+    this.settingsRefreshRevision += 1;
   }
 
   onBackPress(): boolean {
@@ -24,7 +29,8 @@ struct DownloadSettingsPage {
       BrowserDownloadSettingsScreen({
         controller: this.controller,
         revealTargetId: this.settingsRevealTargetId,
-        revealRevision: this.settingsRevealTargetId.length > 0 ? 1 : 0
+        revealRevision: this.settingsRevealTargetId.length > 0 ? 1 : 0,
+        refreshRevision: this.settingsRefreshRevision
       })
         .width('100%')
         .height('100%')

@@ -178,6 +178,8 @@ export const HISTORY_RETENTION_MAX_ROWS: number = 50000;
 
 export const DEFAULT_BROWSER_DOWNLOAD_SETTINGS: BrowserDownloadSettings = {
   defaultLocation: 'system_downloads',
+  customLocationUri: '',
+  customLocationLabel: '',
   askBeforeDownload: true,
   allowCellularDownloads: true,
   autoResumeAfterRestart: true,
@@ -1327,8 +1329,15 @@ export class PreferencesRepository {
   }
 
   private normalizeDownloadSettings(settings: BrowserDownloadSettings | undefined): BrowserDownloadSettings {
+    const customLocationUri = this.normalizeCustomDownloadLocationUri(settings?.customLocationUri);
+    const usesCustomLocation = this.normalizeDownloadLocation(settings?.defaultLocation) === 'custom' &&
+      customLocationUri.length > 0;
     return {
-      defaultLocation: this.normalizeDownloadLocation(settings?.defaultLocation),
+      defaultLocation: usesCustomLocation ? 'custom' : 'system_downloads',
+      customLocationUri: usesCustomLocation ? customLocationUri : '',
+      customLocationLabel: usesCustomLocation
+        ? this.normalizeCustomDownloadLocationLabel(settings?.customLocationLabel)
+        : '',
       askBeforeDownload: typeof settings?.askBeforeDownload === 'boolean'
         ? settings.askBeforeDownload
         : DEFAULT_BROWSER_DOWNLOAD_SETTINGS.askBeforeDownload,
@@ -1603,7 +1612,28 @@ export class PreferencesRepository {
   }
 
   private normalizeDownloadLocation(value: BrowserDownloadLocation | string | undefined): BrowserDownloadLocation {
-    return value === 'system_downloads' ? 'system_downloads' : DEFAULT_BROWSER_DOWNLOAD_SETTINGS.defaultLocation;
+    return value === 'custom' ? 'custom' : 'system_downloads';
+  }
+
+  private normalizeCustomDownloadLocationUri(value: string | undefined): string {
+    if (typeof value !== 'string') {
+      return '';
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed.length > 2048 || trimmed.indexOf('://') <= 0) {
+      return '';
+    }
+    if (trimmed.indexOf('\n') >= 0 || trimmed.indexOf('\r') >= 0) {
+      return '';
+    }
+    return trimmed;
+  }
+
+  private normalizeCustomDownloadLocationLabel(value: string | undefined): string {
+    if (typeof value !== 'string') {
+      return '';
+    }
+    return value.trim().slice(0, 80);
   }
 
   private normalizeDownloadAutoClearPolicy(

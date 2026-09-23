@@ -1038,7 +1038,7 @@ export interface BrowserRetentionSettings {
   staleAfterMs: number;
 }
 
-export type BrowserDownloadLocation = 'system_downloads';
+export type BrowserDownloadLocation = 'system_downloads' | 'custom';
 export type BrowserDownloadAutoClearPolicy =
   'manual' |
   'clear_completed' |
@@ -1067,6 +1067,8 @@ export interface BrowserCustomUserAgentRecord {
 
 export interface BrowserDownloadSettings {
   defaultLocation: BrowserDownloadLocation;
+  customLocationUri: string;
+  customLocationLabel: string;
   askBeforeDownload: boolean;
   allowCellularDownloads: boolean;
   autoResumeAfterRestart: boolean;

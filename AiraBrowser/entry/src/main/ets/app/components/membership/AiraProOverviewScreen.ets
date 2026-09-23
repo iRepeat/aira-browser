@@ -12,6 +12,7 @@ import {
   DEFAULT_BROWSER_SYNC_PROVIDER_ICON_BACKGROUND_TOKENS
 } from '../../../features/theme/BrowserThemePaletteModels';
 import { AiraIcon } from '../common/AiraIcon';
+import { SettingsColoredIconBackground } from '../settings/SettingsColoredIconBackground';
 import {
   SettingsGroupCard,
   SettingsGroupDivider,
@@ -227,10 +228,10 @@ export struct AiraProOverviewScreen {
   private buildBenefitRow(benefit: AiraProOverviewBenefitState, index: number) {
     Row({ space: 12 }) {
       Stack({ alignContent: Alignment.Center }) {
-        Circle()
-          .width(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
-          .height(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
-          .fill(this.resolveBenefitIconBackgroundColor(index))
+        SettingsColoredIconBackground({
+          color: this.resolveBenefitIconBackgroundColor(index),
+          iconSize: AIRA_PRO_BENEFIT_ICON_TILE_SIZE
+        })
 
         AiraIcon({
           airaIconId: benefit.iconId,
@@ -374,10 +375,10 @@ export struct AiraProOverviewScreen {
     SettingsGroupCard({ surfaceColor: this.surfaceBackground }) {
       Row({ space: 12 }) {
         Stack({ alignContent: Alignment.Center }) {
-          Circle()
-            .width(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
-            .height(AIRA_PRO_BENEFIT_ICON_TILE_SIZE)
-            .fill(this.syncProviderIconBackgrounds.webdav)
+          SettingsColoredIconBackground({
+            color: this.syncProviderIconBackgrounds.webdav,
+            iconSize: AIRA_PRO_BENEFIT_ICON_TILE_SIZE
+          })
 
           AiraIcon({
             airaIconId: 'settings.webdav',

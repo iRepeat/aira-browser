@@ -8,6 +8,7 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { AiraRenderableIconId } from '../../../core/resources/GeneratedAiraIconCatalog';
 import { AiraIcon } from '../common/AiraIcon';
+import { SettingsColoredIconBackground } from '../settings/SettingsColoredIconBackground';
 
 @Component
 export struct SyncContentSwitchCard {
@@ -90,10 +91,10 @@ export struct SyncContentSwitchCard {
   @Builder
   private buildIcon() {
     Stack({ alignContent: Alignment.Center }) {
-      Circle()
-        .width(36)
-        .height(36)
-        .fill(this.iconBackgroundColor)
+      SettingsColoredIconBackground({
+        color: this.iconBackgroundColor,
+        iconSize: 36
+      })
 
       if (this.airaIconId !== undefined) {
         AiraIcon({
