@@ -5,6 +5,10 @@
 <h1 align="center">Aira</h1>
 
 <p align="center">
+  <a href="https://appgallery.huawei.com/app/detail?id=com.aira.browser&channelId=SHARE&source=appshare"><img src="docs/app-gallery.png" alt="在华为应用市场下载 Aira" width="240"></a>
+</p>
+
+<p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg?color=3F51B5&style=for-the-badge&label=License&logoColor=000000&labelColor=ececec" alt="License: GPL-3.0"></a>
   <a href="https://t.me/+St1xriweCiJlMGQx"><img src="https://img.shields.io/badge/Telegram-Join-26A5E4?style=for-the-badge&logo=telegram&logoColor=000000&labelColor=ececec" alt="Telegram"></a>
 </p>
