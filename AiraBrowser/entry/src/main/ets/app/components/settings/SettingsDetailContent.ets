@@ -51,6 +51,7 @@ import {
   SettingsTargetRevealController,
   SettingsTargetRevealRegion
 } from './SettingsTargetReveal';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const TAB_OVERVIEW_LAYOUT_SHEET_HEIGHT: Length = '68%';
 
@@ -143,7 +144,7 @@ export struct SettingsDetailContent {
     .onAreaChange((_oldArea: Area, newArea: Area) => {
       this.revealController.rememberContentArea(newArea);
     })
-    .bindSheet($$this.tabOverviewLayoutSheetVisible, this.buildTabOverviewLayoutChoiceSheet(), {
+    .bindSheet($$this.tabOverviewLayoutSheetVisible, this.buildTabOverviewLayoutChoiceSheet(), applyDesktopDialogSheetChrome({
       // Large screen presents this choice centered, not as a phone bottom sheet.
       preferType: this.isLargeScreen ? SheetType.CENTER : SheetType.BOTTOM,
       height: TAB_OVERVIEW_LAYOUT_SHEET_HEIGHT,
@@ -154,7 +155,7 @@ export struct SettingsDetailContent {
       // through the $$ binding) and the draft is reset by refreshDraft on the next
       // open. Writing state here only invalidates this host as the sheet is being
       // removed, which is pointless work during the dismiss animation.
-    })
+    }, 'm', this.isLargeScreen))
   }
 
   @Builder

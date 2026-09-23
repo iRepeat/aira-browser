@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -48,6 +49,7 @@ import {
   BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
   BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 @Component
 export struct LocalBackupScreen {
@@ -142,6 +144,7 @@ export struct LocalBackupScreen {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     onDidDisappear: (): void => {
       this.handleImportDialogDisappear();
     }
@@ -154,6 +157,7 @@ export struct LocalBackupScreen {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
       if (!this.isBusy) {
         dismissDialogAction.dismiss();
@@ -205,7 +209,7 @@ export struct LocalBackupScreen {
     .width('100%')
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
-    .bindSheet($$this.importSelectionSheetVisible, this.buildImportSelectionSheet(), {
+    .bindSheet($$this.importSelectionSheetVisible, this.buildImportSelectionSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: SheetSize.FIT_CONTENT,
       title: {
@@ -217,7 +221,7 @@ export struct LocalBackupScreen {
       onDisappear: (): void => {
         this.handleImportSheetDisappear();
       }
-    })
+    }, 'm'))
   }
 
   @Builder

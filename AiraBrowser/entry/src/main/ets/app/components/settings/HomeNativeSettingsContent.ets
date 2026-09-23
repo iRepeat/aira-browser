@@ -48,6 +48,8 @@ const HOME_SETTINGS_SLIDER_HEIGHT: number = 40;
 const HOME_SETTINGS_SLIDER_TRACK_THICKNESS: number = 20;
 const HOME_SETTINGS_SLIDER_TRACK_RADIUS: number = 10;
 const HOME_SETTINGS_SLIDER_BLOCK_SIZE: number = 16;
+// Rows, sliders and dividers already inset 16vp. Dialog titles and footers use the same inset.
+const HOME_DIALOG_CONTENT_INSET: number = 16;
 
 @Component
 export struct HomeNativeSettingsContent {
@@ -68,6 +70,7 @@ export struct HomeNativeSettingsContent {
   @Prop isEnabled: boolean = true;
   @Prop iconAppearanceEnabled: boolean = true;
   @Prop wallpaperLabel: string = '跟随主题色';
+  @Prop dialogPresentation: boolean = false;
   @Prop @Watch('refreshState') refreshRevision: number = 0;
   onSettingsChanged?: () => void;
   onOpenWallpaperSettings: () => void = () => {};
@@ -105,9 +108,13 @@ export struct HomeNativeSettingsContent {
   private buildWallpaperSection() {
     SettingsSection({
       title: '主页外观',
-      secondaryTextColor: this.storedSecondaryTextColor
+      secondaryTextColor: this.storedSecondaryTextColor,
+      titleLeftPadding: this.dialogContentInset()
     }) {
-      SettingsGroupCard({ surfaceColor: this.storedSurfaceBackgroundColor }) {
+      SettingsGroupCard({
+        surfaceColor: this.storedSurfaceBackgroundColor,
+        flat: this.dialogPresentation
+      }) {
         SettingsNavigationRow({
           title: '壁纸设置',
           value: this.wallpaperLabel,
@@ -127,9 +134,13 @@ export struct HomeNativeSettingsContent {
   private buildFavoritesSection() {
     SettingsSection({
       title: '收藏设置',
-      secondaryTextColor: this.storedSecondaryTextColor
+      secondaryTextColor: this.storedSecondaryTextColor,
+      titleLeftPadding: this.dialogContentInset()
     }) {
-      SettingsGroupCard({ surfaceColor: this.storedSurfaceBackgroundColor }) {
+      SettingsGroupCard({
+        surfaceColor: this.storedSurfaceBackgroundColor,
+        flat: this.dialogPresentation
+      }) {
         SettingsSwitchRow({
           title: '显示收藏',
           checked: this.showFavorites,
@@ -188,7 +199,8 @@ export struct HomeNativeSettingsContent {
 
       SettingsFooterText({
         text: '关闭分区标题后，收藏会保持展开。',
-        secondaryTextColor: this.storedSecondaryTextColor
+        secondaryTextColor: this.storedSecondaryTextColor,
+        horizontalPadding: this.dialogContentInset()
       })
     }
   }
@@ -291,9 +303,13 @@ export struct HomeNativeSettingsContent {
   private buildRecentlyClosedSection() {
     SettingsSection({
       title: '最近关闭',
-      secondaryTextColor: this.storedSecondaryTextColor
+      secondaryTextColor: this.storedSecondaryTextColor,
+      titleLeftPadding: this.dialogContentInset()
     }) {
-      SettingsGroupCard({ surfaceColor: this.storedSurfaceBackgroundColor }) {
+      SettingsGroupCard({
+        surfaceColor: this.storedSurfaceBackgroundColor,
+        flat: this.dialogPresentation
+      }) {
         SettingsSwitchRow({
           title: '显示最近关闭',
           checked: this.showRecentlyClosed,
@@ -327,7 +343,8 @@ export struct HomeNativeSettingsContent {
 
       SettingsFooterText({
         text: '关闭后将清除已有记录，且不再保留新记录。',
-        secondaryTextColor: this.storedSecondaryTextColor
+        secondaryTextColor: this.storedSecondaryTextColor,
+        horizontalPadding: this.dialogContentInset()
       })
     }
   }
@@ -393,9 +410,13 @@ export struct HomeNativeSettingsContent {
   private buildSystemSearchSection() {
     SettingsSection({
       title: '系统搜索',
-      secondaryTextColor: this.storedSecondaryTextColor
+      secondaryTextColor: this.storedSecondaryTextColor,
+      titleLeftPadding: this.dialogContentInset()
     }) {
-      SettingsGroupCard({ surfaceColor: this.storedSurfaceBackgroundColor }) {
+      SettingsGroupCard({
+        surfaceColor: this.storedSurfaceBackgroundColor,
+        flat: this.dialogPresentation
+      }) {
         SettingsSwitchRow({
           title: '在主页显示系统搜索',
           checked: this.showSystemSearch,
@@ -423,8 +444,14 @@ export struct HomeNativeSettingsContent {
 
   @Builder
   private buildSettingsButtonSection() {
-    SettingsSection({ secondaryTextColor: this.storedSecondaryTextColor }) {
-      SettingsGroupCard({ surfaceColor: this.storedSurfaceBackgroundColor }) {
+    SettingsSection({
+      secondaryTextColor: this.storedSecondaryTextColor,
+      titleLeftPadding: this.dialogContentInset()
+    }) {
+      SettingsGroupCard({
+        surfaceColor: this.storedSurfaceBackgroundColor,
+        flat: this.dialogPresentation
+      }) {
         SettingsSwitchRow({
           title: '显示主页设置按钮',
           checked: this.showSettingsButton,
@@ -445,7 +472,8 @@ export struct HomeNativeSettingsContent {
 
       SettingsFooterText({
         text: '收藏、最近关闭和主页设置按钮至少保留一项。',
-        secondaryTextColor: this.storedSecondaryTextColor
+        secondaryTextColor: this.storedSecondaryTextColor,
+        horizontalPadding: this.dialogContentInset()
       })
     }
   }
@@ -518,6 +546,10 @@ export struct HomeNativeSettingsContent {
 
   private resolveControlEnabled(): boolean {
     return this.isEnabled && !this.settingsBusy;
+  }
+
+  private dialogContentInset(): number {
+    return this.dialogPresentation ? HOME_DIALOG_CONTENT_INSET : 6;
   }
 
   private resolveDependentControlEnabled(parentEnabled: boolean): boolean {

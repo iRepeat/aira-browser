@@ -112,28 +112,22 @@ export struct CommunityUpdateSheet {
           .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         }
 
-        Column({ space: 10 }) {
-          Row() {
-            BrowserSheetActionButton({
-              label: '前往下载',
-              emphasis: 'primary',
-              accentColor: this.storedAccentColor,
-              onAction: () => {
-                this.onAction('open_release_page');
-              }
-            })
-          }
-          .width('100%')
+        Row({ space: 12 }) {
+          BrowserSheetActionButton({
+            label: '前往下载',
+            emphasis: 'primary',
+            accentColor: this.storedAccentColor,
+            onAction: () => {
+              this.onAction('open_release_page');
+            }
+          })
 
-          Row() {
-            BrowserSheetActionButton({
-              label: '稍后再说',
-              onAction: () => {
-                this.onAction('dismiss');
-              }
-            })
-          }
-          .width('100%')
+          BrowserSheetActionButton({
+            label: '稍后再说',
+            onAction: () => {
+              this.onAction('dismiss');
+            }
+          })
         }
         .width('100%')
       }

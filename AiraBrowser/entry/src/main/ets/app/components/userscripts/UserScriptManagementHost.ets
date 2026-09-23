@@ -1,5 +1,6 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -31,14 +32,11 @@ import {
 } from '../../../core/navigation/BrowserNativeNavigationRequestCenter';
 import { AppServiceModeGateService } from '../../../services/settings/AppServiceModeGateService';
 import { UserScriptExportService } from '../../../services/userscripts/UserScriptExportService';
+import { DesktopDialogTier } from '../../../core/browser/BrowserDialogPresentationTokens';
 import {
-  BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY,
-  BROWSER_THEME_STORAGE_SURFACE_BACKGROUND_KEY,
-  BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY
+  BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY
 } from '../../../core/theme/BrowserThemeStorageKeys';
-import {
-  BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP
-} from '../../../core/browser/BrowserModalPresentationTokens';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 import { UserScriptDetailScreen } from './UserScriptDetailScreen';
 import { UserScriptInstallSheetContent } from './UserScriptInstallSheetContent';
 import { UserScriptManualUrlDialog } from './UserScriptManualUrlDialog';
@@ -55,10 +53,6 @@ import {
 } from '../../../core/userscripts/UserScriptManualSourceEditCompletionSignal';
 import { UserScriptExternalImportRuntime } from '../../../core/userscripts/UserScriptExternalImportRuntime';
 import { BrowserWindowRuntime } from '../../runtime/BrowserWindowRuntime';
-import {
-  AppWindowModalLayout,
-  AppWindowModalLayoutService
-} from '../../../services/layout/AppWindowModalLayoutService';
 
 export type UserScriptManagementPresentationMode = 'page' | 'native_tab';
 type UserScriptManagementActiveSurface = UserScriptManagementSheet | 'install';
@@ -77,10 +71,6 @@ export struct UserScriptManagementHost {
 
   @StorageProp(BROWSER_THEME_STORAGE_PAGE_BACKGROUND_KEY)
   private storedPageBackgroundColor: string = DEFAULT_THEME_PALETTE.light.pageBackground;
-  @StorageProp(BROWSER_THEME_STORAGE_SURFACE_BACKGROUND_KEY)
-  private storedSurfaceBackgroundColor: string = '#FFFFFF';
-  @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY)
-  private storedPrimaryTextColor: string = '#111318';
   @StorageLink(USER_SCRIPT_MANUAL_SOURCE_EDIT_COMPLETION_REVISION_KEY)
   @Watch('handleManualSourceEditCompletionRevisionChanged')
   private manualSourceEditCompletionRevision: number = 0;
@@ -97,10 +87,7 @@ export struct UserScriptManagementHost {
   @State private selectedScriptId: string = '';
   @State private detailState: UserScriptDetailState = this.managementSession.detailSnapshot('');
   @State private manualUrlDraft: string = '';
-  @State private nativeModalViewportWidthVp: number = 0;
-  @State private nativeModalViewportHeightVp: number = 0;
   @State private manualSourceInstallClaimToken: string = '';
-  private readonly modalLayoutService: AppWindowModalLayoutService = new AppWindowModalLayoutService();
   private manualSourceEditWindowId: string = '';
   private manualSourceEditSurface: UserScriptManagementPresentationMode = 'page';
   private manualSourceEditDataScope: string = '';
@@ -111,6 +98,7 @@ export struct UserScriptManagementHost {
     this.consumePendingExternalImport();
   };
   private manualUrlDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: UserScriptManualUrlDialog({
       urlDraft: $manualUrlDraft,
       onConfirm: () => {
@@ -121,6 +109,7 @@ export struct UserScriptManagementHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true
   });
 
@@ -229,19 +218,13 @@ export struct UserScriptManagementHost {
 
   @Builder
   private buildNativeTabSurface() {
-    Stack({ alignContent: Alignment.Center }) {
+    Column() {
       this.buildManagementContent()
-
-      if (this.activeSurfaceVisible) {
-        this.buildNativeModalSurface()
-      }
     }
     .width('100%')
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
-    .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      this.updateNativeModalViewport(newArea);
-    })
+    .bindSheet($$this.activeSurfaceVisible, this.buildActiveSurface(), this.buildNativeTabSheetOptions())
   }
 
   @Builder
@@ -334,7 +317,6 @@ export struct UserScriptManagementHost {
     if (this.activeSurface === 'riskConsent') {
       UserScriptRiskConsentSheet({
         state: this.managementSnapshot.riskConsent,
-        fillAvailableHeight: this.presentationMode === 'native_tab',
         layoutMode: this.presentationMode === 'native_tab' ? 'large_screen' : 'phone',
         onAccept: () => {
           this.managementSession.action(UserScriptManagementAction.acceptRiskConsent());
@@ -348,7 +330,6 @@ export struct UserScriptManagementHost {
         results: this.managementSnapshot.updateResults,
         checking: this.managementSnapshot.updateChecking,
         updating: this.managementSnapshot.updateInstalling,
-        fillAvailableHeight: this.presentationMode === 'native_tab',
         layoutMode: this.presentationMode === 'native_tab' ? 'large_screen' : 'phone',
         onUpdateSelected: () => {
           this.managementSession.action(UserScriptManagementAction.installAvailableUpdates());
@@ -385,59 +366,26 @@ export struct UserScriptManagementHost {
     }
   }
 
-  @Builder
-  private buildNativeModalSurface() {
-    Stack({ alignContent: Alignment.Center }) {
-      Button()
-        .width('100%')
-        .height('100%')
-        .type(ButtonType.Normal)
-        .backgroundColor(this.storedPrimaryTextColor)
-        .opacity(0.18)
-        .accessibilityText('关闭用户脚本弹窗')
-        .onClick(() => {
-          this.dismissActiveSurface(this.manualSourceInstallClaimToken);
-        })
-
-      Column() {
-        this.buildActiveSurface()
-      }
-      .width(this.resolveNativeModalLayout().width)
-      .height(this.resolveNativeModalLayout().height)
-      .backgroundColor(this.storedSurfaceBackgroundColor)
-      .borderRadius(BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP)
-      .clip(true)
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(40)
-  }
-
-  private resolveNativeModalLayout(): AppWindowModalLayout {
-    const viewportWidth = this.nativeModalViewportWidthVp > 0 ? this.nativeModalViewportWidthVp : 752;
-    const viewportHeight = this.nativeModalViewportHeightVp > 0 ? this.nativeModalViewportHeightVp : 652;
+  private buildNativeTabSheetOptions(): SheetOptions {
     const installSurface = this.activeSurface === 'install';
-    return this.modalLayoutService.resolveModal({
-      viewportWidth: viewportWidth,
-      viewportHeight: viewportHeight,
-      preferredWidth: installSurface ? viewportWidth * 0.72 : 560,
-      preferredHeight: installSurface ? viewportHeight * 0.88 : 520,
-      softMinWidth: 420,
-      maxWidth: 720,
-      softMinHeight: 0,
-      maxHeight: viewportHeight * 0.9
-    });
+    return applyDesktopDialogSheetChrome({
+      preferType: SheetType.BOTTOM,
+      height: SheetSize.FIT_CONTENT,
+      dragBar: false,
+      showClose: false,
+      onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
+        if (!this.isInstallCommitBusy()) {
+          dismissDialogAction.dismiss();
+        }
+      },
+      onDisappear: () => {
+        this.handleActiveSurfaceDisappear();
+      }
+    }, this.resolveNativeTabDialogTier(), true, installSurface);
   }
 
-  private updateNativeModalViewport(area: Area): void {
-    const width = Number(area.width);
-    const height = Number(area.height);
-    if (Number.isFinite(width) && width > 0 && width !== this.nativeModalViewportWidthVp) {
-      this.nativeModalViewportWidthVp = width;
-    }
-    if (Number.isFinite(height) && height > 0 && height !== this.nativeModalViewportHeightVp) {
-      this.nativeModalViewportHeightVp = height;
-    }
+  private resolveNativeTabDialogTier(): DesktopDialogTier {
+    return this.activeSurface === 'install' ? 'l' : 'm';
   }
 
   private activateManagementSession(): void {

@@ -1,5 +1,6 @@
 import { AiraAdditionalBackupIntervalDays } from '../../../common/models/AiraSyncModels';
 import {
+  resolveCenteredDialogControllerWidth,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   CenteredDialogSurface,
   resolveCenteredDialogSurfaceColor,
@@ -66,6 +67,7 @@ import {
   BrowserFeatureSheetHeader,
   BrowserImmersiveSheetLayout
 } from '../browser/BrowserModalBottomSheet';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 interface SyncAdditionalBackupIntervalOption {
   days: AiraAdditionalBackupIntervalDays;
@@ -139,6 +141,7 @@ export struct SyncAdditionalBackupHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.progressInProgress) {
         dismissDialogAction.dismiss();
@@ -216,12 +219,12 @@ export struct SyncAdditionalBackupHost {
     .width('100%')
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
-    .bindSheet($$this.frequencySheetVisible, this.buildFrequencySheet(), {
+    .bindSheet($$this.frequencySheetVisible, this.buildFrequencySheet(), applyDesktopDialogSheetChrome({
       preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
       height: SheetSize.LARGE,
       dragBar: !this.desktopPresentation,
       showClose: true
-    })
+    }, 'm', this.desktopPresentation))
   }
 
   @Builder

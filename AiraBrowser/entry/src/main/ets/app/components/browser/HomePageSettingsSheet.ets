@@ -177,6 +177,7 @@ export struct HomePageSettingsContent {
         isEnabled: true,
         iconAppearanceEnabled: !this.privateModeVisible,
         wallpaperLabel: this.wallpaperState.modeTitle,
+        dialogPresentation: this.layoutMode === 'large_screen',
         onOpenWallpaperSettings: () => {
           this.activeView = 'wallpaper';
           this.refreshWallpaperState();

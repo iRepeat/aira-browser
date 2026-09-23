@@ -1,12 +1,10 @@
 import {
-  BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP
-} from '../../../core/browser/BrowserModalPresentationTokens';
+  DESKTOP_DIALOG_ENTER_DURATION_MS,
+  DesktopDialogTier
+} from '../../../core/browser/BrowserDialogPresentationTokens';
+import { DesktopDialogWidthViewModel } from '../../../core/browser/DesktopDialogWidthViewModel';
 import { BrowserLargeScreenModalHeader } from './BrowserLargeScreenModalHeader';
 import { BrowserModalBottomOverlay } from './BrowserModalBottomSheet';
-import {
-  AppWindowModalLayout,
-  AppWindowModalLayoutService
-} from '../../../services/layout/AppWindowModalLayoutService';
 
 export type BrowserAdaptiveModalLayoutMode = 'phone' | 'large_screen';
 
@@ -28,12 +26,7 @@ export struct BrowserAdaptiveModalOverlay {
   @Prop phoneEnterOffsetY: number = 48;
   @Prop animationDurationMs: number = 220;
   @Prop zIndexValue: number = 220;
-  @Prop desktopWidth: Length = '82%';
-  @Prop desktopHeight: Length = '72%';
-  @Prop desktopMinWidth: number = 520;
-  @Prop desktopMaxWidth: number = 720;
-  @Prop desktopMinHeight: number = 400;
-  @Prop desktopMaxHeight: number = 620;
+  @Prop tier: DesktopDialogTier = 'm';
   onDismiss: () => void = () => {};
   onDidDismiss: () => void = () => {};
   refreshAction: () => void = () => {};
@@ -46,7 +39,8 @@ export struct BrowserAdaptiveModalOverlay {
   private largeScreenDismissTimer: number = -1;
   private largeScreenDismissRequested: boolean = false;
   private largeScreenDismissCompletionPending: boolean = false;
-  private readonly modalLayoutService: AppWindowModalLayoutService = new AppWindowModalLayoutService();
+  private readonly desktopDialogWidthViewModel: DesktopDialogWidthViewModel =
+    new DesktopDialogWidthViewModel();
 
   aboutToAppear(): void {
     this.syncVisible();
@@ -130,19 +124,14 @@ export struct BrowserAdaptiveModalOverlay {
           .layoutWeight(1)
         }
         .backgroundColor($r('app.color.surface_floating_background'))
-        .borderRadius(BROWSER_LARGE_SCREEN_MODAL_CORNER_RADIUS_VP)
+        .borderRadius(this.resolveDesktopCornerRadius())
         .clip(true)
+        .shadow({ radius: 28, color: '#21101420', offsetX: 0, offsetY: 8 })
         .opacity(this.largeScreenPresentationVisible ? 1 : 0)
-        .scale({
-          x: this.largeScreenPresentationVisible ? 1 : 0.97,
-          y: this.largeScreenPresentationVisible ? 1 : 0.97
-        })
-        .animation({ duration: this.animationDurationMs, curve: Curve.EaseOut })
-        .width(this.resolveDesktopLayout().width)
-        .height(this.resolveDesktopLayout().height)
-        .transition(TransitionEffect.scale({ x: 0.97, y: 0.97 })
-          .combine(TransitionEffect.opacity(0))
-          .animation({ duration: this.animationDurationMs, curve: Curve.EaseOut }))
+        .animation({ duration: DESKTOP_DIALOG_ENTER_DURATION_MS, curve: Curve.EaseOut })
+        .width(this.resolveDesktopWidth())
+        .height(this.resolveDesktopHeight())
+        .constraintSize({ maxHeight: this.resolveDesktopHeight() })
         .hitTestBehavior(this.largeScreenPresentationVisible ? HitTestMode.BLOCK_HIERARCHY : HitTestMode.None)
         .keyboardShortcut(FunctionKey.ESC, [], (): void => {
           if (this.dismissOnOutsideTap) {
@@ -162,39 +151,19 @@ export struct BrowserAdaptiveModalOverlay {
     })
   }
 
-  private resolveDesktopLayout(): AppWindowModalLayout {
-    const viewportWidth = this.viewportWidthVp;
-    const viewportHeight = this.viewportHeightVp;
-    return this.modalLayoutService.resolveModal({
-      viewportWidth: viewportWidth,
-      viewportHeight: viewportHeight,
-      preferredWidth: this.resolvePreferredExtent(this.desktopWidth, viewportWidth, 0.82),
-      preferredHeight: this.resolvePreferredExtent(this.desktopHeight, viewportHeight, 0.72),
-      softMinWidth: this.desktopMinWidth,
-      maxWidth: this.desktopMaxWidth,
-      softMinHeight: this.desktopMinHeight,
-      maxHeight: this.desktopMaxHeight
-    });
+  private resolveDesktopWidth(): number {
+    return this.desktopDialogWidthViewModel.resolve(
+      this.tier, this.viewportWidthVp, this.viewportHeightVp).widthVp;
   }
 
-  private resolvePreferredExtent(value: Length, viewportExtent: number, fallbackRatio: number): number {
-    if (typeof value === 'number') {
-      return Math.max(1, value);
-    }
-    if (typeof value === 'string') {
-      const normalizedValue = value.trim();
-      if (normalizedValue.endsWith('%')) {
-        const percentage = Number(normalizedValue.substring(0, normalizedValue.length - 1));
-        if (Number.isFinite(percentage) && percentage > 0) {
-          return viewportExtent * percentage / 100;
-        }
-      }
-      const absoluteValue = Number(normalizedValue);
-      if (Number.isFinite(absoluteValue) && absoluteValue > 0) {
-        return absoluteValue;
-      }
-    }
-    return viewportExtent * fallbackRatio;
+  private resolveDesktopHeight(): number {
+    return this.desktopDialogWidthViewModel.resolve(
+      this.tier, this.viewportWidthVp, this.viewportHeightVp).maxHeightVp;
+  }
+
+  private resolveDesktopCornerRadius(): number {
+    return this.desktopDialogWidthViewModel.resolve(
+      this.tier, this.viewportWidthVp, this.viewportHeightVp).cornerRadiusVp;
   }
 
   private isViewportMeasured(): boolean {

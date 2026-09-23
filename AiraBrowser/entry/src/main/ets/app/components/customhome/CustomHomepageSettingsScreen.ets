@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -98,6 +99,7 @@ import {
 import { CustomHomepageRemoteUrlDialog } from './CustomHomepageRemoteUrlDialog';
 import { CustomHomepageSettingsPageBinding } from '../../../core/customhome/CustomHomepageSettingsPageBinding';
 import { CustomHomepageEnvironmentService } from '../../../services/customhome/CustomHomepageEnvironmentService';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 const CUSTOM_HOMEPAGE_SITE_ICON_CACHE_LIMIT: number = 24;
 const CUSTOM_HOMEPAGE_SITE_ICON_NETWORK_PREFETCH_LIMIT: number = 4;
 type RemoteHomepageWarmupPurpose = 'add' | 'refresh';
@@ -192,6 +194,7 @@ export struct CustomHomepageSettingsScreen {
   private remoteHomepageRefreshFinishedCount: number = 0;
   private remoteHomepageRefreshSucceededCount: number = 0;
   private remoteHomepageUrlDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: CustomHomepageRemoteUrlDialog({
       urlDraft: $remoteHomepageUrlDraft,
       errorText: $remoteHomepageUrlError,
@@ -207,6 +210,7 @@ export struct CustomHomepageSettingsScreen {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true
   });
   private remoteHomepageProgressDialogController: CustomDialogController = new CustomDialogController({
@@ -224,6 +228,7 @@ export struct CustomHomepageSettingsScreen {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.remoteHomepageProgressInProgress) {
         dismissDialogAction.dismiss();
@@ -353,7 +358,7 @@ export struct CustomHomepageSettingsScreen {
     .onAreaChange((_oldArea: Area, _newArea: Area) => {
       this.refreshPreviewWindowViewport();
     })
-    .bindSheet($$this.homepageInfoSheetVisible, this.buildHomepageInfoSheet(), {
+    .bindSheet($$this.homepageInfoSheetVisible, this.buildHomepageInfoSheet(), applyDesktopDialogSheetChrome({
       // Embedded on large screen: center the info sheet instead of a bottom sheet.
       preferType: this.presentationMode === 'embedded' ? SheetType.CENTER : SheetType.BOTTOM,
       height: SheetSize.FIT_CONTENT,
@@ -362,7 +367,7 @@ export struct CustomHomepageSettingsScreen {
       onDisappear: () => {
         this.handleHomepageInfoSheetDisappear();
       }
-    })
+    }, 'm', this.presentationMode === 'embedded'))
   }
 
   @Builder

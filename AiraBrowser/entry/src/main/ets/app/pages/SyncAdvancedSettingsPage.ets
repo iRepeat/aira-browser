@@ -1,5 +1,6 @@
 import router from '@ohos.router';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -143,6 +144,7 @@ struct SyncAdvancedSettingsPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
   private syncResultDialogController: CustomDialogController = new CustomDialogController({
     builder: SyncResultDialog({
@@ -155,6 +157,7 @@ struct SyncAdvancedSettingsPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
   });
   private syncProgressDialogOpen: boolean = false;
   private syncProgressTipTimer: number = -1;
@@ -181,6 +184,7 @@ struct SyncAdvancedSettingsPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.syncFloatingInProgress) {
         dismissDialogAction.dismiss();

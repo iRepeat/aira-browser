@@ -33,9 +33,9 @@ import {
   SyncExperienceSelectionKind
 } from './SyncExperienceSelectionDialog';
 import {
+  resolveCenteredDialogControllerWidth,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
-  resolveCenteredDialogSurfaceColor,
-  resolveWideCenteredDialogWidth
+  resolveCenteredDialogSurfaceColor
 } from '../common/CenteredDialogSurface';
 import { SyncContentSwitchCard } from './SyncContentSwitchCard';
 import {
@@ -55,6 +55,7 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { SettingsContentKind } from '../../../core/settings/SettingsContentLayoutPolicy';
 import { AiraRenderableIconId } from '../../../core/resources/GeneratedAiraIconCatalog';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const DEFAULT_SYNC_EXPERIENCE_STATE: SyncExperienceViewState = createDefaultSyncExperienceViewState();
 
@@ -165,7 +166,7 @@ export struct SyncExperienceScreen {
     customStyle: false,
     // The controller caps its own box at 400 vp by default; widen the box too, or the
     // 560 vp content is laid out against a narrower box and gets clipped.
-    width: resolveWideCenteredDialogWidth(),
+    width: resolveCenteredDialogControllerWidth('l'),
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
@@ -230,7 +231,7 @@ export struct SyncExperienceScreen {
     .width('100%')
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
-    .bindSheet($$this.phoneSheetVisible, this.buildActiveSheet(), {
+    .bindSheet($$this.phoneSheetVisible, this.buildActiveSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: SheetSize.LARGE,
       dragBar: true,
@@ -243,7 +244,7 @@ export struct SyncExperienceScreen {
         this.activeSheetVisible = false;
         this.finishActiveSelectionDismissal();
       }
-    })
+    }, 'm'))
   }
 
   @Builder

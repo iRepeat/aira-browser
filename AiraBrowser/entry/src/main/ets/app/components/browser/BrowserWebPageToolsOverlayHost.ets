@@ -20,6 +20,7 @@ import {
   BrowserWebPageToolsOverlayAction,
   BrowserWebPageToolsSheetType
 } from '../../../core/browser/BrowserWebPageToolsCoordinator';
+import { DesktopDialogTier } from '../../../core/browser/BrowserDialogPresentationTokens';
 import {
   BrowserDesktopSiteMode
 } from '../../../services/web/BrowserUserAgentService';
@@ -150,12 +151,7 @@ export struct BrowserWebPageToolsLargeScreenOverlayHost {
         title: this.resolveDialogTitle(),
         animationDurationMs: WEB_PAGE_TOOLS_OVERLAY_ANIMATION_DURATION_MS,
         zIndexValue: BROWSER_MODAL_BOTTOM_OVERLAY_Z_INDEX,
-        desktopWidth: '76%',
-        desktopHeight: this.resolveDesktopDialogHeight(),
-        desktopMinWidth: 520,
-        desktopMaxWidth: 680,
-        desktopMinHeight: this.resolveDesktopDialogMinHeight(),
-        desktopMaxHeight: this.resolveDesktopDialogMaxHeight(),
+        tier: this.resolveDesktopDialogTier(),
         onDismiss: () => this.onAction({ type: 'dismiss' })
       }) {
         BrowserWebPageToolsContent({
@@ -185,21 +181,10 @@ export struct BrowserWebPageToolsLargeScreenOverlayHost {
     return '站点信息';
   }
 
-  private resolveDesktopDialogHeight(): Length {
+  private resolveDesktopDialogTier(): DesktopDialogTier {
     if (this.sheetType === 'userAgentPreset') {
-      return '76%';
+      return 'l';
     }
-    if (this.sheetType === 'desktopSiteMode') {
-      return 420;
-    }
-    return 380;
-  }
-
-  private resolveDesktopDialogMinHeight(): number {
-    return this.sheetType === 'userAgentPreset' ? 420 : 360;
-  }
-
-  private resolveDesktopDialogMaxHeight(): number {
-    return this.sheetType === 'userAgentPreset' ? 620 : 460;
+    return 'm';
   }
 }

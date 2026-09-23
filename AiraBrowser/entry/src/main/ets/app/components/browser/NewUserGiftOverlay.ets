@@ -32,12 +32,7 @@ export struct NewUserGiftOverlay {
       phoneSheetAlignment: Alignment.Center,
       animationDurationMs: FEATURE_GATE_OVERLAY_ANIMATION_DURATION_MS,
       zIndexValue: BROWSER_MODAL_BOTTOM_OVERLAY_Z_INDEX,
-      desktopWidth: '70%',
-      desktopHeight: 460,
-      desktopMinWidth: 480,
-      desktopMaxWidth: 560,
-      desktopMinHeight: 420,
-      desktopMaxHeight: 520,
+      tier: 's',
       onDismiss: () => {
         this.onAction('dismiss');
       }

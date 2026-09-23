@@ -65,12 +65,7 @@ export struct BrowserWifiQrResultOverlay {
       visible: this.externallyControlled ? this.presentationVisible : this.visible,
       layoutMode: this.layoutMode,
       title: 'Wi-Fi 信息',
-      desktopWidth: '70%',
-      desktopHeight: 390,
-      desktopMinWidth: 500,
-      desktopMaxWidth: 620,
-      desktopMinHeight: 360,
-      desktopMaxHeight: 430,
+      tier: 'm',
       onDismiss: () => {
         this.requestClose();
       }
@@ -127,9 +122,8 @@ export struct BrowserWifiQrResultOverlay {
             )
           }
 
-          Column({ space: 10 }) {
+          Row({ space: 12 }) {
             BrowserSheetActionButton({
-              stacked: true,
               label: '复制密码',
               emphasis: 'primary',
               actionEnabled: this.credentials.password.length > 0,
@@ -140,7 +134,6 @@ export struct BrowserWifiQrResultOverlay {
             })
 
             BrowserSheetActionButton({
-              stacked: true,
               label: '关闭',
               emphasis: 'secondary',
               onAction: () => {

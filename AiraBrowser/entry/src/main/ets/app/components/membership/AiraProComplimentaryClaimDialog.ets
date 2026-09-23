@@ -61,9 +61,8 @@ export struct AiraProComplimentaryClaimDialog {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
 
-        Column({ space: 8 }) {
+        Row({ space: 12 }) {
           BrowserSheetActionButton({
-            stacked: true,
             label: this.resolveActionText(),
             emphasis: 'primary',
             actionEnabled: this.state.complimentaryClaim.actionEnabled,
@@ -80,7 +79,6 @@ export struct AiraProComplimentaryClaimDialog {
           })
 
           BrowserSheetActionButton({
-            stacked: true,
             label: '取消',
             buttonHeight: 44,
             fontSize: 15,

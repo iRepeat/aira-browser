@@ -1,5 +1,6 @@
 import { SyncExperienceActionOutcome } from '../../../core/sync/SyncExperienceCoordinator';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -80,6 +81,7 @@ export struct SyncMasterControlSection {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.progressInProgress) {
         dismissDialogAction.dismiss();

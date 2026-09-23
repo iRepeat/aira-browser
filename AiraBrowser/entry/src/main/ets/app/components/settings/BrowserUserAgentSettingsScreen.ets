@@ -72,6 +72,7 @@ import {
   BrowserImmersiveSheetLayout,
   BrowserSheetActionButton
 } from '../browser/BrowserModalBottomSheet';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const BROWSER_USER_AGENT_CUSTOM_RADIO_GROUP: string = 'browser-user-agent-custom-list';
 const BROWSER_USER_AGENT_DELETE_SWIPE_WIDTH: number = 88;
@@ -198,7 +199,7 @@ export struct BrowserUserAgentSettingsScreen {
       .width('100%')
       .height('100%')
       .backgroundColor(this.storedPageBackgroundColor)
-      .bindSheet($$this.customUserAgentSheetVisible, this.buildCustomUserAgentSheet(), {
+      .bindSheet($$this.customUserAgentSheetVisible, this.buildCustomUserAgentSheet(), applyDesktopDialogSheetChrome({
         preferType: this.useCenteredSheet ? SheetType.CENTER : SheetType.BOTTOM,
         height: SheetSize.LARGE,
         dragBar: !this.useCenteredSheet,
@@ -206,7 +207,7 @@ export struct BrowserUserAgentSettingsScreen {
         onDisappear: () => {
           this.customUserAgentSheetVisible = false;
         }
-      })
+      }, 's', this.useCenteredSheet))
     }
   }
 

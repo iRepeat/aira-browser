@@ -108,6 +108,7 @@ import { BrowserToolbarCustomizationScreen } from './BrowserToolbarCustomization
 import {
   CustomHomepageSettingsPageBinding
 } from '../../../core/customhome/CustomHomepageSettingsPageBinding';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 interface EmbeddedSettingsRouteParams extends BrowserBoundaryRouteState {
   providerId?: string;
@@ -232,7 +233,7 @@ export struct SettingsEmbeddedDetailPanel {
       }
       .width('100%')
       .height('100%')
-      .bindSheet($$this.userScriptSheetVisible, this.buildUserScriptActiveSheet(), {
+      .bindSheet($$this.userScriptSheetVisible, this.buildUserScriptActiveSheet(), applyDesktopDialogSheetChrome({
         // Large-screen consent/update sheets use the same centered presentation.
         preferType: this.shellFamily === 'large_screen' ? SheetType.CENTER : SheetType.BOTTOM,
         height: this.shellFamily === 'large_screen' ? SheetSize.FIT_CONTENT : SheetSize.LARGE,
@@ -241,7 +242,7 @@ export struct SettingsEmbeddedDetailPanel {
         onDisappear: () => {
           this.handleUserScriptSheetDisappear();
         }
-      })
+      }, 'm', this.shellFamily === 'large_screen'))
     }
   }
 

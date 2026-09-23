@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aira 桌面居中弹窗 · 视觉草稿 v2（macOS 取向）</title>
+<style>
+  :root{
+    color-scheme: light;
+    --accent:#0A59F7;
+    --label:#0A0A0C;
+    --label-75:rgba(10,10,12,.72);
+    --label-55:rgba(10,10,12,.55);
+    --label-45:rgba(10,10,12,.42);
+    --hairline:rgba(0,0,0,.10);
+    --hairline-soft:rgba(0,0,0,.07);
+    --fill-ctrl:#ECEDEF;
+    --fill-group:#F2F3F5;
+    --danger:#E03127; --danger-fill:#FFD8D5;
+    --field-border:#D9D9DE;
+    --win-bg:#ECECEC;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-font-smoothing:antialiased}
+  body{
+    margin:0;padding:40px 24px 96px;
+    background:#E4E6EA;
+    color:var(--label);
+    font:13px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+    letter-spacing:-.006em;
+  }
+  main{max-width:1060px;margin:0 auto}
+  h1{font-size:22px;font-weight:700;margin:0 0 6px;letter-spacing:-.018em}
+  .lede{margin:0;color:var(--label-55);max-width:820px;font-size:13px}
+  h2{font-size:14px;font-weight:600;margin:52px 0 4px;padding-top:22px;border-top:1px solid var(--hairline)}
+  h2 .num{color:var(--accent);margin-right:8px;font-weight:700}
+  .note{margin:0 0 18px;color:var(--label-55);max-width:860px}
+  code{font:12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8A3D00;
+    background:rgba(0,0,0,.05);padding:1px 4px;border-radius:3px}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;
+    background:rgba(0,0,0,.07);color:var(--label-55);vertical-align:middle}
+  .tag.mac{background:rgba(10,89,247,.12);color:#0A50E0}
+
+  /* ============ macOS 窗口外壳（舞台） ============ */
+  .win{
+    border-radius:12px;overflow:hidden;background:#fff;
+    border:.5px solid rgba(0,0,0,.20);
+    box-shadow:0 1px 2px rgba(0,0,0,.12),0 20px 44px rgba(0,0,0,.20);
+  }
+  .win-bar{
+    height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;
+    background:#ECECEC;
+    border-bottom:.5px solid rgba(0,0,0,.13);
+  }
+  .tl{width:12px;height:12px;border-radius:50%;display:block;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.16)}
+  .tl.r{background:#FF5F57}.tl.y{background:#FEBC2E}.tl.g{background:#28C840}
+  .win-title{flex:1;text-align:center;font-size:13px;font-weight:600;color:var(--label-75);
+    margin-right:52px}
+  .win-body{position:relative;background:#F2F2F2;padding:48px 30px 54px;
+    display:flex;justify-content:center;align-items:flex-start}
+  .win-page{position:absolute;inset:26px 30px;pointer-events:none}
+  .bar{height:11px;border-radius:4px;background:rgba(0,0,0,.075);margin-bottom:12px}
+  .win-scrim{position:absolute;inset:0;background:rgba(0,0,0,.11)}
+
+  /* ============ 对话框（参考图语言） ============ */
+  .mac{
+    position:relative;width:520px;background:#fff;border-radius:24px;
+    box-shadow:0 8px 28px rgba(16,20,32,.13),0 2px 6px rgba(16,20,32,.07);
+    overflow:hidden;
+  }
+  .mac-head{padding:24px 24px 0}
+  .mac-head h3{margin:0;font-size:19px;font-weight:700;line-height:1.35;color:var(--label);letter-spacing:-.012em}
+  .mac-head p{margin:10px 0 0;font-size:13.5px;line-height:1.5;color:var(--label-75)}
+  .mac-body{padding:20px 24px 0;display:flex;flex-direction:column;gap:16px}
+  .mac-body:last-child{padding-bottom:24px}
+  .mac-sec{margin:0;font-size:12.5px;font-weight:600;color:var(--label-55)}
+  .mac-group{background:var(--fill-group);border-radius:16px;overflow:hidden}
+  .mac-row{display:flex;align-items:center;gap:10px;padding:0 14px;cursor:default}
+  .mac-row+.mac-row{border-top:1px solid rgba(0,0,0,.055)}
+  .mac-row.one{height:34px}
+  .mac-row.two{align-items:flex-start;padding:9px 14px}
+  .mac-row .t{flex:1;font-size:14px;line-height:1.45}
+  .mac-row .s{display:block;font-size:12px;line-height:1.45;color:var(--label-55);margin-top:2px}
+  .mac-row:hover{background:rgba(0,0,0,.04)}
+  .mac-foot{display:flex;gap:12px;padding:22px 24px 24px}
+  .mac-foot.stack{flex-direction:column;gap:12px}
+  .mac-foot.stack .mbtn{flex:0 0 auto;width:100%}
+
+  /* 胶囊按钮：40vp 高 · 纯色填充 · 无描边无渐变无阴影 */
+  .mbtn{
+    height:40px;padding:0 20px;border:none;border-radius:20px;flex:1;
+    background:var(--fill-ctrl);color:var(--label);
+    font:14px/1 inherit;font-family:inherit;font-weight:500;letter-spacing:0;cursor:default;
+  }
+  .mbtn:active{background:#E0E2E5}
+  .mbtn.default{background:var(--accent);color:#fff}
+  .mbtn.default:active{background:#0A50E0}
+  .mbtn.danger{background:var(--danger-fill);color:var(--danger)}
+  .mbtn.sm{flex:0 0 auto;height:30px;padding:0 14px;border-radius:15px;font-size:13px}
+
+  /* 复选框 / 单选框 17vp */
+  .mchk,.mrad{width:17px;height:17px;flex:none;position:relative;
+    border:1.5px solid rgba(0,0,0,.26);background:#FFF}
+  .mchk{border-radius:4px}
+  .mrad{border-radius:50%}
+  .mchk.on,.mrad.on{
+    border-color:var(--accent);background:var(--accent);
+  }
+  .mchk.on::after{content:"";position:absolute;left:5px;top:2.5px;width:4px;height:7.5px;
+    border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
+  .mrad.on::after{content:"";position:absolute;left:50%;top:50%;width:5px;height:5px;
+    margin:-2.5px 0 0 -2.5px;border-radius:50%;background:#fff}
+
+  /* 文本框：白底 + 描边 + 圆角 12；聚焦蓝环 */
+  .mform{display:flex;align-items:center;gap:12px}
+  .mform .lb{width:80px;text-align:right;font-size:14px;color:var(--label-55)}
+  .mfield{flex:1;height:36px;display:flex;align-items:center;padding:0 12px;font-size:14px;
+    background:#fff;border:1px solid var(--field-border);border-radius:12px}
+  .mfield.focus{outline:none;border:2px solid var(--accent);box-shadow:0 0 0 4px rgba(10,89,247,.18)}
+  .mfield .ph{color:var(--label-45)}
+
+  /* ============ 三种风格对比小样 ============ */
+  .trio{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+  .trio figure{margin:0;flex:1 1 300px;max-width:330px}
+  .trio figcaption{margin-top:9px;font-size:12px;color:var(--label-55);line-height:1.45}
+  .trio figcaption b{color:var(--label);font-weight:600}
+  .pill{display:flex;align-items:center;justify-content:center;height:44px;border-radius:22px;
+    background:#ECEDEF;font-size:15px;font-weight:500}
+  .pill.blue{background:var(--accent);color:#fff}
+  .webbtn{height:36px;min-width:80px;padding:0 18px;border-radius:10px;border:1px solid rgba(0,0,0,.15);
+    background:transparent;font:14px/1 inherit;font-family:inherit;font-weight:500;color:var(--label)}
+  .webbtn.blue{background:var(--accent);border-color:var(--accent);color:#fff}
+  .shadowcard{box-shadow:0 12px 32px rgba(16,20,32,.18),0 2px 6px rgba(16,20,32,.10)}
+
+  /* ============ 宽度阶梯 ============ */
+  .ladder{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .tier{background:#fff;border:.5px solid rgba(0,0,0,.13);border-radius:10px;padding:13px 14px;
+    display:flex;flex-direction:column;gap:5px}
+  .tier .k{font-size:11px;font-weight:700;color:var(--accent)}
+  .tier .v{font-size:18px;font-weight:700;letter-spacing:-.02em}
+  .tier .u{font-size:11px;color:var(--label-55);line-height:1.45}
+
+  /* ============ 跟手弹窗（沿用已冻结的菜单标准） ============ */
+  .toolbar{display:flex;gap:6px;align-items:center;position:relative;background:#EDEDED;
+    border:.5px solid rgba(0,0,0,.13);border-radius:9px;padding:6px;width:fit-content}
+  .tbtn{height:26px;padding:0 11px;border-radius:6px;border:.5px solid transparent;background:transparent;
+    font:13px/1 inherit;font-family:inherit;color:var(--label-75)}
+  .tbtn.active{background:#fff;border-color:rgba(0,0,0,.13);color:var(--label)}
+  .menu{position:absolute;top:44px;left:6px;width:236px;background:#F7F7F7;
+    border:.5px solid rgba(0,0,0,.16);border-radius:8px;padding:5px;
+    box-shadow:0 6px 20px rgba(0,0,0,.22);z-index:2}
+  .mrow{height:26px;border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:13px}
+  .mrow:hover{background:rgba(0,0,0,.06)}
+  .mrow.on{background:var(--accent);color:#fff}
+
+  /* ============ 对照表 ============ */
+  table{width:100%;border-collapse:collapse;background:#fff;border:.5px solid rgba(0,0,0,.13);
+    border-radius:10px;overflow:hidden;font-size:12.5px}
+  th,td{text-align:left;padding:9px 13px;border-bottom:.5px solid var(--hairline-soft);vertical-align:top}
+  th{background:var(--fill-group);font-size:11px;color:var(--label-55);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td code{font-size:11.5px}
+</style>
+</head>
+<body>
+<main>
+
+  <h1>Aira 桌面居中弹窗 · 视觉草稿 v2</h1>
+  <p class="lede">v1 的观感偏"网页"，这版把风格基线换成 <b>macOS 原生（AppKit 取向）</b>。
+    所有尺寸按 1vp ≈ 1px 真实绘制，未缩放。数值口径见 <code>docs/aira-desktop-dialog-design-spec.md</code>。</p>
+
+  <!-- ============ ① ============ -->
+  <h2><span class="num">①</span>同一个弹窗，三种风格 <span class="tag">先看差别</span></h2>
+  <p class="note">同一句标题、同一个动作，只换容器规范。左边是现在代码里的手机式弹窗，中间是 v1 草稿（网页感），右边是这版的 macOS 取向。</p>
+  <div class="trio">
+
+    <figure>
+      <div class="mac shadowcard" style="width:100%;border-radius:28px;padding:22px 20px 18px">
+        <p style="margin:0 0 12px;font-size:20px;font-weight:700;text-align:center">清除浏览数据</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="pill blue">清除</div>
+          <div class="pill">取消</div>
+        </div>
+      </div>
+      <figcaption><b>手机感（现状）</b><br>半径 28 · 标题 20 Bold 居中 · 按钮 44vp 全宽胶囊竖向堆叠 · 无描边</figcaption>
+    </figure>
+
+    <figure>
+        <div class="mac shadowcard" style="width:100%;border-radius:16px;padding:0">
+        <div style="height:52px;display:flex;align-items:center;padding:0 12px 0 24px;border-bottom:1px solid rgba(0,0,0,.12)">
+          <span style="flex:1;font-size:17px;font-weight:500">清除浏览数据</span>
+          <span style="width:32px;height:32px;border-radius:8px;background:#ECEDEF;display:flex;align-items:center;justify-content:center;font-size:13px">✕</span>
+        </div>
+        <div style="padding:24px;display:flex;justify-content:flex-end;gap:10px">
+          <button class="webbtn">取消</button>
+          <button class="webbtn blue">清除</button>
+        </div>
+      </div>
+      <figcaption><b>网页感（v1 草稿）</b><br>半径 16 · 标题 17 左对齐 + 圆角方底 ✕ · 按钮 36vp 圆角 10 纯色填充 · 大而散的阴影</figcaption>    </figure>
+
+    <figure>
+      <div class="mac" style="width:100%">
+        <div class="mac-head" style="padding-bottom:14px">
+          <h3>清除浏览数据</h3>
+          <p>时间范围适用于历史记录和最近关闭。</p>
+        </div>
+        <div class="mac-foot" style="margin-top:0;padding-top:0;border-top:none">
+          <button class="mbtn">取消</button>
+          <button class="mbtn default">清除</button>
+        </div>
+      </div>
+      <figcaption><b>macOS 取向（v2）</b><br>半径 12 + 0.5px 描边 · 标题 13 Semibold 左对齐、无 ✕ · 按钮 24vp 圆角 5 纯色填充 + 0.5px 描边 · 收敛的多层阴影</figcaption>
+    </figure>
+
+  </div>
+
+  <!-- ============ ② ============ -->
+  <h2><span class="num">②</span>macOS 原生 · 对话框解剖 <span class="tag mac">半径 12</span></h2>
+  <p class="note">放进真实的窗口语境里看：macOS 弹窗浮在窗口内容之上，靠 <b>0.5px 描边 + 多层柔和阴影</b> 分离，而不是靠重遮罩。
+    模态压暗很轻（约 11%），因为原生模态靠阴影和阴影外的"失活"表达层级。</p>
+  <div class="win">
+    <div class="win-bar">
+      <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+      <span class="win-title">编辑快捷方式</span>
+    </div>
+    <div class="win-body">
+      <div class="win-page">
+        <div class="bar" style="width:140px"></div>
+        <div class="bar" style="width:300px;height:34px;background:rgba(0,0,0,.05)"></div>
+        <div class="bar" style="width:220px"></div>
+        <div class="bar" style="width:340px"></div>
+      </div>
+      <div class="win-scrim"></div>
+      <div class="mac" style="width:440px">
+        <div class="mac-head">
+          <h3>编辑快捷方式</h3>
+          <p>名称和网址会显示在主页的快捷方式卡片上。</p>
+        </div>
+        <div class="mac-body" style="gap:10px">
+          <div class="mform">
+            <span class="lb">名称：</span>
+            <span class="mfield">Aira 社区</span>
+          </div>
+          <div class="mform">
+            <span class="lb">网址：</span>
+            <span class="mfield focus">community.aira.browser</span>
+          </div>
+        </div>
+        <div class="mac-foot">
+          <button class="mbtn">取消</button>
+          <button class="mbtn default">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px">
+    <b>关于右上角 ✕：</b>macOS 原生 alert 和 sheet 都<b>没有</b> ✕ ——「取消」按钮加上 Esc / ⌘. 就是关闭路径，标题区保持干净。
+    v1 那个"圆角方形底 + hover 变灰"的 ✕ 是网页对话框的特征。这版去掉了；若你更看重鼠标可达性要保留，
+    正确做法是 11px 纯字形、无底色、hover 只加深颜色。
+  </p>
+
+  <!-- ============ ③ ============ -->
+  <h2><span class="num">③</span>应用示例：清除浏览数据 <span class="tag mac">M 档 520vp</span></h2>
+  <p class="note">真实文案、真实项数（4 行时间范围 + 6 行数据类型），来自 <code>ClearBrowsingDataDialog.ets</code> 与
+    <code>SettingsSiteDataClearCoordinator.buildDialogState()</code>。</p>
+  <div class="win">
+    <div class="win-bar">
+      <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+      <span class="win-title">设置 — 隐私与安全</span>
+    </div>
+    <div class="win-body" style="padding:40px 30px">
+      <div class="win-page">
+        <div class="bar" style="width:120px"></div>
+        <div class="bar" style="width:280px"></div>
+        <div class="bar" style="width:360px;height:30px;background:rgba(0,0,0,.05)"></div>
+        <div class="bar" style="width:200px"></div>
+      </div>
+      <div class="win-scrim"></div>
+      <div class="mac">
+        <div class="mac-head">
+          <h3>清除浏览数据</h3>
+          <p>时间范围适用于历史记录和最近关闭；Cookie、缓存、站点存储按系统 Web 能力清除全部。</p>
+        </div>
+        <div class="mac-body">
+          <p class="mac-sec">时间范围</p>
+          <div class="mac-group">
+            <div class="mac-row one"><span class="mrad"></span><span class="t">最近 1 小时</span></div>
+            <div class="mac-row one"><span class="mrad"></span><span class="t">最近 24 小时</span></div>
+            <div class="mac-row one"><span class="mrad"></span><span class="t">最近 7 天</span></div>
+            <div class="mac-row one"><span class="mrad on"></span><span class="t">全部时间</span></div>
+          </div>
+          <p class="mac-sec">数据类型</p>
+          <div class="mac-group">
+            <div class="mac-row two"><span class="mchk on"></span><span class="t">历史记录<span class="s">地址栏建议和历史页面中的访问记录</span></span></div>
+            <div class="mac-row two"><span class="mchk on"></span><span class="t">最近关闭<span class="s">主页和标签页恢复使用的最近关闭记录</span></span></div>
+            <div class="mac-row two"><span class="mchk on"></span><span class="t">Cookie<span class="s">网站登录状态和会话 Cookie</span></span></div>
+            <div class="mac-row two"><span class="mchk on"></span><span class="t">缓存<span class="s">网页资源缓存</span></span></div>
+            <div class="mac-row two"><span class="mchk on"></span><span class="t">站点存储<span class="s">网站保存的本地数据</span></span></div>
+            <div class="mac-row two"><span class="mchk on"></span><span class="t">站点权限<span class="s">已保存的相机、麦克风、位置等权限</span></span></div>
+          </div>
+        </div>
+        <div class="mac-foot">
+          <button class="mbtn">取消</button>
+          <button class="mbtn default">清除</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px">
+    内容一项没加、一项没减。相对现状改的：半径 28→12、标题 20 Bold 居中→13 Semibold 左对齐、去掉竖向全宽胶囊改 24vp 右对齐按钮、
+    补回被丢掉的说明文本、选择控件从行尾改到行首、行高 44→26（单行）/44（双行）、分组盒改用极浅填充 + 0.5px hairline。
+  </p>
+
+  <!-- ============ ④ ============ -->
+  <h2><span class="num">④</span>宽度阶梯 <span class="tag">替代 12 个裸数值</span></h2>
+  <p class="note">macOS 原生 alert 标准宽 420pt，这就是 S 档。窗口宽 &lt; 600vp 时退化为全宽；L / XL 仅窗口 ≥ 1200vp 时启用，否则降档。</p>
+  <div class="ladder">
+    <div class="tier" style="width:340px"><span class="k">XS</span><span class="v">360</span><span class="u">单行确认、短提示</span></div>
+    <div class="tier" style="width:420px"><span class="k">S</span><span class="v">420</span><span class="u">短表单、权限确认<br>对齐 macOS alert 420pt</span></div>
+    <div class="tier" style="width:520px"><span class="k">M</span><span class="v">520</span><span class="u">列表、多勾选项<br>≤ 560 上限</span></div>
+  </div>
+  <div class="ladder" style="margin-top:12px">
+    <div class="tier" style="width:640px"><span class="k">L</span><span class="v">640</span><span class="u">带内嵌面板的工作区（同步 / 代理 / 书签移动）</span></div>
+    <div class="tier" style="width:720px"><span class="k">XL</span><span class="v">720</span><span class="u">富内容（更新说明 / Pro / 小说目录）</span></div>
+  </div>
+
+  <!-- ============ ⑤ ============ -->
+  <h2><span class="num">⑤</span>跟手弹窗 <span class="tag">沿用已冻结的菜单标准</span></h2>
+  <p class="note">这一节<b>不在本次调整范围</b>：桌面临时菜单已由 <code>aira-desktop-context-menu-design-spec.md</code> 冻结
+    （容器半径 18vp、行高 44vp、hover 用 <code>HoverEffect.Highlight</code>）。这里只是示意它在 macOS 取向下的观感，
+    以及一个需要你决策的矛盾：<b>如果居中弹窗收敛到半径 12 / 24vp 按钮，菜单留在半径 18 / 44vp 行高，两套语言会打架。</b></p>
+  <div class="win" style="max-width:720px">
+    <div class="win-bar">
+      <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+      <span class="win-title">Aira</span>
+    </div>
+    <div class="win-body" style="background:#fff;padding:22px">
+      <div class="toolbar">
+        <button class="tbtn">返回</button>
+        <button class="tbtn">刷新</button>
+        <button class="tbtn active">网站版本</button>
+        <button class="tbtn">下载</button>
+        <div class="menu">
+          <div class="mrow on">桌面版（当前）</div>
+          <div class="mrow">移动版</div>
+          <div class="mrow">跟随站点默认</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ⑥ ============ -->
+  <h2><span class="num">⑥</span>差异速查（macOS 口径）</h2>
+  <table>
+    <thead><tr><th style="width:120px">项目</th><th style="width:32%">现状</th><th>macOS 取向目标</th></tr></thead>
+    <tbody>
+      <tr><td>外壳圆角</td><td>28（三处各自定义），平台默认 32</td><td><code>12</code></td></tr>
+      <tr><td>边框</td><td>无</td><td><code>0.5px</code> 描边 <code>rgba(0,0,0,.18)</code></td></tr>
+      <tr><td>阴影</td><td>原生由平台给、自绘壳完全没有</td><td>三层收敛：<code>0 1px 3px</code> + <code>0 16px 36px</code> + <code>0 34px 80px</code></td></tr>
+      <tr><td>遮罩</td><td>系统 20% 与自绘 40% 并存</td><td><code>11%</code>（原生模态靠阴影表达层级）</td></tr>
+      <tr><td>标题</td><td>20fp Bold 居中，无 ✕</td><td><code>13fp Semibold</code> 左对齐 + <code>11fp</code> 说明副标题，<b>无 ✕</b></td></tr>
+      <tr><td>正文字号 / 行高</td><td>15 / 12fp，行高 1.5</td><td><code>13fp</code> 主 / <code>11fp</code> 次，行高 <code>1.35</code></td></tr>
+      <tr><td>按钮</td><td>竖向全宽 44vp 胶囊；AlertDialog 另有 7 处强制竖向</td><td><code>24vp</code> 高、圆角 <code>5</code>、横排右对齐、微渐变 + 内高光 + 0.5px 描边；默认按钮最右</td></tr>
+      <tr><td>文本框</td><td>透明底 + 仅底边线 + 圆角 0，高 44</td><td>高 <code>22</code>、圆角 <code>5</code>、hairline + 内阴影 + 焦点环 <code>0 0 0 3.5px</code></td></tr>
+      <tr><td>选择控件</td><td>行尾，14–18vp</td><td>前置 <code>14vp</code>：复选框圆角 <code>3.5</code>、单选框实心圆 + 白点</td></tr>
+      <tr><td>列表行高</td><td>44vp 单行</td><td><code>26vp</code> 单行 / <code>44vp</code> 双行</td></tr>
+      <tr><td>分组盒</td><td>与弹窗同色，只剩 0.5vp 分割线</td><td>极浅填充 <code>#F7F7F7</code> + 0.5px hairline，圆角 <code>7</code></td></tr>
+      <tr><td>悬停</td><td>对话框内容区基本没有 hover</td><td>极轻填充 <code>rgba(0,0,0,.035)</code>，不做整块灰</td></tr>
+      <tr><td>动效</td><td>自绘 220ms 缩放 vs 平台默认</td><td>不做缩放，仅 <code>120ms</code> 淡入</td></tr>
+      <tr><td>PC 上的底部弹窗</td><td>仍有 <code>SheetType.BOTTOM</code> + <code>dragBar: true</code></td><td>禁止；改居中对话框或跟手弹窗</td></tr>
+    </tbody>
+  </table>
+
+</main>
+</body>
+</html>

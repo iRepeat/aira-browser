@@ -89,6 +89,7 @@ import {
   CustomHomepageSettingsPageBinding
 } from '../../../core/customhome/CustomHomepageSettingsPageBinding';
 import { BrowserSearchInvocationRuntime } from '../../runtime/BrowserSearchInvocationRuntime';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 type SettingsCenterSheetType = 'none' | 'huaweiLogin' | 'desktopLoginConfirm' | 'appProxyQuick';
 
@@ -320,7 +321,7 @@ export struct SettingsCenterScreen {
       this.viewportWidth = Math.max(1, Math.round(this.parseAreaDimension(newArea.width)));
       this.refreshShellLayoutState();
     })
-    .bindSheet($$this.settingsSheetVisible, this.buildSettingsSheet(), {
+    .bindSheet($$this.settingsSheetVisible, this.buildSettingsSheet(), applyDesktopDialogSheetChrome({
       // Large-screen (native tab) presents settings sheets centered, not as a
       // phone-style bottom sheet.
       preferType: this.presentationMode === 'native_tab' ? SheetType.CENTER : SheetType.BOTTOM,
@@ -330,7 +331,7 @@ export struct SettingsCenterScreen {
       onDisappear: () => {
         this.handleSettingsSheetDisappear();
       }
-    })
+    }, 'm', this.presentationMode === 'native_tab'))
   }
 
   private buildSettingsPresentationSnapshot(): SettingsCenterPresentationSnapshot {

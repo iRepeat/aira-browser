@@ -34,7 +34,7 @@ import {
   SiteIconListTarget
 } from '../../../core/siteicons/SiteIconListPresenter';
 import { SiteControlsManualOriginDialog } from './SiteControlsManualOriginDialog';
-import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
+import { resolveCenteredDialogControllerWidth,  resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 
 const SITE_CONTROLS_OVERVIEW_CARD_GAP: number = 10;
 const SITE_CONTROLS_OVERVIEW_CARD_HEIGHT: number = 88;
@@ -100,6 +100,7 @@ export struct SiteControlsManagementScreen {
   onOpenManualOrigin?: (value: string) => void;
   onClose?: () => void;
   private manualOriginDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: SiteControlsManualOriginDialog({
       addressDraft: $manualOriginDraft,
       errorText: $manualOriginError,
@@ -109,6 +110,7 @@ export struct SiteControlsManagementScreen {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true
   });
 

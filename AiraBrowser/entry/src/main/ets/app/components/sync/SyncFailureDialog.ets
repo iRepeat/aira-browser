@@ -52,9 +52,8 @@ export struct SyncFailureDialog {
       }
       .width('100%')
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '知道了',
           emphasis: 'primary',
           accentColor: this.storedAccentColor,
@@ -66,7 +65,6 @@ export struct SyncFailureDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '复制详情',
           buttonHeight: 44,
           fontSize: 15,

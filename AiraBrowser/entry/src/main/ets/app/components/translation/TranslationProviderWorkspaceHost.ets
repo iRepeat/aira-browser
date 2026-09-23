@@ -3,6 +3,7 @@ import {
   TranslationProviderTemplateId
 } from '../../../common/models/BrowserModels';
 import {
+  resolveCenteredDialogControllerWidth,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER,
   resolveCenteredDialogSurfaceColor,
@@ -85,6 +86,7 @@ export struct TranslationProviderWorkspaceHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
   });
   @StorageProp(BROWSER_THEME_STORAGE_ACCENT_KEY) private storedAccentColor: string = '#0A59F7';
   @StorageProp(BROWSER_THEME_STORAGE_PRESSED_BACKGROUND_KEY) private storedPressedBackgroundColor: string = '#DDE4EC';

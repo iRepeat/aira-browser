@@ -501,6 +501,7 @@ export struct ReaderSpeechPlayerOverlay {
   build() {
     BrowserModalBottomOverlay({
       visible: this.visible,
+      tier: 's',
       sheetHeight: READER_SPEECH_PLAYER_OVERLAY_SHEET_HEIGHT,
       enterOffsetY: READER_SPEECH_PLAYER_OVERLAY_ENTER_OFFSET_Y,
       animationDurationMs: READER_SPEECH_PLAYER_OVERLAY_ANIMATION_DURATION_MS,

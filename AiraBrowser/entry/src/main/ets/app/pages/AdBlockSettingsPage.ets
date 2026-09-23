@@ -34,6 +34,7 @@ import {
 } from '../../core/theme/BrowserThemeViewState';
 import { AppServiceModeGateService } from '../../services/settings/AppServiceModeGateService';
 import { AdBlockRiskConsentSheet } from '../components/adblock/AdBlockRiskConsentSheet';
+import { applyDesktopDialogSheetChrome } from '../components/common/DesktopDialogSheetChrome';
 
 @Entry
 @Component
@@ -116,7 +117,7 @@ struct AdBlockSettingsPage {
     .height('100%')
     .backgroundColor(this.theme.pageBackground)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .bindSheet($$this.riskConsentVisible, this.buildRiskConsentSheet(), {
+    .bindSheet($$this.riskConsentVisible, this.buildRiskConsentSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: SheetSize.LARGE,
       dragBar: true,
@@ -124,7 +125,7 @@ struct AdBlockSettingsPage {
       onDisappear: () => {
         this.handleRiskConsentDisappear();
       }
-    })
+    }, 's'))
   }
 
   @Builder

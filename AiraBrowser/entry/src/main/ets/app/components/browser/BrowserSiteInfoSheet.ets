@@ -343,9 +343,8 @@ export struct BrowserSiteInfoSheet {
 
   @Builder
   private buildSecurityReportActions() {
-    Column({ space: 12 }) {
+    Row({ space: 12 }) {
       BrowserSheetActionButton({
-        stacked: true,
         label: '站点信息',
         emphasis: 'primary',
         accentColor: this.storedAccentColor,
@@ -355,7 +354,6 @@ export struct BrowserSiteInfoSheet {
       })
 
       BrowserSheetActionButton({
-        stacked: true,
         label: '拦截日志',
         onAction: () => {
           this.onAction('open_protection_log');
@@ -363,7 +361,7 @@ export struct BrowserSiteInfoSheet {
       })
     }
     .width('100%')
-    .alignItems(HorizontalAlign.Center)
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -575,9 +573,8 @@ export struct BrowserSiteInfoSheet {
       Row() {
         BrowserSheetActionButton({
           label: '清除当前站点存储',
-          emphasis: 'primary',
+          emphasis: 'destructive',
           actionEnabled: this.snapshot.canClearCurrentSiteStorage,
-          accentColor: $r('app.color.permission_blocked'),
           onAction: () => {
             this.onAction('clear_site_data');
           }

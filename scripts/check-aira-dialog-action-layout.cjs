@@ -1,15 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
-// Dialog/sheet actions stack vertically, primary action first, and a stacked action must
-// opt out of the Row width weight.
+// One or two dialog actions sit side by side and share the row. Three or more stack,
+// primary action first, and a stacked action must opt out of the Row width weight.
 //
-// Why this exists: the app settled on stacked actions (ClientUpdateRequiredSheet, the
-// Secure DNS and proxy editors). A side-by-side pair came back in a later change, and
-// once those pairs were stacked the buttons were stretched vertically, because
-// BrowserSheetActionButton uses layoutWeight to split a Row's width and that weight is
-// the main axis - vertical inside a Column. Both mistakes are cheap to reintroduce and
-// invisible in review, so they are scanned here.
+// Why this exists: BrowserSheetActionButton uses layoutWeight to split a Row's width,
+// and that weight is the main axis. The same weight inside a Column stretches the
+// button vertically. A later rule put 1–2 actions back in a Row and kept 3+ stacked.
+// Both the stretch and a 3-across row are cheap to reintroduce, so they are scanned here.
 //
 // The scan is textual and conservative: it only inspects a container whose whole body is
 // action buttons (or a single builder call that renders them), so two-column rows that
@@ -149,12 +147,17 @@ for (const file of listEtsFiles(ROOT)) {
   const builders = readBuilders(source);
 
   for (const block of collectBlocks(lines, 'Row')) {
-    if (isPureActionBody(block.body)) {
+    if (isPureActionBody(block.body) && buttonCount(block.body) >= 3) {
       sideBySide.push(`${relative}:${block.line}`);
       continue;
     }
+    if (isPureActionBody(block.body) && /stacked: true/.test(block.body)) {
+      notStacked.push(`${relative}:${block.line} a side-by-side pair must not pass stacked: true`);
+      continue;
+    }
     const builder = wrappedBuilder(block.lines);
-    if (builder !== undefined && buttonCount(builders.get(builder) ?? '') >= 2) {
+    const builderBody = builder === undefined ? '' : (builders.get(builder) ?? '');
+    if (builder !== undefined && buttonCount(builderBody) >= 3) {
       builderSideBySide.push(`${relative}:${block.line} this.${builder}()`);
     }
   }
@@ -169,6 +172,10 @@ for (const file of listEtsFiles(ROOT)) {
   }
 
   for (const block of collectBlocks(lines, 'Column')) {
+    if (isPureActionBody(block.body) && buttonCount(block.body) === 2) {
+      sideBySide.push(`${relative}:${block.line} two actions must sit side by side`);
+      continue;
+    }
     if (isPureActionBody(block.body)) {
       if (stackedMissing(block.body)) {
         notStacked.push(`${relative}:${block.line}`);
@@ -214,7 +221,7 @@ if (!/buildSheetHeader\(\)[\s\S]*?sys\.symbol\.xmark/.test(clearContent)) {
 const inlinePanelPath = path.join(ROOT, 'app/components/settings/SettingsInlineDetailPanel.ets');
 const inlinePanelSource = fs.readFileSync(inlinePanelPath, 'utf8');
 for (const [source, label] of [[phoneSettingsSource, 'SettingsDetailPage'], [inlinePanelSource, 'SettingsInlineDetailPanel']]) {
-  const sheet = /bindSheet\(\$\$this\.clearBrowsingDataSheetVisible[\s\S]{0,400}?\}\)/.exec(source)?.[0] ?? '';
+  const sheet = /bindSheet\(\$\$this\.clearBrowsingDataSheetVisible[\s\S]{0,700}?\)\)/.exec(source)?.[0] ?? '';
   if (!/showClose: false/.test(sheet)) {
     presentationViolations.push(`${label} must let the sheet content own the close button`);
   }
@@ -253,8 +260,8 @@ function report(header, entries) {
   }
 }
 
-report('Dialog actions must stack vertically, not sit side by side:', sideBySide);
-report('A builder that renders an action pair must be stacked too:', builderSideBySide);
+report('Dialog action rows must be one or two buttons, and a pair must not stay stacked:', sideBySide);
+report('A builder that renders three or more actions must not sit in a Row:', builderSideBySide);
 report('A stacked action must pass stacked: true so it keeps its height:', notStacked);
 report('A stacked action group must put the primary action first:', wrongOrder);
 report('The phone shell must present the clear-data picker as a sheet:', presentationViolations);
@@ -263,5 +270,5 @@ if (sideBySide.length + builderSideBySide.length + notStacked.length + wrongOrde
   presentationViolations.length + builderParamViolations.length > 0) {
   process.exitCode = 1;
 } else {
-  console.log('Dialog action layout passed: actions stack, primary first, with stacked: true.');
+  console.log('Dialog action layout passed: one or two actions sit side by side; three or more stack.');
 }

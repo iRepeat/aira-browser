@@ -11,6 +11,7 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { BrowserSheetActionButton } from './BrowserModalBottomSheet';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER
@@ -69,9 +70,8 @@ struct BrowserDownloadConfirmDialog {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
 
-    Column({ space: 10 }) {
+    Row({ space: 12 }) {
       BrowserSheetActionButton({
-        stacked: true,
         label: prompt.confirmLabel,
         emphasis: 'primary',
         actionEnabled: this.fileNameDraft.trim().length > 0,
@@ -88,7 +88,6 @@ struct BrowserDownloadConfirmDialog {
       })
 
       BrowserSheetActionButton({
-        stacked: true,
         label: prompt.cancelLabel,
         buttonHeight: 44,
         fontSize: 15,
@@ -99,7 +98,7 @@ struct BrowserDownloadConfirmDialog {
     }
     .width('100%')
     .margin({ top: 16 })
-    .alignItems(HorizontalAlign.Center)
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -311,6 +310,7 @@ export struct BrowserDownloadConfirmOverlay {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
       this.handleInteractiveDismiss();
       dismissDialogAction.dismiss();

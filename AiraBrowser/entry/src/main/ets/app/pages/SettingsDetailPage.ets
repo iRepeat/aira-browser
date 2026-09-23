@@ -1,5 +1,6 @@
 import { DEFAULT_THEME_PALETTE } from '../../features/theme/palettes/DefaultThemePalette';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -103,6 +104,7 @@ import {
   SettingsDetailNavigationActionCoordinator,
   SettingsDetailNavigationActionHandlers
 } from '../router/SettingsDetailNavigationActionCoordinator';
+import { applyDesktopDialogSheetChrome } from '../components/common/DesktopDialogSheetChrome';
 
 interface SettingsDetailPageParams {
   sectionId?: string;
@@ -228,6 +230,7 @@ struct SettingsDetailPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
   private alwaysPrivateConfirmationDialogController: CustomDialogController = new CustomDialogController({
     builder: AlwaysPrivateModeConfirmationDialog({
@@ -247,6 +250,7 @@ struct SettingsDetailPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
 
   aboutToAppear(): void {
@@ -339,7 +343,7 @@ struct SettingsDetailPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.themedPageBackground)
-    .bindSheet($$this.clearBrowsingDataSheetVisible, this.buildClearBrowsingDataSheet(), {
+    .bindSheet($$this.clearBrowsingDataSheetVisible, this.buildClearBrowsingDataSheet(), applyDesktopDialogSheetChrome({
       // Phone shell: the clear-data picker is a tall bottom sheet, not a centered dialog.
       preferType: SheetType.BOTTOM,
       height: SheetSize.LARGE,
@@ -348,7 +352,7 @@ struct SettingsDetailPage {
       onDisappear: () => {
         this.clearBrowsingDataSheetVisible = false;
       }
-    })
+    }, 'l'))
   }
 
   @Builder

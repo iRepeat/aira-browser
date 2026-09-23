@@ -154,9 +154,8 @@ export struct HomeShortcutEditDialog {
           this.draft = nextDraft;
         })
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '保存',
           emphasis: 'primary',
           buttonHeight: 44,
@@ -168,7 +167,6 @@ export struct HomeShortcutEditDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,
@@ -264,9 +262,8 @@ export struct SiteReportDialog {
           this.remark = value;
         })
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '确定',
           emphasis: 'primary',
           buttonHeight: 44,
@@ -278,7 +275,6 @@ export struct SiteReportDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,
@@ -440,9 +436,8 @@ export struct DesktopShortcutNameDialog {
         .backgroundColor(this.storedControlBackgroundColor)
         .borderRadius(14)
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '安装',
           emphasis: 'primary',
           actionEnabled: !this.snapshot.iconProcessing,
@@ -455,7 +450,6 @@ export struct DesktopShortcutNameDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,
@@ -518,9 +512,8 @@ export struct BrowserShellWebPromptDialog {
           };
         })
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '确定',
           emphasis: 'primary',
           buttonHeight: 44,
@@ -532,7 +525,6 @@ export struct BrowserShellWebPromptDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,
@@ -619,9 +611,8 @@ export struct BrowserShellHttpAuthDialog {
           };
         })
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '登录',
           emphasis: 'primary',
           buttonHeight: 44,
@@ -633,7 +624,6 @@ export struct BrowserShellHttpAuthDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,

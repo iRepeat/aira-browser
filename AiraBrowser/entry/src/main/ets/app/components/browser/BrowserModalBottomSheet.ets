@@ -14,6 +14,16 @@ import { HdsImmersiveMaterialSurface } from '../common/HdsImmersiveMaterialSurfa
 import { isHdsMaterialAvailable } from '../common/HdsImmersiveMaterialTokens';
 import { resolveFloatingGlassMaterialTintForMode } from '../common/FloatingGlassMaterialTokens';
 import { BrowserSheetResponsiveLayoutViewModel } from '../../../core/browser/BrowserSheetResponsiveLayoutViewModel';
+import {
+  DESKTOP_DIALOG_ACTION_FONT_SIZE_FP,
+  DESKTOP_DIALOG_ACTION_HEIGHT_VP,
+  DESKTOP_DIALOG_DESTRUCTIVE_FILL,
+  DESKTOP_DIALOG_DESTRUCTIVE_TEXT,
+  DESKTOP_DIALOG_SECONDARY_FILL,
+  DesktopDialogTier
+} from '../../../core/browser/BrowserDialogPresentationTokens';
+import { DesktopDialogWidthViewModel } from '../../../core/browser/DesktopDialogWidthViewModel';
+import { isLargeScreenDialogShell } from '../common/DesktopDialogSheetChrome';
 
 export const BROWSER_MODAL_BOTTOM_SHEET_Z_INDEX: number = 220;
 export const BROWSER_MODAL_BOTTOM_SHEET_ENTER_OFFSET_Y: number = 48;
@@ -48,7 +58,12 @@ export struct BrowserModalBottomOverlay {
    * anchor; a centered lane presents the same content as a floating card.
    */
   @Prop sheetAlignment: Alignment = Alignment.Bottom;
+  @Prop tier: DesktopDialogTier = 'm';
   sheetHeight: Length = '';
+  @State private viewportWidthVp: number = 0;
+  @State private viewportHeightVp: number = 0;
+  private readonly desktopDialogWidthViewModel: DesktopDialogWidthViewModel =
+    new DesktopDialogWidthViewModel();
   zIndexValue: number = BROWSER_MODAL_BOTTOM_SHEET_Z_INDEX;
   animationDurationMs: number = BROWSER_MODAL_BOTTOM_SHEET_ANIMATION_DURATION_MS;
   enterOffsetY: number = BROWSER_MODAL_BOTTOM_SHEET_ENTER_OFFSET_Y;
@@ -65,7 +80,7 @@ export struct BrowserModalBottomOverlay {
   }
 
   build() {
-    Stack({ alignContent: this.sheetAlignment }) {
+    Stack({ alignContent: this.shouldPresentCentered() ? Alignment.Center : this.sheetAlignment }) {
       Stack()
         .width('100%')
         .height('100%')
@@ -86,27 +101,100 @@ export struct BrowserModalBottomOverlay {
           }
         })
 
-      Column() {
-        this.content()
+      if (this.shouldPresentCentered()) {
+        this.buildCenteredCard()
+      } else {
+        this.buildBottomCard()
       }
-      .width('100%')
-      .height(this.sheetHeight)
-      .opacity(this.presentationVisible ? 1 : 0)
-      .translate({ y: this.presentationVisible ? 0 : this.enterOffsetY })
-      .animation({
-        duration: this.animationDurationMs,
-        curve: this.presentationVisible ? 'interpolatingSpring(0, 1, 360, 30)' : Curve.EaseIn
-      })
-      .hitTestBehavior(this.presentationVisible
-        ? (this.dismissOnOutsideTap ? HitTestMode.Default : HitTestMode.BLOCK_HIERARCHY)
-        : HitTestMode.None)
     }
     .width('100%')
     .height('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      this.updateViewportSize(newArea);
+    })
     .hitTestBehavior(this.presentationVisible
       ? (this.dismissOnOutsideTap ? HitTestMode.Default : HitTestMode.Transparent)
       : HitTestMode.None)
     .zIndex(this.zIndexValue)
+  }
+
+  @Builder
+  private buildBottomCard() {
+    Column() {
+      this.content()
+    }
+    .width('100%')
+    .height(this.sheetHeight)
+    .opacity(this.presentationVisible ? 1 : 0)
+    .translate({ y: this.presentationVisible ? 0 : this.enterOffsetY })
+    .animation({
+      duration: this.animationDurationMs,
+      curve: this.presentationVisible ? 'interpolatingSpring(0, 1, 360, 30)' : Curve.EaseIn
+    })
+    .hitTestBehavior(this.presentationVisible
+      ? (this.dismissOnOutsideTap ? HitTestMode.Default : HitTestMode.BLOCK_HIERARCHY)
+      : HitTestMode.None)
+  }
+
+  @Builder
+  private buildCenteredCard() {
+    Column() {
+      this.content()
+    }
+    .width(this.resolveCenteredWidth())
+    .constraintSize({ maxHeight: this.resolveCenteredMaxHeight() })
+    .backgroundColor(this.resolveCenteredSurfaceColor())
+    .borderRadius(this.resolveCenteredRadius())
+    .clip(true)
+    .shadow({ radius: 28, color: '#21101420', offsetX: 0, offsetY: 8 })
+    .opacity(this.presentationVisible ? 1 : 0)
+    .animation({ duration: 120, curve: Curve.EaseOut })
+    .hitTestBehavior(this.presentationVisible
+      ? (this.dismissOnOutsideTap ? HitTestMode.Default : HitTestMode.BLOCK_HIERARCHY)
+      : HitTestMode.None)
+    .keyboardShortcut(FunctionKey.ESC, [], (): void => {
+      if (this.dismissOnOutsideTap) {
+        this.onDismiss();
+      }
+    })
+  }
+
+  private shouldPresentCentered(): boolean {
+    return this.sheetAlignment === Alignment.Bottom && isLargeScreenDialogShell();
+  }
+
+  private resolveCenteredWidth(): number {
+    return this.desktopDialogWidthViewModel.resolve(
+      this.tier, this.viewportWidthVp, this.viewportHeightVp).widthVp;
+  }
+
+  private resolveCenteredMaxHeight(): number {
+    return this.desktopDialogWidthViewModel.resolve(
+      this.tier, this.viewportWidthVp, this.viewportHeightVp).maxHeightVp;
+  }
+
+  private resolveCenteredRadius(): number {
+    return this.desktopDialogWidthViewModel.resolve(
+      this.tier, this.viewportWidthVp, this.viewportHeightVp).cornerRadiusVp;
+  }
+
+  private resolveCenteredSurfaceColor(): ResourceColor {
+    const storedColor = AppStorage.get<string>(BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY);
+    if (storedColor === undefined || storedColor.length === 0) {
+      return $r('app.color.surface_floating_background');
+    }
+    return storedColor;
+  }
+
+  private updateViewportSize(area: Area): void {
+    const width = Number(area.width);
+    const height = Number(area.height);
+    if (Number.isFinite(width) && width > 0 && width !== this.viewportWidthVp) {
+      this.viewportWidthVp = width;
+    }
+    if (Number.isFinite(height) && height > 0 && height !== this.viewportHeightVp) {
+      this.viewportHeightVp = height;
+    }
   }
 
   private syncVisible(): void {
@@ -299,7 +387,7 @@ export struct BrowserSheetActionButton {
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY) private storedPrimaryTextColor: string = '#111318';
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY) private storedSecondaryTextColor: string = '#5F6875';
   @Prop label: string = '';
-  @Prop emphasis: 'primary' | 'secondary' = 'secondary';
+  @Prop emphasis: 'primary' | 'secondary' | 'destructive' = 'secondary';
   @Prop actionEnabled: boolean = true;
   @Prop accentColor: ResourceColor = '';
   @Prop textColor: ResourceColor = '';
@@ -314,46 +402,47 @@ export struct BrowserSheetActionButton {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      FloatingGlassMaterialSurface({
-        surfaceWidth: '100%',
-        surfaceHeight: this.buttonHeight,
-        surfaceRadius: this.buttonHeight / 2,
-        tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
-        overlayColor: this.resolveOverlayColor(),
-        overlayOpacity: this.emphasis === 'primary' ? 1 : 0
-      }) {
+      if (this.useFlatFill()) {
         Button() {
-          Row({ space: 8 }) {
-            if (this.loading) {
-              LoadingProgress()
-                .width(18)
-                .height(18)
-                .color(this.resolveTextColor())
-            }
-            Text(this.label)
-              .fontSize(this.fontSize)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.resolveTextColor())
-          }
-          .width('100%')
-          .height('100%')
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
+          this.buildButtonLabel()
         }
           .width('100%')
           .height('100%')
           .type(ButtonType.Normal)
-          .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
-          .borderRadius(this.buttonHeight / 2)
+          .backgroundColor(this.resolveFlatFill())
+          .borderRadius(this.resolveRenderedHeight() / 2)
           .stateEffect(this.actionEnabled)
           .enabled(this.actionEnabled)
           .onClick(() => {
             this.onAction();
           })
+      } else {
+        FloatingGlassMaterialSurface({
+          surfaceWidth: '100%',
+          surfaceHeight: this.resolveRenderedHeight(),
+          surfaceRadius: this.resolveRenderedHeight() / 2,
+          tintColor: resolveFloatingGlassMaterialTintForMode(this.storedResolvedThemeMode),
+          overlayColor: this.resolveOverlayColor(),
+          overlayOpacity: this.emphasis === 'primary' ? 1 : 0
+        }) {
+          Button() {
+            this.buildButtonLabel()
+          }
+            .width('100%')
+            .height('100%')
+            .type(ButtonType.Normal)
+            .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))
+            .borderRadius(this.resolveRenderedHeight() / 2)
+            .stateEffect(this.actionEnabled)
+            .enabled(this.actionEnabled)
+            .onClick(() => {
+              this.onAction();
+            })
+        }
       }
     }
     .width(this.fillAvailableWidth ? '100%' : this.buttonWidth)
-    .height(this.buttonHeight)
+    .height(this.resolveRenderedHeight())
     // layoutWeight splits a Row's width. It is the main-axis weight, so the same value
     // inside a Column would stretch the button vertically and blow the dialog height up;
     // stacked callers opt out and keep the fixed height instead.
@@ -361,7 +450,54 @@ export struct BrowserSheetActionButton {
     .opacity(this.resolveStackOpacity())
   }
 
+  @Builder
+  private buildButtonLabel() {
+    Row({ space: 8 }) {
+      if (this.loading) {
+        LoadingProgress()
+          .width(18)
+          .height(18)
+          .color(this.resolveTextColor())
+      }
+      Text(this.label)
+        .fontSize(this.resolveRenderedFontSize())
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.resolveTextColor())
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  private useFlatFill(): boolean {
+    return this.emphasis === 'destructive' || isLargeScreenDialogShell();
+  }
+
+  private resolveRenderedHeight(): number {
+    return this.useFlatFill() ? DESKTOP_DIALOG_ACTION_HEIGHT_VP : this.buttonHeight;
+  }
+
+  private resolveRenderedFontSize(): number {
+    return this.useFlatFill() ? DESKTOP_DIALOG_ACTION_FONT_SIZE_FP : this.fontSize;
+  }
+
+  private resolveFlatFill(): ResourceColor {
+    if (this.emphasis === 'destructive') {
+      return DESKTOP_DIALOG_DESTRUCTIVE_FILL;
+    }
+    if (this.emphasis === 'primary') {
+      return this.resolvePrimaryBackgroundColor();
+    }
+    return DESKTOP_DIALOG_SECONDARY_FILL;
+  }
+
   private resolveTextColor(): ResourceColor {
+    if (this.emphasis === 'destructive') {
+      return DESKTOP_DIALOG_DESTRUCTIVE_TEXT;
+    }
     if (this.isPrimaryDisabled()) {
       return this.storedSecondaryTextColor;
     }

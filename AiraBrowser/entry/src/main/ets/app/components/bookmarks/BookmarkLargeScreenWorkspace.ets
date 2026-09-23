@@ -1,5 +1,6 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -116,6 +117,7 @@ export struct BookmarkLargeScreenWorkspace {
   private sessionBindingRevision: number = 0;
 
   private createFolderDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: BookmarkManagerCreateFolderDialog({
       folderTitle: $newFolderTitle,
       confirm: (title: string): void => {
@@ -126,9 +128,11 @@ export struct BookmarkLargeScreenWorkspace {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true
   });
   private editNodeDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: BookmarkManagerEditNodeDialog({
       nodeTitle: $editingTitle,
       nodeUrl: $editingUrl,
@@ -142,6 +146,7 @@ export struct BookmarkLargeScreenWorkspace {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true
   });
 

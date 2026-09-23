@@ -1,5 +1,9 @@
 import { AdBlockRiskConsentSheetState } from '../../../core/adblock/AdBlockRiskConsentViewModel';
 import {
+  DESKTOP_DIALOG_PADDING_VP,
+  DESKTOP_DIALOG_TITLE_FONT_SIZE_FP
+} from '../../../core/browser/BrowserDialogPresentationTokens';
+import {
   BROWSER_THEME_STORAGE_ACCENT_KEY,
   BROWSER_THEME_STORAGE_CONTROL_BACKGROUND_KEY,
   BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY,
@@ -14,8 +18,6 @@ import {
   BrowserImmersiveSheetLayout,
   BrowserSheetActionButton
 } from '../browser/BrowserModalBottomSheet';
-import { AiraIcon } from '../common/AiraIcon';
-
 const AD_BLOCK_RISK_SHEET_MAX_WIDTH: number = 540;
 const AD_BLOCK_RISK_BODY_MAX_HEIGHT: number = 420;
 @Component
@@ -40,9 +42,10 @@ export struct AdBlockRiskConsentSheet {
     BrowserBottomSheetSurface({
       maxWidth: AD_BLOCK_RISK_SHEET_MAX_WIDTH,
       fullHeight: this.layoutMode === 'phone',
-      horizontalPadding: this.layoutMode === 'phone' ? 0 : 16,
-      topPadding: this.layoutMode === 'phone' ? 0 : 26,
-      bottomPadding: this.layoutMode === 'phone' ? 0 : 24
+      presentation: this.layoutMode === 'large_screen' ? 'flat_content' : 'bottom_sheet',
+      horizontalPadding: this.layoutMode === 'phone' ? 0 : DESKTOP_DIALOG_PADDING_VP,
+      topPadding: this.layoutMode === 'phone' ? 0 : DESKTOP_DIALOG_PADDING_VP,
+      bottomPadding: this.layoutMode === 'phone' ? 0 : DESKTOP_DIALOG_PADDING_VP
     }) {
       if (this.layoutMode === 'phone') {
         this.buildImmersivePhoneLayout()
@@ -122,22 +125,12 @@ export struct AdBlockRiskConsentSheet {
 
   @Builder
   private buildHeader() {
-    Column({ space: 8 }) {
-      AiraIcon({
-        airaIconId: 'settings.notice.userShield',
-        iconSize: 34,
-        iconColor: this.storedPrimaryTextColor
-      })
-
-      Text(this.state.title)
-        .width('100%')
-        .fontSize(21)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.storedPrimaryTextColor)
-        .textAlign(TextAlign.Center)
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Center)
+    Text(this.state.title)
+      .width('100%')
+      .fontSize(DESKTOP_DIALOG_TITLE_FONT_SIZE_FP)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(this.storedPrimaryTextColor)
+      .textAlign(TextAlign.Start)
   }
 
   @Builder
@@ -171,9 +164,8 @@ export struct AdBlockRiskConsentSheet {
     // The phone footer hosts this builder inside its own Row, so the stack lives here:
     // a stacked action keeps width 100%, and two of those laid out side by side by the
     // caller would overflow the sheet.
-    Column({ space: 10 }) {
+    Row({ space: 12 }) {
       BrowserSheetActionButton({
-        stacked: true,
         label: this.state.primaryActionLabel,
         emphasis: 'primary',
         accentColor: this.storedAccentColor,
@@ -183,7 +175,6 @@ export struct AdBlockRiskConsentSheet {
       })
 
       BrowserSheetActionButton({
-        stacked: true,
         label: this.state.secondaryActionLabel,
         onAction: () => {
           this.onDecline();

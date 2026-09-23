@@ -1,5 +1,6 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import {
+  resolveCenteredDialogControllerWidth,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   resolveCenteredDialogSurfaceColor,
   showCenteredAlertDialog
@@ -157,6 +158,7 @@ export struct BrowserDownloadManagementScreen {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
       this.downloadSettingsDialogOpen = false;
       dismissDialogAction.dismiss();

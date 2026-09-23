@@ -1,24 +1,37 @@
 import { display } from '@kit.ArkUI';
 import { BROWSER_THEME_STORAGE_FLOATING_SURFACE_KEY } from '../../../core/theme/BrowserThemeStorageKeys';
 import {
+  DESKTOP_DIALOG_ACTION_FONT_SIZE_FP,
+  DESKTOP_DIALOG_ACTION_GAP_VP,
+  DESKTOP_DIALOG_ACTION_HEIGHT_VP,
+  DESKTOP_DIALOG_CORNER_RADIUS_VP,
+  DESKTOP_DIALOG_DESTRUCTIVE_FILL,
+  DESKTOP_DIALOG_DESTRUCTIVE_TEXT,
+  DESKTOP_DIALOG_NARROW_WINDOW_VP,
+  DESKTOP_DIALOG_PADDING_VP,
+  DESKTOP_DIALOG_TITLE_FONT_SIZE_FP,
+  DesktopDialogTier
+} from '../../../core/browser/BrowserDialogPresentationTokens';
+import {
   CENTERED_DIALOG_ALERT_WIDTH_RATIO,
   CENTERED_DIALOG_MAX_WIDTH_VP,
   CenteredDialogWidthViewModel
 } from '../../../core/browser/CenteredDialogWidthViewModel';
+import { DesktopDialogWidthViewModel } from '../../../core/browser/DesktopDialogWidthViewModel';
 
 export { CENTERED_DIALOG_MAX_WIDTH_VP };
 export const CENTERED_DIALOG_HORIZONTAL_MARGIN_VP: number = 12;
 /** Width the PC/large-screen shell gives a tall centered dialog that holds a list. */
-export const CENTERED_DIALOG_WIDE_MAX_WIDTH_VP: number = 560;
-export const CENTERED_DIALOG_CORNER_RADIUS_VP: number = 28;
+export const CENTERED_DIALOG_WIDE_MAX_WIDTH_VP: number = 520;
+export const CENTERED_DIALOG_CORNER_RADIUS_VP: number = DESKTOP_DIALOG_CORNER_RADIUS_VP;
 export const CENTERED_DIALOG_CONTENT_GAP_VP: number = 16;
-export const CENTERED_DIALOG_HORIZONTAL_PADDING_VP: number = 20;
-export const CENTERED_DIALOG_TOP_PADDING_VP: number = 22;
-export const CENTERED_DIALOG_BOTTOM_PADDING_VP: number = 18;
-export const CENTERED_DIALOG_TITLE_FONT_SIZE_FP: number = 20;
-export const CENTERED_DIALOG_ACTION_GAP_VP: number = 10;
-export const CENTERED_DIALOG_ACTION_HEIGHT_VP: number = 44;
-export const CENTERED_DIALOG_ACTION_FONT_SIZE_FP: number = 15;
+export const CENTERED_DIALOG_HORIZONTAL_PADDING_VP: number = DESKTOP_DIALOG_PADDING_VP;
+export const CENTERED_DIALOG_TOP_PADDING_VP: number = DESKTOP_DIALOG_PADDING_VP;
+export const CENTERED_DIALOG_BOTTOM_PADDING_VP: number = DESKTOP_DIALOG_PADDING_VP;
+export const CENTERED_DIALOG_TITLE_FONT_SIZE_FP: number = DESKTOP_DIALOG_TITLE_FONT_SIZE_FP;
+export const CENTERED_DIALOG_ACTION_GAP_VP: number = DESKTOP_DIALOG_ACTION_GAP_VP;
+export const CENTERED_DIALOG_ACTION_HEIGHT_VP: number = DESKTOP_DIALOG_ACTION_HEIGHT_VP;
+export const CENTERED_DIALOG_ACTION_FONT_SIZE_FP: number = DESKTOP_DIALOG_ACTION_FONT_SIZE_FP;
 const CENTERED_DIALOG_WIDTH: string =
   `calc(100% - ${CENTERED_DIALOG_HORIZONTAL_MARGIN_VP * 2}vp)`;
 const CENTERED_DIALOG_TALL_HEIGHT: string = 'calc(100% - 48vp)';
@@ -32,6 +45,7 @@ const CENTERED_DIALOG_TALL_MAX_HEIGHT_VP: number = 720;
 const CENTERED_DIALOG_ALERT_WIDTH_PERCENT: Dimension = '90%';
 
 const centeredDialogWidthViewModel: CenteredDialogWidthViewModel = new CenteredDialogWidthViewModel();
+const desktopDialogWidthViewModel: DesktopDialogWidthViewModel = new DesktopDialogWidthViewModel();
 
 /**
  * One opaque surface for every centered dialog. Reads the same floating-surface
@@ -53,12 +67,87 @@ export type CenteredAlertDialogParams =
  * Resolves the AlertDialog width for the current window so a wide PC/large-screen
  * window does not stretch the alert to the whole viewport.
  */
-function resolveCenteredAlertDialogWidth(): Dimension {
+function resolveCenteredAlertDialogWidth(tier: DesktopDialogTier): Dimension {
+  if (shouldUseDesktopDialogWidth(readDisplayWidthVp())) {
+    return resolveCenteredDialogControllerWidth(tier);
+  }
   const resolved = centeredDialogWidthViewModel.resolve(readDisplayWidthVp());
   if (resolved.percentBased) {
     return CENTERED_DIALOG_ALERT_WIDTH_PERCENT;
   }
   return resolved.widthVp;
+}
+
+function resolveAlertDialogTier(params: CenteredAlertDialogParams): DesktopDialogTier {
+  const options = params as AlertDialogParamWithOptions;
+  if (options.buttons !== undefined && options.buttons.length >= 3) {
+    return 's';
+  }
+  return 'xs';
+}
+
+function isDestructiveAlertLabel(value: ResourceStr): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return value.includes('删除') || value.includes('清除') ||
+    value.includes('移除') || value.includes('不保存');
+}
+
+function styleDestructiveAlertButton(button: AlertDialogButtonBaseOptions): void {
+  if (button.value === undefined || !isDestructiveAlertLabel(button.value)) {
+    return;
+  }
+  button.backgroundColor = DESKTOP_DIALOG_DESTRUCTIVE_FILL;
+  button.fontColor = DESKTOP_DIALOG_DESTRUCTIVE_TEXT;
+}
+
+function applyAlertActionChrome(params: CenteredAlertDialogParams): void {
+  const options = params as AlertDialogParamWithOptions;
+  if (options.buttons !== undefined) {
+    const labels: string[] = [];
+    for (let index = 0; index < options.buttons.length; index++) {
+      const button = options.buttons[index];
+      styleDestructiveAlertButton(button);
+      labels.push(typeof button.value === 'string' ? button.value : '');
+    }
+    const windowWidthVp = readDisplayWidthVp();
+    const layout = desktopDialogWidthViewModel.resolve(
+      resolveAlertDialogTier(params), windowWidthVp, readDisplayHeightVp());
+    const contentWidthVp = Math.max(0, layout.widthVp - layout.paddingVp * 2);
+    const actionLayout = desktopDialogWidthViewModel.resolveActionLayout(
+      labels, contentWidthVp, windowWidthVp);
+    options.buttonDirection = actionLayout === 'stack' ?
+      DialogButtonDirection.VERTICAL : DialogButtonDirection.HORIZONTAL;
+    return;
+  }
+  const paired = params as AlertDialogParamWithButtons;
+  if (paired.primaryButton !== undefined) {
+    styleDestructiveAlertButton(paired.primaryButton);
+  }
+  if (paired.secondaryButton !== undefined) {
+    styleDestructiveAlertButton(paired.secondaryButton);
+  }
+}
+
+function shouldUseDesktopDialogWidth(windowWidthVp: number): boolean {
+  return Number.isFinite(windowWidthVp) && windowWidthVp >= DESKTOP_DIALOG_NARROW_WINDOW_VP;
+}
+
+/**
+ * Controller width for a centered dialog. CustomDialog caps its box at 400vp
+ * unless this is set. Phone and unknown windows keep the existing alert width.
+ */
+export function resolveCenteredDialogControllerWidth(tier: DesktopDialogTier = 's'): Dimension {
+  const windowWidthVp = readDisplayWidthVp();
+  if (!shouldUseDesktopDialogWidth(windowWidthVp)) {
+    const resolved = centeredDialogWidthViewModel.resolve(windowWidthVp);
+    if (resolved.percentBased) {
+      return CENTERED_DIALOG_ALERT_WIDTH_PERCENT;
+    }
+    return resolved.widthVp;
+  }
+  return desktopDialogWidthViewModel.resolve(tier, windowWidthVp, readDisplayHeightVp()).widthVp;
 }
 
 function resolveCenteredWideDialogWidth(): Dimension {
@@ -82,16 +171,27 @@ export function resolveWideCenteredDialogWidth(): Dimension {
   return resolveCenteredWideDialogWidth();
 }
 
+function readDisplayExtentVp(extentPx: number, densityPixels: number): number {
+  if (!Number.isFinite(extentPx) || extentPx <= 0 ||
+    !Number.isFinite(densityPixels) || densityPixels <= 0) {
+    return 0;
+  }
+  return extentPx / densityPixels;
+}
+
 function readDisplayWidthVp(): number {
   try {
     const defaultDisplay = display.getDefaultDisplaySync();
-    const widthPx = defaultDisplay.width;
-    const densityPixels = defaultDisplay.densityPixels;
-    if (!Number.isFinite(widthPx) || widthPx <= 0 ||
-      !Number.isFinite(densityPixels) || densityPixels <= 0) {
-      return 0;
-    }
-    return widthPx / densityPixels;
+    return readDisplayExtentVp(defaultDisplay.width, defaultDisplay.densityPixels);
+  } catch (_error) {
+    return 0;
+  }
+}
+
+function readDisplayHeightVp(): number {
+  try {
+    const defaultDisplay = display.getDefaultDisplaySync();
+    return readDisplayExtentVp(defaultDisplay.height, defaultDisplay.densityPixels);
   } catch (_error) {
     return 0;
   }
@@ -99,10 +199,12 @@ function readDisplayWidthVp(): number {
 
 /** Adds the shared centered-dialog surface without choosing the execution owner. */
 export function configureCenteredAlertDialog(params: CenteredAlertDialogParams): CenteredAlertDialogParams {
-  params.width = resolveCenteredAlertDialogWidth();
+  params.width = resolveCenteredAlertDialogWidth(resolveAlertDialogTier(params));
   params.cornerRadius = CENTERED_DIALOG_CORNER_RADIUS_VP;
   params.backgroundColor = resolveCenteredDialogSurfaceColor();
   params.backgroundBlurStyle = BlurStyle.NONE;
+  params.alignment = DialogAlignment.Center;
+  applyAlertActionChrome(params);
   return params;
 }
 
@@ -141,20 +243,35 @@ class CenteredDialogSurfaceModifier implements AttributeModifier<CommonAttribute
     // collapses to its content. Those surfaces take the same definite width the
     // AlertDialog path already resolves instead of the calc() expression. The
     // wide variant uses the PC dialog width rather than the phone alert width.
-    instance.width(this.definiteWidth ? resolveCenteredWideDialogWidth() : CENTERED_DIALOG_WIDTH)
-    if (this.fillHeight) {
-      instance.height(CENTERED_DIALOG_TALL_HEIGHT)
-      instance.constraintSize({
-        maxWidth: this.definiteWidth ? CENTERED_DIALOG_WIDE_MAX_WIDTH_VP : CENTERED_DIALOG_MAX_WIDTH_VP,
-        maxHeight: CENTERED_DIALOG_TALL_MAX_HEIGHT_VP
-      })
-    } else if (this.boundHeight) {
-      instance.constraintSize({
-        maxWidth: CENTERED_DIALOG_MAX_WIDTH_VP,
-        maxHeight: CENTERED_DIALOG_TALL_HEIGHT
-      })
+    // On a wide window the controller already owns the tier width, so capping
+    // the content at the phone maximum would clip every S+ dialog.
+    const windowWidthVp = readDisplayWidthVp();
+    if (shouldUseDesktopDialogWidth(windowWidthVp)) {
+      instance.width('100%')
+      if (this.fillHeight || this.boundHeight) {
+        const maxHeightVp = desktopDialogWidthViewModel.resolve(
+          'l', windowWidthVp, readDisplayHeightVp()).maxHeightVp;
+        if (this.fillHeight) {
+          instance.height(maxHeightVp)
+        }
+        instance.constraintSize({ maxHeight: maxHeightVp })
+      }
     } else {
-      instance.constraintSize({ maxWidth: CENTERED_DIALOG_MAX_WIDTH_VP })
+      instance.width(this.definiteWidth ? resolveCenteredWideDialogWidth() : CENTERED_DIALOG_WIDTH)
+      if (this.fillHeight) {
+        instance.height(CENTERED_DIALOG_TALL_HEIGHT)
+        instance.constraintSize({
+          maxWidth: this.definiteWidth ? CENTERED_DIALOG_WIDE_MAX_WIDTH_VP : CENTERED_DIALOG_MAX_WIDTH_VP,
+          maxHeight: CENTERED_DIALOG_TALL_MAX_HEIGHT_VP
+        })
+      } else if (this.boundHeight) {
+        instance.constraintSize({
+          maxWidth: CENTERED_DIALOG_MAX_WIDTH_VP,
+          maxHeight: CENTERED_DIALOG_TALL_HEIGHT
+        })
+      } else {
+        instance.constraintSize({ maxWidth: CENTERED_DIALOG_MAX_WIDTH_VP })
+      }
     }
     instance.borderRadius(CENTERED_DIALOG_CORNER_RADIUS_VP)
     instance.clip(true)

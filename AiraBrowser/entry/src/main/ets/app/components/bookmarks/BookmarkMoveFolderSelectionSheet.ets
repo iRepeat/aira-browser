@@ -246,12 +246,7 @@ export struct BookmarkMoveFolderSelectionOverlay {
       phoneEnterOffsetY: BOOKMARK_FOLDER_OVERLAY_ENTER_OFFSET_Y,
       animationDurationMs: BOOKMARK_FOLDER_OVERLAY_ANIMATION_DURATION_MS,
       zIndexValue: BROWSER_MODAL_BOTTOM_OVERLAY_Z_INDEX,
-      desktopWidth: '64%',
-      desktopHeight: '78%',
-      desktopMinWidth: 460,
-      desktopMaxWidth: 640,
-      desktopMinHeight: 440,
-      desktopMaxHeight: 680,
+      tier: 'm',
       onDismiss: () => {
         this.onAction({ type: 'dismiss' });
       }

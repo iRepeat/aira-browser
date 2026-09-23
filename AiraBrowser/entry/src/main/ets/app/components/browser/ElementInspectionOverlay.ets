@@ -257,6 +257,7 @@ export struct ElementInspectionOverlay {
   private buildDetailsOverlay() {
     BrowserModalBottomOverlay({
       visible: this.visible,
+      tier: 'm',
       dismissOnOutsideTap: false,
       showScrim: false,
       sheetHeight: ELEMENT_INSPECTION_SHEET_HEIGHT,

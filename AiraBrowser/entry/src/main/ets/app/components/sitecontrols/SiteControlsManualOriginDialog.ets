@@ -45,9 +45,8 @@ export struct SiteControlsManualOriginDialog {
         }
       })
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '继续',
           emphasis: 'primary',
           accentColor: this.storedAccentColor,
@@ -61,7 +60,6 @@ export struct SiteControlsManualOriginDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,

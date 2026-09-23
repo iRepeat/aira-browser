@@ -166,9 +166,8 @@ export struct TabOverviewLayoutChoiceSheet {
 
   @Builder
   private buildActionFooter() {
-    Column({ space: 12 }) {
+    Row({ space: 12 }) {
       BrowserSheetActionButton({
-        stacked: true,
         label: this.isSaving ? '应用中…' : '应用',
         emphasis: 'primary',
         actionEnabled: !this.isSaving,
@@ -179,7 +178,6 @@ export struct TabOverviewLayoutChoiceSheet {
       })
 
       BrowserSheetActionButton({
-        stacked: true,
         label: '取消',
         emphasis: 'secondary',
         actionEnabled: !this.isSaving,

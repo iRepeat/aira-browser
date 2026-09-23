@@ -1,8 +1,7 @@
 import { DEFAULT_THEME_PALETTE } from '../../features/theme/palettes/DefaultThemePalette';
 import {
-  resolveCenteredDialogSurfaceColor,
-  CENTERED_DIALOG_CORNER_RADIUS_VP,
-  showCenteredAlertDialog
+  resolveCenteredDialogControllerWidth, resolveCenteredDialogSurfaceColor,
+  CENTERED_DIALOG_CORNER_RADIUS_VP, showCenteredAlertDialog
 } from '../components/common/CenteredDialogSurface';
 import { common } from '@kit.AbilityKit';
 import { fileIo, picker } from '@kit.CoreFileKit';
@@ -110,6 +109,8 @@ import { BookmarkRootTabs } from '../components/bookmarks/BookmarkRootTabs';
 import { BookmarkManagerImmersiveHost, BookmarkManagerImmersiveLayoutContext } from '../components/bookmarks/BookmarkManagerImmersiveHost';
 import { BOOKMARK_MANAGER_ROUTE, BROWSER_SHELL_ROUTE } from '../router/AppRoutes';
 import { BROWSER_WINDOW_SAFE_TOP_INSET_STORAGE_KEY } from '../../core/browser/BrowserWindowAvoidAreaCoordinator';
+import { applyDesktopDialogSheetChrome } from '../components/common/DesktopDialogSheetChrome';
+
 
 const BOOKMARK_CONTEXT_MENU_DISMISS_DELAY_MS: number = 240;
 const BOOKMARK_IMPORT_PROGRESS_FRAME_DELAY_MS: number = 80;
@@ -214,18 +215,18 @@ struct BookmarkManagerPage {
   @State isSessionEphemeral: boolean = false;
   @LocalStorageProp(BROWSER_WINDOW_SAFE_TOP_INSET_STORAGE_KEY) private topSafeInsetVp: number = 0;
   private createFolderDialogController: CustomDialogController = new CustomDialogController({
-    builder: BookmarkManagerCreateFolderDialog({
+    alignment: DialogAlignment.Center, builder: BookmarkManagerCreateFolderDialog({
       folderTitle: $newFolderTitle,
       confirm: (title: string) => {
         this.confirmCreateFolder(title);
       }
     }),
     customStyle: false,
-    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP, width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true
   });
   private editNodeDialogController: CustomDialogController = new CustomDialogController({
-    builder: BookmarkManagerEditNodeDialog({
+    alignment: DialogAlignment.Center, builder: BookmarkManagerEditNodeDialog({
       nodeTitle: $editingTitle,
       nodeUrl: $editingUrl,
       nodeType: $editingNodeType,
@@ -235,7 +236,7 @@ struct BookmarkManagerPage {
       }
     }),
     customStyle: false,
-    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP, width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true
   });
   private bookmarkTransferProgressDialogOpen: boolean = false;
@@ -251,7 +252,7 @@ struct BookmarkManagerPage {
     alignment: DialogAlignment.Center,
     autoCancel: false,
     customStyle: false,
-    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP, width: resolveCenteredDialogControllerWidth('xs'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.bookmarkTransferInProgress) {
         dismissDialogAction.dismiss();
@@ -269,7 +270,7 @@ struct BookmarkManagerPage {
     alignment: DialogAlignment.Center,
     autoCancel: true,
     customStyle: false,
-    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    backgroundColor: resolveCenteredDialogSurfaceColor(), backgroundBlurStyle: BlurStyle.NONE, cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP, width: resolveCenteredDialogControllerWidth('xs'),
   });
   private bookmarkTransferProgressController: SyncOperationProgressController = new SyncOperationProgressController(
     (state: SyncOperationProgressUiState): void => {
@@ -371,7 +372,7 @@ struct BookmarkManagerPage {
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
     .expandSafeArea([SafeAreaType.SYSTEM, SafeAreaType.CUTOUT], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .bindSheet($$this.moveFolderSheetVisible, this.buildMoveFolderSelectionSheet(), {
+    .bindSheet($$this.moveFolderSheetVisible, this.buildMoveFolderSelectionSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: '92%',
       dragBar: false,
@@ -379,7 +380,7 @@ struct BookmarkManagerPage {
       onDisappear: () => {
         this.clearMoveFolderSelectionSheet();
       }
-    })
+    }, 'm'))
   }
   @Builder
   private buildList(layout: BookmarkManagerImmersiveLayoutContext) {

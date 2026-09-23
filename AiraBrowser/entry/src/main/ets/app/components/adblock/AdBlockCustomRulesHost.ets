@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import {
+  resolveCenteredDialogControllerWidth,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER,
   resolveCenteredDialogSurfaceColor,
@@ -104,6 +105,7 @@ export struct AdBlockCustomRulesHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
   private ruleImportDialogOpen: boolean = false;
   private ruleImportDialogController: CustomDialogController = new CustomDialogController({
@@ -117,6 +119,7 @@ export struct AdBlockCustomRulesHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.ruleImportInProgress) {
         dismissDialogAction.dismiss();

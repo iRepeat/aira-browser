@@ -1,7 +1,6 @@
 import {
   BrowserSystemSurfacePresentation,
-  BrowserSystemSurfacePresentationViewModel,
-  resolveNovelReaderSystemSurfaceLayout
+  BrowserSystemSurfacePresentationViewModel
 } from '../../../core/browser/BrowserSystemSurfacePresentationViewModel';
 import { BrowserSystemSheetSnapshot } from '../../../core/browser/BrowserTransientSurfaceCoordinator';
 import {
@@ -20,7 +19,10 @@ import {
   BrowserSessionPrivacyMode
 } from '../../../common/models/BrowserModels';
 import { BrowserAdaptiveModalOverlay } from './BrowserAdaptiveModalOverlay';
-import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
+import { DesktopDialogShell } from '../common/DesktopDialogShell';
+import { DesktopDialogTier } from '../../../core/browser/BrowserDialogPresentationTokens';
+import { resolveSystemSheetDialogTier } from '../../../core/browser/DesktopDialogSheetPolicy';
+import { resolveCenteredDialogControllerWidth,  resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 
 @Component
 export struct BrowserSystemSurfaceHost {
@@ -53,14 +55,11 @@ export struct BrowserSystemSurfaceHost {
   onDisappear: () => void = () => {};
   @BuilderParam largeScreenReadingContent: () => void = this.emptyContent;
   @State private largeScreenDialogVisible: boolean = false;
+  @State private largeScreenCenteredContentVisible: boolean = false;
+  @State private largeScreenCenteredContentTier: DesktopDialogTier = 'm';
   @State private largeScreenNovelReaderDialogVisible: boolean = false;
   @State private largeScreenNovelReaderDialogTitle: string = '';
-  @State private largeScreenNovelReaderDialogPreferredWidth: number = 600;
-  @State private largeScreenNovelReaderDialogPreferredHeight: number = 560;
-  @State private largeScreenNovelReaderDialogSoftMinWidth: number = 500;
-  @State private largeScreenNovelReaderDialogMaxWidth: number = 640;
-  @State private largeScreenNovelReaderDialogSoftMinHeight: number = 420;
-  @State private largeScreenNovelReaderDialogMaxHeight: number = 600;
+  @State private largeScreenNovelReaderDialogTier: DesktopDialogTier = 'l';
   private homeShortcutDialogOpen: boolean = false;
   private homeSettingsDialogOpen: boolean = false;
   private userScriptInstallDialogOpen: boolean = false;
@@ -85,6 +84,7 @@ export struct BrowserSystemSurfaceHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     onWillDismiss: (_dismissDialogAction: DismissDialogAction): void => {
       this.onSelectionBack();
     }
@@ -105,6 +105,7 @@ export struct BrowserSystemSurfaceHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     onWillDismiss: (_dismissDialogAction: DismissDialogAction): void => {
       this.onCloseRequested();
     }
@@ -127,6 +128,7 @@ export struct BrowserSystemSurfaceHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     onWillDismiss: (_dismissDialogAction: DismissDialogAction): void => {
       this.onCloseRequested();
     }
@@ -140,6 +142,7 @@ export struct BrowserSystemSurfaceHost {
   aboutToDisappear(): void {
     this.phoneSheetVisible = false;
     this.largeScreenDialogVisible = false;
+    this.largeScreenCenteredContentVisible = false;
     this.largeScreenNovelReaderDialogVisible = false;
     this.closeHomeShortcutDialog();
     this.closeHomeSettingsDialog();
@@ -149,9 +152,28 @@ export struct BrowserSystemSurfaceHost {
   build() {
     Column() {
       this.buildLargeScreenNovelReaderDialog()
+      this.buildLargeScreenCenteredContentDialog()
     }
     .width(0)
     .height(0)
+  }
+
+  @Builder
+  private buildLargeScreenCenteredContentDialog() {
+    DesktopDialogShell({
+      visible: this.largeScreenCenteredContentVisible,
+      tier: this.largeScreenCenteredContentTier,
+      showHeader: false,
+      fillHeight: true,
+      onDismiss: (): void => {
+        this.onCloseRequested();
+      },
+      onDidDismiss: (): void => {
+        this.handleLargeScreenCenteredContentDisappear();
+      }
+    }) {
+      this.largeScreenReadingContent()
+    }
   }
 
   @Builder
@@ -160,12 +182,7 @@ export struct BrowserSystemSurfaceHost {
       visible: this.largeScreenNovelReaderDialogVisible,
       layoutMode: 'large_screen',
       title: this.largeScreenNovelReaderDialogTitle,
-      desktopWidth: this.largeScreenNovelReaderDialogPreferredWidth,
-      desktopHeight: this.largeScreenNovelReaderDialogPreferredHeight,
-      desktopMinWidth: this.largeScreenNovelReaderDialogSoftMinWidth,
-      desktopMaxWidth: this.largeScreenNovelReaderDialogMaxWidth,
-      desktopMinHeight: this.largeScreenNovelReaderDialogSoftMinHeight,
-      desktopMaxHeight: this.largeScreenNovelReaderDialogMaxHeight,
+      tier: this.largeScreenNovelReaderDialogTier,
       onDismiss: (): void => {
         this.onCloseRequested();
       },
@@ -196,16 +213,12 @@ export struct BrowserSystemSurfaceHost {
 
   private syncPresentation(): void {
     const presentation = this.presentationViewModel.resolve(this.systemSheet, this.shellFamily);
-    const novelReaderDialogLayout = resolveNovelReaderSystemSurfaceLayout(this.systemSheet.type);
     this.phoneSheetVisible = presentation.phoneSheetVisible;
+    this.largeScreenCenteredContentTier = resolveSystemSheetDialogTier(this.systemSheet.type);
+    this.largeScreenCenteredContentVisible = presentation.largeScreenCenteredContentVisible;
     this.largeScreenDialogVisible = this.isLargeScreenDialogVisible(presentation);
     this.largeScreenNovelReaderDialogTitle = presentation.largeScreenNovelReaderDialogTitle;
-    this.largeScreenNovelReaderDialogPreferredWidth = novelReaderDialogLayout.preferredWidth;
-    this.largeScreenNovelReaderDialogPreferredHeight = novelReaderDialogLayout.preferredHeight;
-    this.largeScreenNovelReaderDialogSoftMinWidth = novelReaderDialogLayout.softMinWidth;
-    this.largeScreenNovelReaderDialogMaxWidth = novelReaderDialogLayout.maxWidth;
-    this.largeScreenNovelReaderDialogSoftMinHeight = novelReaderDialogLayout.softMinHeight;
-    this.largeScreenNovelReaderDialogMaxHeight = novelReaderDialogLayout.maxHeight;
+    this.largeScreenNovelReaderDialogTier = resolveSystemSheetDialogTier(this.systemSheet.type);
     this.largeScreenNovelReaderDialogVisible = presentation.largeScreenNovelReaderDialogVisible;
 
     if (presentation.largeScreenHomeShortcutDialogVisible) {
@@ -233,6 +246,12 @@ export struct BrowserSystemSurfaceHost {
     }
   }
 
+  private handleLargeScreenCenteredContentDisappear(): void {
+    if (!this.systemSheet.visible) {
+      this.onDisappear();
+    }
+  }
+
   private syncPrivateModeVisible(): void {
     this.currentPrivateModeVisible = this.privateModeVisible;
   }
@@ -241,7 +260,8 @@ export struct BrowserSystemSurfaceHost {
     return presentation.largeScreenHomeShortcutDialogVisible ||
       presentation.largeScreenHomeSettingsDialogVisible ||
       presentation.largeScreenUserScriptInstallDialogVisible ||
-      presentation.largeScreenNovelReaderDialogVisible;
+      presentation.largeScreenNovelReaderDialogVisible ||
+      presentation.largeScreenCenteredContentVisible;
   }
 
   private openHomeShortcutDialog(): void {

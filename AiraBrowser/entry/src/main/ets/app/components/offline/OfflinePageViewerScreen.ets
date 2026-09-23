@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -106,6 +107,7 @@ import {
 import { ReaderModeOverlay } from '../browser/ReaderModeOverlay';
 import { ReaderSpeechVoiceDialog } from '../browser/ReaderSpeechVoiceDialog';
 import { BrowserWindowRuntime } from '../../runtime/BrowserWindowRuntime';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const OFFLINE_PAGE_FIND_TAB_ID: string = 'offline-page-viewer';
 const OFFLINE_PAGE_FIND_BAR_TOP_MARGIN: number = 74;
@@ -147,6 +149,7 @@ export struct OfflinePageViewerScreen {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     autoCancel: true
   });
   private exportService: OfflinePageExportService = new OfflinePageExportService(sharedOfflinePageRepository);
@@ -298,7 +301,7 @@ export struct OfflinePageViewerScreen {
       this.offlineToolbarLayoutRevision += 1;
     })
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .bindSheet($$this.detailsSheetVisible, this.buildDetailsSheet(), {
+    .bindSheet($$this.detailsSheetVisible, this.buildDetailsSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
@@ -306,7 +309,7 @@ export struct OfflinePageViewerScreen {
       onDisappear: () => {
         this.detailsSheetVisible = false;
       }
-    })
+    }, 'm'))
   }
 
   @Builder
@@ -498,9 +501,8 @@ export struct OfflinePageViewerScreen {
         }
         .width('100%')
 
-        Column({ space: 10 }) {
+        Row({ space: 12 }) {
           BrowserSheetActionButton({
-            stacked: true,
             label: '打开原网页',
             actionEnabled: this.resolveOriginalPageUrl().length > 0,
             accentColor: this.themedAccentColor,
@@ -511,7 +513,6 @@ export struct OfflinePageViewerScreen {
           })
 
           BrowserSheetActionButton({
-            stacked: true,
             label: '复制链接',
             actionEnabled: this.resolveOriginalPageUrl().length > 0,
             accentColor: this.themedAccentColor,
@@ -656,6 +657,7 @@ export struct OfflinePageViewerScreen {
   private buildReaderSpeechPlayerOverlay() {
     BrowserModalBottomOverlay({
       visible: this.readerSpeechPlayerSheetVisible,
+      tier: 's',
       sheetHeight: OFFLINE_READER_SPEECH_PLAYER_OVERLAY_SHEET_HEIGHT,
       enterOffsetY: BROWSER_MODAL_BOTTOM_SHEET_ENTER_OFFSET_Y,
       animationDurationMs: BROWSER_MODAL_BOTTOM_SHEET_ANIMATION_DURATION_MS,

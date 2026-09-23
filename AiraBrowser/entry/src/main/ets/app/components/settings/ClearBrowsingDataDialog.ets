@@ -166,9 +166,8 @@ export struct ClearBrowsingDataContent {
 
   @Builder
   private buildActions() {
-    Column({ space: 10 }) {
+    Row({ space: 12 }) {
       BrowserSheetActionButton({
-        stacked: true,
         label: this.dialogState.confirmLabel,
         emphasis: 'primary',
         actionEnabled: this.selectedItemIds.length > 0,
@@ -181,7 +180,6 @@ export struct ClearBrowsingDataContent {
       })
 
       BrowserSheetActionButton({
-        stacked: true,
         label: '取消',
         buttonHeight: 44,
         fontSize: 15,

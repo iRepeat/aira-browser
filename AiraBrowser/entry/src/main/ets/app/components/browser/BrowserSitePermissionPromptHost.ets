@@ -8,6 +8,7 @@ import {
 } from '../../../core/browser/BrowserWebCapabilityPromptApplicationCoordinator';
 import { BrowserSheetActionButton } from './BrowserModalBottomSheet';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   CENTERED_DIALOG_SYSTEM_COMPACT_SURFACE_MODIFIER
@@ -73,6 +74,7 @@ export struct BrowserSitePermissionPromptHost {
   private dialogOpen: boolean = false;
   private decisionCommitted: boolean = false;
   private dialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: BrowserSitePermissionPromptDialog({
       presentation: $presentation,
       onAction: (action: BrowserSitePermissionPromptAction): void => this.handleAction(action)
@@ -81,6 +83,7 @@ export struct BrowserSitePermissionPromptHost {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true,
     onWillDismiss: (dismissDialogAction: DismissDialogAction): void => {
       if (this.decisionCommitted) {

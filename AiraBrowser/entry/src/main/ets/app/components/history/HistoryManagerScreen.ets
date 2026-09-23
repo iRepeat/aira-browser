@@ -103,6 +103,7 @@ import {
   BROWSER_MODAL_BOTTOM_SHEET_ANIMATION_DURATION_MS,
   BROWSER_MODAL_BOTTOM_SHEET_OPEN_DELAY_MS
 } from '../browser/BrowserModalBottomSheet';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const HISTORY_CONTEXT_MENU_DISMISS_DELAY_MS: number = 240;
 const HISTORY_SELECTION_MENU_PANEL_WIDTH: number = 224;
@@ -349,7 +350,7 @@ export struct HistoryManagerScreen {
       [SafeAreaType.SYSTEM, SafeAreaType.CUTOUT],
       [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]
     )
-    .bindSheet($$this.visitDetailsSheetVisible, this.buildVisitDetailsSheet(), {
+    .bindSheet($$this.visitDetailsSheetVisible, this.buildVisitDetailsSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: SheetSize.LARGE,
       dragBar: true,
@@ -357,7 +358,7 @@ export struct HistoryManagerScreen {
       onDisappear: () => {
         this.visitDetailsSheetVisible = false;
       }
-    })
+    }, 'm'))
   }
 
   @Builder

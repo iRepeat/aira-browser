@@ -27,6 +27,7 @@ export struct HistoryBookmarkFolderSelectionOverlay {
   build() {
     if (this.visible) {
       BrowserModalBottomOverlay({
+        tier: 'm',
         visible: this.sheetVisible,
         sheetHeight: HISTORY_BOOKMARK_FOLDER_OVERLAY_SHEET_HEIGHT,
         enterOffsetY: BROWSER_MODAL_BOTTOM_SHEET_ENTER_OFFSET_Y,

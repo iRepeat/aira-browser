@@ -108,32 +108,22 @@ export struct BottomToolbarGuideSheet {
         .width('100%')
         .alignItems(HorizontalAlign.Center)
 
-        // Stacked, not side by side: the two actions are a commitment and its
-        // escape hatch, so they read better as a full-width pair. Each button is
-        // wrapped in a Row because the shared button sizes itself with
-        // layoutWeight, which would stretch it vertically inside a Column.
-        Column({ space: 10 }) {
-          Row() {
-            BrowserSheetActionButton({
-              label: this.state.primaryActionTitle,
-              emphasis: 'primary',
-              accentColor: this.storedAccentColor,
-              onAction: () => {
-                this.onAction('acknowledge');
-              }
-            })
-          }
-          .width('100%')
+        Row({ space: 12 }) {
+          BrowserSheetActionButton({
+            label: this.state.primaryActionTitle,
+            emphasis: 'primary',
+            accentColor: this.storedAccentColor,
+            onAction: () => {
+              this.onAction('acknowledge');
+            }
+          })
 
-          Row() {
-            BrowserSheetActionButton({
-              label: this.state.secondaryActionTitle,
-              onAction: () => {
-                this.onAction('never_show_again');
-              }
-            })
-          }
-          .width('100%')
+          BrowserSheetActionButton({
+            label: this.state.secondaryActionTitle,
+            onAction: () => {
+              this.onAction('never_show_again');
+            }
+          })
         }
         .width('100%')
       }

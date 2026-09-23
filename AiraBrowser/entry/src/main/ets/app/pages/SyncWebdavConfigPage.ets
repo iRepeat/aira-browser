@@ -3,6 +3,7 @@ import {
   AiraSyncProviderKind
 } from '../../common/models/AiraSyncModels';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -76,6 +77,7 @@ import {
 import { SyncResultDialog } from '../components/sync/SyncResultDialog';
 import { SyncFormField } from '../components/sync/SyncFormFields';
 import { AppServiceModeGateService } from '../../services/settings/AppServiceModeGateService';
+import { applyDesktopDialogSheetChrome } from '../components/common/DesktopDialogSheetChrome';
 
 @Entry
 @Component
@@ -158,6 +160,7 @@ struct SyncWebdavConfigPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
   private syncResultDialogController: CustomDialogController = new CustomDialogController({
     builder: SyncResultDialog({
@@ -170,6 +173,7 @@ struct SyncWebdavConfigPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
   });
   private syncProgressDialogOpen: boolean = false;
   private syncProgressTipTimer: number = -1;
@@ -195,6 +199,7 @@ struct SyncWebdavConfigPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       if (!this.syncFloatingInProgress) {
         dismissDialogAction.dismiss();
@@ -262,7 +267,7 @@ struct SyncWebdavConfigPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
-    .bindSheet($$this.showHuaweiLoginPanel, this.buildHuaweiLoginSheet(), {
+    .bindSheet($$this.showHuaweiLoginPanel, this.buildHuaweiLoginSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
@@ -270,7 +275,7 @@ struct SyncWebdavConfigPage {
       onDisappear: () => {
         this.showHuaweiLoginPanel = false;
       }
-    })
+    }, 'm'))
   }
 
   @Builder

@@ -1019,7 +1019,7 @@ import {
 import { ReadingWindowBrightnessService } from '../../services/reading/ReadingWindowBrightnessService';
 import { ReaderSpeechPlayerOverlay } from '../components/browser/ReaderSpeechPlayerScreen';
 import { ReaderSpeechVoiceDialog } from '../components/browser/ReaderSpeechVoiceDialog';
-import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../components/common/CenteredDialogSurface';
+import { resolveCenteredDialogControllerWidth,  resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../components/common/CenteredDialogSurface';
 import {
   WebpageTranslationTargetLanguageOverlay
 } from '../components/translation/WebpageTranslationTargetLanguageSheet';
@@ -1223,6 +1223,8 @@ import {
   BrowserSystemSheetType,
   TabMutationCommitOptions
 } from '../../core/browser/BrowserShellRuntimeContracts';
+import { resolveSystemSheetDialogTier } from '../../core/browser/DesktopDialogSheetPolicy';
+import { applyDesktopDialogSheetChrome } from '../components/common/DesktopDialogSheetChrome';
 
 const BROWSER_KEYBOARD_AVOID_OWNER_CUSTOM_HOMEPAGE: string = 'custom-homepage-web';
 const BROWSER_KEYBOARD_AVOID_OWNER_ROOT_BOTTOM_ADDRESS_INPUT: string = 'root-bottom-address-input';
@@ -5452,6 +5454,7 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     autoCancel: true
   });
   private largeScreenWebZoomDialogController: CustomDialogController = new CustomDialogController({
@@ -5473,6 +5476,7 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
     autoCancel: true,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       this.browserLargeScreenShellIntentApplication.handleWebZoomDialogDismissed();
@@ -5499,9 +5503,11 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: false
   });
   private editHomeShortcutDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: HomeShortcutEditDialog({
       draft: $homeShortcutEditDraft,
       confirm: () => {
@@ -5515,9 +5521,11 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true
   });
   private desktopShortcutNameDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: DesktopShortcutNameDialog({
       snapshot: $webAppInstallDialogSnapshot,
       onAction: (action: WebAppInstallDialogAction): void => {
@@ -5528,6 +5536,7 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true,
     onWillDismiss: (dismissDialogAction: DismissDialogAction) => {
       void this.webAppInstallCoordinator.handleDialogDismissed();
@@ -5535,6 +5544,7 @@ struct BrowserShellPage {
     }
   });
   private webPromptDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: BrowserShellWebPromptDialog({
       presentation: $webPromptDialogPresentation,
       confirm: (value: string) => {
@@ -5548,9 +5558,11 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: false
   });
   private httpAuthDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: BrowserShellHttpAuthDialog({
       presentation: $httpAuthDialogPresentation,
       confirm: (username: string, password: string) => {
@@ -5564,9 +5576,11 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: false
   });
   private siteReportDialogController: CustomDialogController = new CustomDialogController({
+    alignment: DialogAlignment.Center,
     builder: SiteReportDialog({
       selectedReasonId: $siteReportReasonId,
       remark: $siteReportRemark,
@@ -5579,6 +5593,7 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     autoCancel: true
   });
   private documentViewerFileInfoDialogController: CustomDialogController = new CustomDialogController({
@@ -5590,6 +5605,7 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     autoCancel: true
   });
   private readerSpeechVoiceDialogController: CustomDialogController = new CustomDialogController({
@@ -5604,6 +5620,7 @@ struct BrowserShellPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('m'),
     autoCancel: true
   });
   @State addressBarTabSwipePreview?: BrowserTabPreviewState = undefined;
@@ -6647,7 +6664,7 @@ struct BrowserShellPage {
     .keyboardShortcut('a', [ModifierKey.CTRL, ModifierKey.SHIFT], () => {
       this.browserKeyboardShortcutCoordinator.handleShortcut('toggleTabsOverview');
     })
-    .bindSheet($$this.phoneSystemSheetVisible, this.buildSystemSheet(), {
+    .bindSheet($$this.phoneSystemSheetVisible, this.buildSystemSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: resolveReadingExperienceSystemSheetHeight(this.browserTransientSurfaceSnapshot.systemSheet.type),
       title: resolveReadingExperienceSystemSheetTitle(this.browserTransientSurfaceSnapshot.systemSheet.type),
@@ -6659,7 +6676,7 @@ struct BrowserShellPage {
       onDisappear: () => {
         this.handleSystemSheetDisappear();
       }
-    })
+    }, resolveSystemSheetDialogTier(this.browserTransientSurfaceSnapshot.systemSheet.type)))
     .onKeyPreIme((event: KeyEvent): boolean =>
       this.browserLargeScreenShellIntentApplication.handleWebZoomShortcutKey(event))
     .onKeyEvent((event: KeyEvent): boolean => {

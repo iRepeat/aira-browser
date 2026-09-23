@@ -8,6 +8,7 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { BrowserSheetActionButton } from '../browser/BrowserModalBottomSheet';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER
@@ -58,9 +59,8 @@ struct ClientUpdateRequiredDialog {
           .textAlign(TextAlign.Start)
       }
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '前往升级',
           emphasis: 'primary',
           accentColor: this.storedAccentColor,
@@ -68,7 +68,6 @@ struct ClientUpdateRequiredDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '继续使用本地功能',
           textColor: this.storedAccentColor,
           onAction: (): void => this.commit('continue_local')
@@ -118,6 +117,7 @@ export struct ClientUpdateRequiredOverlay {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
 
   aboutToAppear(): void {

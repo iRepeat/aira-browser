@@ -54,6 +54,7 @@ import {
   RECORD_LIST_ROW_RADIUS
 } from '../common/RecordListTokens';
 import { WebsiteRecordRow } from '../common/WebsiteRecordRow';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const EMPTY_PANEL_STATE: CrossDeviceTabPresencePanelState = {
   status: 'loading',
@@ -154,12 +155,12 @@ export struct BrowserCrossDeviceTabsSheet {
     .padding({ left: 16, right: 16 })
     .justifyContent(FlexAlign.Start)
     .alignItems(HorizontalAlign.Start)
-    .bindSheet($$this.loginSheetVisible, this.buildHuaweiLoginSheet(), {
+    .bindSheet($$this.loginSheetVisible, this.buildHuaweiLoginSheet(), applyDesktopDialogSheetChrome({
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
       showClose: false,
       preferType: SheetType.BOTTOM
-    })
+    }, 'm'))
   }
 
   @Builder

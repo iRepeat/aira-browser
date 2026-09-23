@@ -21,7 +21,7 @@ import { KeyboardShortcutsContent } from './KeyboardShortcutsContent';
 import { AppIconSettingsContent } from './AppIconSettingsContent';
 import { ThemePaletteSettingsContent } from './ThemePaletteSettingsContent';
 import { BrowserTabletInterfaceModeSettingsContent } from './BrowserTabletInterfaceModeSettingsContent';
-import { resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
+import { resolveCenteredDialogControllerWidth,  resolveCenteredDialogSurfaceColor, CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 import { BrowserTrackingProtectionSettingsContent } from './BrowserTrackingProtectionSettingsContent';
 import {
   SiteControlsExternalNavigationDefaultContent
@@ -215,6 +215,7 @@ export struct SettingsLargeScreenShell {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
 
   build() {

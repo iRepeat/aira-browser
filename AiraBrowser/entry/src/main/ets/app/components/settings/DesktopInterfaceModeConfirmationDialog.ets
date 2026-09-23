@@ -39,9 +39,8 @@ export struct DesktopInterfaceModeConfirmationDialog {
 
       this.buildAcceptanceRow()
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '继续切换',
           emphasis: 'primary',
           actionEnabled: this.accepted,
@@ -55,7 +54,6 @@ export struct DesktopInterfaceModeConfirmationDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,

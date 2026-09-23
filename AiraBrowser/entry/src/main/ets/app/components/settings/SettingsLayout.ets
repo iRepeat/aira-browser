@@ -130,6 +130,7 @@ export struct SettingsSection {
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY) private storedSecondaryTextColor: string = '#5F6875';
   @Prop title: ResourceStr = '';
   @Prop secondaryTextColor: ResourceColor = '';
+  @Prop titleLeftPadding: number = SETTINGS_SECTION_TITLE_LEFT_PADDING;
   @BuilderParam content: () => void = this.emptyContent;
 
   build() {
@@ -137,7 +138,8 @@ export struct SettingsSection {
       if (`${this.title}`.length > 0) {
         SettingsSectionTitle({
           title: this.title,
-          secondaryTextColor: this.resolveSecondaryTextColor()
+          secondaryTextColor: this.resolveSecondaryTextColor(),
+          leftPadding: this.titleLeftPadding
         })
       }
       this.content()
@@ -181,6 +183,10 @@ export struct SettingsGroupCard {
   @Prop surfaceColor: ResourceColor = '';
   @Prop fullHeight: boolean = false;
   @Prop desktopPresentation: boolean = false;
+  // A dialog whose surface is already the card color cannot show this wrapper.
+  // Flatten it and bleed the row padding back out so text shares the section baseline.
+  @Prop flat: boolean = false;
+  @Prop horizontalBleed: number = 0;
   @BuilderParam content: () => void = this.emptyContent;
 
   build() {
@@ -189,15 +195,19 @@ export struct SettingsGroupCard {
     }
     .width('100%')
     .height(this.fullHeight ? '100%' : '')
-    .padding({
-      left: SETTINGS_GROUP_HORIZONTAL_PADDING,
-      right: SETTINGS_GROUP_HORIZONTAL_PADDING,
-      top: SETTINGS_GROUP_VERTICAL_PADDING,
-      bottom: SETTINGS_GROUP_VERTICAL_PADDING
+    .margin({
+      left: -this.horizontalBleed,
+      right: -this.horizontalBleed
     })
-    .backgroundColor(this.resolveSurfaceColor())
-    .borderRadius(this.desktopPresentation ? 8 : SETTINGS_GROUP_CORNER_RADIUS)
-    .clip(true)
+    .padding({
+      left: this.flat ? 0 : SETTINGS_GROUP_HORIZONTAL_PADDING,
+      right: this.flat ? 0 : SETTINGS_GROUP_HORIZONTAL_PADDING,
+      top: this.flat ? 0 : SETTINGS_GROUP_VERTICAL_PADDING,
+      bottom: this.flat ? 0 : SETTINGS_GROUP_VERTICAL_PADDING
+    })
+    .backgroundColor(this.flat ? Color.Transparent : this.resolveSurfaceColor())
+    .borderRadius(this.flat ? 0 : (this.desktopPresentation ? 8 : SETTINGS_GROUP_CORNER_RADIUS))
+    .clip(!this.flat)
   }
 
   private resolveSurfaceColor(): ResourceColor {
@@ -213,6 +223,7 @@ export struct SettingsGroupCard {
 export struct SettingsGroupDivider {
   @StorageProp(BROWSER_THEME_STORAGE_DIVIDER_KEY) private storedDividerColor: string = '#E3E8EF';
   @Prop dividerColor: ResourceColor = '';
+  @Prop horizontalMargin: number = SETTINGS_GROUP_DIVIDER_HORIZONTAL_MARGIN;
 
   build() {
     Divider()
@@ -220,8 +231,8 @@ export struct SettingsGroupDivider {
       .height(1)
       .color(this.resolveDividerColor())
       .margin({
-        left: SETTINGS_GROUP_DIVIDER_HORIZONTAL_MARGIN,
-        right: SETTINGS_GROUP_DIVIDER_HORIZONTAL_MARGIN
+        left: this.horizontalMargin,
+        right: this.horizontalMargin
       })
   }
 
@@ -235,6 +246,7 @@ export struct SettingsFooterText {
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_SECONDARY_KEY) private storedSecondaryTextColor: string = '#5F6875';
   @Prop text: ResourceStr = '';
   @Prop secondaryTextColor: ResourceColor = '';
+  @Prop horizontalPadding: number = SETTINGS_SECTION_TITLE_LEFT_PADDING;
 
   build() {
     Text(this.text)
@@ -242,7 +254,7 @@ export struct SettingsFooterText {
       .fontSize(13)
       .lineHeight(18)
       .fontColor(this.resolveSecondaryTextColor())
-      .padding({ left: 6, right: 6 })
+      .padding({ left: this.horizontalPadding, right: this.horizontalPadding })
   }
 
   private resolveSecondaryTextColor(): ResourceColor {

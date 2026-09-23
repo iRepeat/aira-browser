@@ -1,4 +1,8 @@
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
+import {
+  DESKTOP_DIALOG_PADDING_VP,
+  DESKTOP_DIALOG_TITLE_FONT_SIZE_FP
+} from '../../../core/browser/BrowserDialogPresentationTokens';
 import { UserScriptUpdateResult } from '../../../services/userscripts/UserScriptUpdateService';
 import {
   BROWSER_THEME_STORAGE_ACCENT_KEY,
@@ -47,10 +51,10 @@ export struct UserScriptUpdateSheet {
       maxWidth: USER_SCRIPT_UPDATE_SHEET_MAX_WIDTH,
       surfaceColor: this.storedPageBackgroundColor,
       fullHeight: this.layoutMode === 'phone' || this.fillAvailableHeight,
-      presentation: this.layoutMode === 'large_screen' && this.fillAvailableHeight ? 'flat_content' : 'bottom_sheet',
-      horizontalPadding: this.layoutMode === 'phone' ? 0 : 16,
-      topPadding: this.layoutMode === 'phone' ? 0 : 26,
-      bottomPadding: this.layoutMode === 'phone' ? 0 : 24
+      presentation: this.layoutMode === 'large_screen' ? 'flat_content' : 'bottom_sheet',
+      horizontalPadding: this.layoutMode === 'phone' ? 0 : DESKTOP_DIALOG_PADDING_VP,
+      topPadding: this.layoutMode === 'phone' ? 0 : DESKTOP_DIALOG_PADDING_VP,
+      bottomPadding: this.layoutMode === 'phone' ? 0 : DESKTOP_DIALOG_PADDING_VP
     }) {
       if (this.layoutMode === 'phone') {
         this.buildImmersivePhoneLayout()
@@ -124,7 +128,7 @@ export struct UserScriptUpdateSheet {
       Column({ space: 6 }) {
         Text('脚本更新检查')
           .width('100%')
-          .fontSize(21)
+          .fontSize(DESKTOP_DIALOG_TITLE_FONT_SIZE_FP)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.storedPrimaryTextColor)
 

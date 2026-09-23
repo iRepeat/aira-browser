@@ -39,9 +39,8 @@ export struct AlwaysPrivateModeConfirmationDialog {
 
       this.buildAcceptanceRow()
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '确认开启',
           emphasis: 'primary',
           actionEnabled: this.accepted,
@@ -55,7 +54,6 @@ export struct AlwaysPrivateModeConfirmationDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,

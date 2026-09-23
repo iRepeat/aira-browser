@@ -69,32 +69,22 @@ export struct FeatureGateSheet {
           this.buildRenewalBody(this.state.renewal)
         }
 
-        // Stacked, not side by side: the two actions are a commitment and its
-        // escape hatch, so they read better as a full-width pair. Each button is
-        // wrapped in a Row because the shared button sizes itself with
-        // layoutWeight, which would stretch it vertically inside a Column.
-        Column({ space: 10 }) {
-          Row() {
-            BrowserSheetActionButton({
-              label: this.state.primaryActionTitle,
-              emphasis: 'primary',
-              accentColor: this.storedAccentColor,
-              onAction: () => {
-                this.onAction(this.state.primaryAction);
-              }
-            })
-          }
-          .width('100%')
+        Row({ space: 12 }) {
+          BrowserSheetActionButton({
+            label: this.state.primaryActionTitle,
+            emphasis: 'primary',
+            accentColor: this.storedAccentColor,
+            onAction: () => {
+              this.onAction(this.state.primaryAction);
+            }
+          })
 
-          Row() {
-            BrowserSheetActionButton({
-              label: this.state.secondaryActionTitle,
-              onAction: () => {
-                this.onAction(this.state.secondaryAction);
-              }
-            })
-          }
-          .width('100%')
+          BrowserSheetActionButton({
+            label: this.state.secondaryActionTitle,
+            onAction: () => {
+              this.onAction(this.state.secondaryAction);
+            }
+          })
         }
         .width('100%')
       }

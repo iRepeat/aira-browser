@@ -58,6 +58,7 @@ import { DesktopLoginConfirmSheetContent } from '../settings/DesktopLoginConfirm
 import { HuaweiLoginSheetContent } from '../account/HuaweiLoginSheetContent';
 import { CrossDeviceLinkScreen } from './CrossDeviceLinkScreen';
 import { CrossDeviceLinkSetupScreen } from './CrossDeviceLinkSetupScreen';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const DEVICE_TABS_SHEET_TITLE: string = '跨设备标签页';
 const CROSS_DEVICE_LINK_LOG_DOMAIN: number = 0x0A1A;
@@ -231,7 +232,7 @@ export struct CrossDeviceLinkHost {
     Column()
       .width(0)
       .height(0)
-      .bindSheet($$this.confirmSheetVisible, this.buildDesktopLoginConfirmSheet(), {
+      .bindSheet($$this.confirmSheetVisible, this.buildDesktopLoginConfirmSheet(), applyDesktopDialogSheetChrome({
         preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
         height: SheetSize.FIT_CONTENT,
         dragBar: !this.desktopPresentation,
@@ -239,12 +240,12 @@ export struct CrossDeviceLinkHost {
         onDisappear: (): void => {
           this.handleConfirmSheetDisappear();
         }
-      })
+      }, 's', this.desktopPresentation))
 
     Column()
       .width(0)
       .height(0)
-      .bindSheet($$this.loginSheetVisible, this.buildHuaweiLoginSheet(), {
+      .bindSheet($$this.loginSheetVisible, this.buildHuaweiLoginSheet(), applyDesktopDialogSheetChrome({
         preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
         height: SheetSize.FIT_CONTENT,
         dragBar: !this.desktopPresentation,
@@ -252,18 +253,18 @@ export struct CrossDeviceLinkHost {
         onDisappear: (): void => {
           this.handleLoginSheetDisappear();
         }
-      })
+      }, 'm', this.desktopPresentation))
 
     Column()
       .width(0)
       .height(0)
-      .bindSheet($$this.deviceTabsSheetVisible, this.buildDeviceTabsSheet(), {
+      .bindSheet($$this.deviceTabsSheetVisible, this.buildDeviceTabsSheet(), applyDesktopDialogSheetChrome({
         preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
         height: SheetSize.LARGE,
         title: { title: DEVICE_TABS_SHEET_TITLE },
         dragBar: !this.desktopPresentation,
         showClose: true
-      })
+      }, 'm', this.desktopPresentation))
     }
     .width('100%')
     .height('100%')

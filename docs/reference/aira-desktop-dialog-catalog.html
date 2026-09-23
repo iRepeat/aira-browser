@@ -1,0 +1,1666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aira 居中弹窗逐个草稿 · macOS 口径</title>
+<style>
+  :root{
+    color-scheme:light;
+    --accent:#0A59F7; --accent-press:#0A50E0;
+    --label:#0A0A0C; --label-75:rgba(10,10,12,.72); --label-55:rgba(10,10,12,.55); --label-45:rgba(10,10,12,.42);
+    --hairline:rgba(0,0,0,.10); --hairline-soft:rgba(0,0,0,.07);
+    /* 参考图语言：控件填充 / 分组填充 / 危险色 / 输入框描边 */
+    --fill-ctrl:#ECEDEF;
+    --fill-ctrl-press:#E0E2E5;
+    --fill-group:#F2F3F5;
+    --danger:#E03127; --danger-fill:#FFD8D5;
+    --field-border:#D9D9DE;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;padding:36px 22px 96px;background:#E4E6EA;color:var(--label);
+    font:13px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+    letter-spacing:-.006em;-webkit-font-smoothing:antialiased;
+  }
+  main{max-width:1180px;margin:0 auto}
+  h1{font-size:22px;font-weight:700;margin:0 0 6px;letter-spacing:-.018em}
+  .lede{margin:0 0 4px;color:var(--label-55);max-width:900px}
+  h2{font-size:15px;font-weight:600;margin:46px 0 3px;padding-top:20px;border-top:1px solid var(--hairline)}
+  h2 .n{color:var(--accent);margin-right:8px;font-weight:700}
+  .note{margin:0 0 16px;color:var(--label-55);max-width:900px}
+  code{font:11.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8A3D00;background:rgba(0,0,0,.05);padding:1px 4px;border-radius:3px}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:rgba(0,0,0,.07);color:var(--label-55);vertical-align:middle}
+  .tag.warn{background:#FDECEA;color:#B3261E}
+  .tag.ok{background:rgba(10,89,247,.12);color:#0A50E0}
+  summary{cursor:pointer;font-weight:600;font-size:13px;margin:14px 0 6px}
+
+  /* ---------- 入口索引 ---------- */
+  .idx{background:#fff;border:none;border-radius:16px;padding:20px 24px;
+       columns:2;column-gap:32px;font-size:12.5px;line-height:1.9}
+  .idx b{display:block;margin-top:8px;font-size:11px;color:var(--label-55);letter-spacing:.02em}
+  .idx a{display:inline-block;margin-right:10px;white-space:nowrap}
+
+  /* ---------- 卡片网格 ---------- */
+  .grid{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start}
+  .d{margin:0;flex:0 0 auto}
+  .did{margin:0 0 7px;font-size:11.5px;color:var(--label-55);max-width:640px}
+  .did b{color:var(--label);font-weight:700}
+  .did .src{display:block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--label-45);margin-top:1px}
+  .d .mac{box-shadow:0 8px 28px rgba(16,20,32,.13),0 2px 6px rgba(16,20,32,.07)}
+
+  /* ---------- 对话框（参考图语言：大圆角 · 无描边 · 胶囊按钮 · 纯色填充） ---------- */
+  .mac{width:420px;background:#fff;border-radius:24px;overflow:hidden}
+  .w360{width:360px}.w420{width:420px}.w460{width:460px}.w520{width:520px}.w560{width:560px}
+  .w640{width:640px}.w680{width:680px}.w720{width:720px}
+  .mac-head{padding:24px 24px 0}
+  .mac-head h3{margin:0;font-size:19px;font-weight:700;line-height:1.35;letter-spacing:-.012em}
+  .mac-head p{margin:10px 0 0;font-size:13.5px;line-height:1.5;color:var(--label-75)}
+  .mac-head.center{text-align:center}
+  .mac-body{padding:20px 24px 0;display:flex;flex-direction:column;gap:16px}
+  .mac-body:last-child{padding-bottom:24px}
+  .mac-sec{margin:0;font-size:12.5px;font-weight:600;color:var(--label-55)}
+  .mac-group{background:var(--fill-group);border-radius:16px;overflow:hidden}
+  .mac-row{display:flex;align-items:center;gap:10px;padding:0 14px;cursor:default}
+  .mac-row+.mac-row{border-top:1px solid rgba(0,0,0,.055)}
+  .mac-row:hover{background:rgba(0,0,0,.04)}
+  .one{height:34px}.two{padding:9px 14px;align-items:flex-start}
+  .mac-row .t{flex:1;font-size:14px;line-height:1.45}
+  .mac-row .s{display:block;font-size:12px;line-height:1.45;color:var(--label-55);margin-top:2px}
+  .mac-row .sp{flex:1}
+  .mac-foot{display:flex;gap:12px;padding:22px 24px 24px}
+  .mac-foot.plain{padding-top:22px}
+  .mac-foot.stack{flex-direction:column;gap:12px}
+  .mac-foot.stack .mbtn{flex:0 0 auto;width:100%}
+  .mac-foot .grp{display:flex;gap:12px;flex:1}
+  /* 胶囊按钮：40vp 高、纯色填充、无描边无渐变无阴影 */
+  .mbtn{height:40px;padding:0 20px;border:none;border-radius:20px;flex:1;
+    background:var(--fill-ctrl);color:var(--label);
+    font:14px/1 inherit;font-family:inherit;font-weight:500;letter-spacing:0;cursor:default}
+  .mbtn:active{background:var(--fill-ctrl-press)}
+  .mbtn.default{background:var(--accent);color:#fff}
+  .mbtn.default:active{background:var(--accent-press)}
+  .mbtn.danger{background:var(--danger-fill);color:var(--danger)}
+  .mbtn.ghost{flex:0 0 auto;height:36px;padding:0 12px;background:transparent;color:var(--accent)}
+  .mbtn.sm{flex:0 0 auto;height:30px;padding:0 14px;border-radius:15px;font-size:13px}
+  .mbtn.wide{flex:1}
+  .mchk,.mrad{width:17px;height:17px;flex:none;position:relative;
+    border:1.5px solid rgba(0,0,0,.26);background:#fff}
+  .mchk{border-radius:4px}.mrad{border-radius:50%}
+  .mchk.on,.mrad.on{border-color:var(--accent);background:var(--accent)}
+  .mchk.on::after{content:"";position:absolute;left:5px;top:2.5px;width:4px;height:7.5px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
+  .mrad.on::after{content:"";position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:#fff}
+  .mform{display:flex;align-items:center;gap:12px}
+  .mform .lb{width:80px;text-align:right;font-size:14px;color:var(--label-55);flex:none}
+  .mfield{flex:1;height:36px;display:flex;align-items:center;padding:0 12px;font-size:14px;background:#fff;
+    border:1px solid var(--field-border);border-radius:12px}
+  .mfield.focus{border:2px solid var(--accent);box-shadow:0 0 0 4px rgba(10,89,247,.18)}
+  .mfield.tall{height:72px;align-items:flex-start;padding-top:9px;line-height:1.5}
+  .mfield .ph{color:var(--label-45)}
+  .mselect{flex:1;height:36px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 12px;font-size:14px;background:var(--fill-ctrl);border-radius:12px}
+  .mhint{font-size:12.5px;line-height:1.5;color:var(--label-55);margin:6px 0 0}
+  .mhint.err{color:var(--danger)}
+  /* 开关（参考图语言：胶囊轨道 + 白色滑块） */
+  .msw{width:44px;height:26px;border-radius:13px;background:var(--fill-ctrl);position:relative;flex:none}
+  .msw.on{background:var(--accent)}
+  .msw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;
+    box-shadow:0 1px 2px rgba(0,0,0,.18);transition:left .12s}
+  .msw.on::after{left:21px}
+  /* 色块图标底座 */
+  .mtile{width:34px;height:34px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    font-size:16px;flex:none}
+  .miconsq{width:48px;height:48px;border-radius:14px;background:var(--fill-ctrl);
+    display:flex;align-items:center;justify-content:center;font-size:18px}
+  .tile{height:36px;flex:0 0 110px;display:flex;align-items:center;justify-content:center;
+    border-radius:18px;background:var(--fill-ctrl);font-size:13.5px}
+  .mscroll{max-height:190px;overflow:auto;padding-right:2px}
+  .mbar{height:11px;border-radius:5px;background:rgba(0,0,0,.075);margin-bottom:10px}
+  .mqty{width:48px;height:32px;display:flex;align-items:center;justify-content:center;font-size:15px;
+    background:var(--fill-ctrl);border-radius:10px}
+  .msep{height:1px;background:var(--hairline-soft);margin:12px 0}
+  .mlabel-c{font-size:12px;color:var(--label-55);margin:0}
+  .mbig{font-size:30px;font-weight:700;letter-spacing:-.02em}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Aira 居中弹窗逐个草稿</h1>
+<p class="lede">按 <code>docs/aira-desktop-dialog-inventory.md</code> 的全量清单逐个画出，全部为 macOS 取向（半径 12 / 0.5px 描边 / 13fp 正文 / 24vp 按钮 / 横排右对齐）。1vp ≈ 1px 真实尺寸，未缩放。规范见 <code>docs/aira-desktop-dialog-design-spec.md</code>。</p>
+<p class="lede"><b>覆盖情况：</b>93 个 <code>showCenteredAlertDialog</code> 调用点归并为 <b>4 种按钮形状</b>（第 1 节）；39 个 <code>@CustomDialog</code> 逐个（第 2 节）；10 个 <code>BrowserAdaptiveModalOverlay</code> 宿主逐个（第 3 节）；11 个居中半模态（第 4 节）；1 个自绘居中模态（第 5 节）；16 处 PC 上仍是底部弹窗（第 6 节）；<b>说明 / 同意 / 引导类 8 个（第 7 节，第二版补全）；其余 sheet 内容 16 个（第 8 节，第二版补全）</b>。</p>
+
+<!-- ================= 索引 ================= -->
+<div class="idx">
+  <b>0 · 宽度算法</b><a href="#width">公式 / 档位 / 降级</a> <b>1 · 通用确认（93 处 → 4 形状）</b>
+  <a href="#A1">A1 两按钮</a><a href="#A2">A2 单按钮</a><a href="#A3">A3 破坏性</a><a href="#A4">A4 多按钮</a>
+  <b>2 · @CustomDialog（39）</b>
+  <a href="#B01">B01</a><a href="#B02">B02</a><a href="#B03">B03</a><a href="#B04">B04</a><a href="#B05">B05</a>
+  <a href="#B06">B06</a><a href="#B07">B07</a><a href="#B08">B08</a><a href="#B09">B09</a><a href="#B10">B10</a>
+  <a href="#B11">B11</a><a href="#B12">B12</a><a href="#B13">B13</a><a href="#B14">B14</a><a href="#B15">B15</a>
+  <a href="#B16">B16</a><a href="#B17">B17</a><a href="#B18">B18</a><a href="#B19">B19</a><a href="#B20">B20</a>
+  <a href="#B21">B21</a><a href="#B22">B22</a><a href="#B23">B23</a><a href="#B24">B24</a><a href="#B25">B25</a>
+  <a href="#B26">B26</a><a href="#B27">B27</a><a href="#B28">B28</a><a href="#B29">B29</a><a href="#B30">B30</a>
+  <a href="#B31">B31</a><a href="#B32">B32</a><a href="#B33">B33</a><a href="#B34">B34</a><a href="#B35">B35</a>
+  <a href="#B36">B36</a><a href="#B37">B37</a><a href="#B38">B38</a><a href="#B39">B39</a>
+  <b>3 · 大屏居中卡片（10）</b>
+  <a href="#C1">C1 AiraPro</a><a href="#C2">C2 底部工具条</a><a href="#C3">C3 移动书签</a><a href="#C4">C4 新用户礼包</a><a href="#C5">C5 小说阅读器</a>
+  <a href="#C6">C6 网页工具</a><a href="#C7">C7 FeatureGate</a><a href="#C8">C8 Wi-Fi</a><a href="#C9">C9 目标语言</a><a href="#C10">C10 软件更新</a>
+  <b>4 · 居中半模态（11）</b><a href="#D">D1–D11</a>
+  <b>5 · 自绘居中模态（1）</b><a href="#E">E1</a>
+  <b>6 · PC 上仍是底部弹窗的 26 处（三种机制）</b><a href="#F">机制 A/B/C 审计表</a><a href="#F13d">F13d 华为登录</a><a href="#F7d">F7d–F10d 阅读四件套</a><a href="#B3d">B3d 元素检查</a>
+  <b>参考</b><a href="#width">动作排布与密度决策</a>
+  <b>7 · 说明 / 同意 / 引导类（补全）</b><a href="#G1">G1 内容过滤</a><a href="#G2">G2 第三方规则</a><a href="#G3">G3 脚本风险</a><a href="#G4">G4 脚本更新</a><a href="#G5">G5 发布公告</a><a href="#G6">G6 开发者说明</a><a href="#G7">G7 同步指南</a><a href="#G8">G8 法务文档</a>
+  <b>8 · 其余 sheet 内容（补全）</b><a href="#H1">H1 站点信息</a><a href="#H2">H2 屏幕方向</a><a href="#H3">H3 网页标识</a><a href="#H4">H4 自定义 UA</a><a href="#H5">H5 工具条面板</a><a href="#H6">H6 工具栏自定义</a><a href="#H7">H7 页面脚本</a><a href="#H8">H8 页面资源</a><a href="#H9">H9 图片预览</a><a href="#H10">H10 HLS 接管</a><a href="#H11">H11 历史详情</a><a href="#H12">H12 标签页样式</a><a href="#H13">H13 应用内代理</a><a href="#H14">H14 同步方式</a><a href="#H15">H15 跨设备标签页</a><a href="#H16">H16 离线网页详情</a>
+  <b>9 · 同步 / 开关类（三版补全）</b><a href="#S1">S1 选择同步内容</a><a href="#S2">S2 额外备份内容</a><a href="#S3">S3 同步开关卡</a>
+  <b>10 · 其余弹窗（三版补全）</b><a href="#T1">T1 选择文件夹</a><a href="#T2">T2 脚本安装内容</a><a href="#T3">T3 阅读体验面板</a><a href="#T4">T4 朗读播放器</a><a href="#T5">T5 小说阅读器浮层</a><a href="#T6">T6 Cookie 管理</a><a href="#T7">T7 隐藏元素选择</a><a href="#T8">T8 主页外观/壁纸</a>
+</div>
+
+<!-- ================= 0. 宽度算法 ================= -->
+<h2 id="width"><span class="n">0</span>宽度算法 <span class="tag ok">唯一公式 · 4 个档位</span></h2>
+<p class="note">下面 94 张卡片的宽度全部是按这个公式算出来的，不是随手给的。<b>档位由内容形状决定，不由宽度反推</b>——调用方只声明档位，数值由 `core` 侧解析。</p>
+
+<div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
+  <div style="flex:1 1 420px;min-width:380px">
+    <p class="mac-sec" style="margin-bottom:8px">公式</p>
+    <pre style="margin:0;background:#fff;border-radius:16px;padding:18px 20px;font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;color:#2A2A2E">edge    = 24
+usableW = W - edge * 2
+w       = tier.width              // 档位标准宽
+if W &lt; 600: w = usableW          // 窄窗 → 全宽对话框
+w       = clamp(w, tier.minWidth, usableW)
+h       = min(contentHeight, tier.maxHeight, usableW... )</pre>
+    <p class="mhint" style="margin-top:10px">高度不设档位，由内容决定，只封顶 <code>min(720vp, H - 48vp)</code>；超过时只有正文区滚动。</p>
+    <p class="mhint"><b style="color:var(--danger)">禁止：</b>百分比宽度（如 <code>'82%'</code>）与调用点写法宽度数字。</p>
+  </div>
+
+  <div style="flex:1 1 460px;min-width:400px">
+    <p class="mac-sec" style="margin-bottom:8px">档位与判据（真实宽度）</p>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div class="mac w360" style="padding:14px 16px"><b style="color:var(--accent);font-size:12px">XS 360</b><span style="font-size:13px;font-weight:600;margin-top:2px">360vp</span><span style="font-size:11.5px;color:var(--label-55);margin-top:4px;line-height:1.45">标题 + ≤1 行正文 + ≤2 动作；单控件；进度</span></div>
+      <div class="mac w420" style="padding:14px 16px"><b style="color:var(--accent);font-size:12px">S 420</b><span style="font-size:13px;font-weight:600;margin-top:2px">420vp</span><span style="font-size:11.5px;color:var(--label-55);margin-top:4px;line-height:1.45">有输入无列表；图片/二维码；3 动作确认</span></div>
+      <div class="mac w520" style="padding:14px 16px"><b style="color:var(--accent);font-size:12px">M 520</b><span style="font-size:13px;font-weight:600;margin-top:2px">520vp</span><span style="font-size:11.5px;color:var(--label-55);margin-top:4px;line-height:1.45">有列表：可选项 / 键值行 / 开关行</span></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:12px">
+      <div class="mac w640" style="padding:14px 16px"><b style="color:var(--accent);font-size:12px">L 640</b><span style="font-size:13px;font-weight:600;margin-top:2px">640vp</span><span style="font-size:11.5px;color:var(--label-55);margin-top:4px;line-height:1.45">≥2 个分段标题；内嵌导航；滚动长文档</span></div>
+      <div class="mac w720" style="padding:14px 16px"><b style="color:var(--accent);font-size:12px">XL 720</b><span style="font-size:13px;font-weight:600;margin-top:2px">720vp</span><span style="font-size:11.5px;color:var(--label-55);margin-top:4px;line-height:1.45">全文阅读类。当前 94 项中 0 项使用</span></div>
+    </div>
+  </div>
+</div>
+
+<p class="mac-sec" style="margin:24px 0 8px">不同窗口下的实际结果</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;font-size:12.5px">
+<thead><tr>
+  <th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">窗口宽 W</th>
+  <th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">XS</th>
+  <th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">S</th>
+  <th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">M</th>
+  <th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">L</th>
+  <th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">XL</th>
+  <th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">动作排布</th>
+</tr></thead>
+<tbody>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>1440</b>（大屏满窗）</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">360</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">420</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">520</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">640</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">720</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">1–2 并排，≥3 竖排</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>1000</b>（自由窗口）</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">360</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">420</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">520</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">640</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">720</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">同上</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>900</b>（< 1000）</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">360</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">420</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">520</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>520</b>↓</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>640</b>↓</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">L/XL 降档</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>600</b>（临界）</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">360</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">420</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">520</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">520 ↓</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">520 ↓</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">同上</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>560</b>（< 600）</td><td colspan="5" style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>536</b>（= W − 24），全部降为全宽对话框；圆角 24→20，内边距 24→20</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">同上</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>440</b>（< 480）</td><td colspan="5" style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>416</b>，全宽对话框</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b>一律竖排</b></td></tr>
+</tbody>
+</table>
+
+<p class="mhint" style="margin-top:12px"><b>平台陷阱：</b><code>@CustomDialog</code> + <code>customStyle: false</code> 的容器默认上限是 <b>400vp</b>，而全仓 0 个 controller 设了 <code>width</code>。所以实现时必须在 controller 上写 <code>width: tier.width</code>，光给内容挂 <code>maxWidth</code> 是无效的。</p>
+
+<p class="mac-sec" style="margin:24px 0 8px">动作排布规则（含防折行）</p>
+<ol style="margin:0;font-size:13px;line-height:1.8;color:var(--label-75);padding-left:20px">
+  <li><b>1–2 个动作</b> → 并排等宽（<code>flex:1</code>），间距 12vp。</li>
+  <li><b>≥ 3 个动作</b> → 竖向堆叠全宽。</li>
+  <li><b>防折行（新增）</b>：任一标签按 <code>14fp</code> 估算后超过「可用宽度 / 按钮数」时，也改竖排。<br>
+    <span style="color:var(--label-55)">例：XS 360 档内容宽 312vp，两个按钮各 150vp；“继续使用本地功能” 8 字 × 14fp ≈ 112vp + 左右内边距 40vp = 152vp &gt; 150vp → 会折行 → 必须竖排。</span></li>
+  <li><b>按钮标签永不折行</b>（<code>maxLines: 1</code>）。宁可竖排，不缩字号。</li>
+</ol>
+
+<p class="mac-sec" style="margin:24px 0 8px">密度决策：为什么一个数都不缩</p>
+<ul style="margin:0;font-size:13px;line-height:1.8;color:var(--label-75);padding-left:20px">
+  <li><b>按钮 40vp 不动。</b>这就是 HarmonyOS 平台自己在 PC/2in1 上的对话框尺寸（官方：电脑设备键鼠热区 ≥ 5mm；系统推荐触屏点击热区 40vp×40vp）。跟着平台走，才不会在系统对话框旁边显得突兀；PC/2in1 本身也可能两用触屏。</li>
+  <li><b>标题 19fp 不动。</b>它不是“大”—— Windows 11 对话框标题约 20px、HarmonyOS 对话框标题默认 20fp Bold。缩小反而发虚。</li>
+  <li><b>圆角 24vp 不动。</b>它是这套参考图语言的签名特征，缩了就不像了。</li>
+  <li><b>内边距 24vp 不动。</b>Material 与 Fluent 的对话框也正好都是 24。</li>
+  <li><b>只动排布，不动尺寸。</b>你之前看到的“仅使用期间允许”折行，根因是 <b>3 个按钮并排</b>，不是字号大——已经由“≥3 个竖排”修好了；叠加防折行规则后，任何档位都不会再折行。</li>
+</ul>
+
+<!-- ================= 1. 通用确认 ================= -->
+<h2 id="sec1"><span class="n">1</span>通用确认家族 <span class="tag ok">93 处 → 4 种形状</span></h2>
+<p class="note">93 个调用点的内容只有「标题 + 一句说明 + 1～3 个按钮」，所以 4 张草图即覆盖全部。当前它们走原生 <code>AlertDialog</code>（半径 28、默认横向按钮），这里给出 macOS 形态。现行 7 处被强制竖向的按钮（<code>DialogButtonDirection.VERTICAL</code>）在第 A4 张。</p>
+
+<div class="grid">
+
+<figure class="d" id="A1">
+<p class="did"><b>A1 · 两按钮确认</b>（约 50 处）<span class="src">如 SearchSettingsHost.ets:333 / BookmarkManagerPage.ets:1636 / SyncMasterControlSection.ets:159</span></p>
+<div class="mac w360">
+  <div class="mac-head"><h3>清除搜索历史</h3><p>会清除地址栏保存的搜索词，不影响网页浏览历史。</p></div>
+  <div class="mac-foot plain"><button class="mbtn">取消</button><button class="mbtn default">清除</button></div>
+</div>
+</figure>
+
+<figure class="d" id="A2">
+<p class="did"><b>A2 · 单按钮提示</b>（约 25 处）<span class="src">如 HistoryManagerScreen.ets:2497 / BookmarkManagerPage.ets:1342</span></p>
+<div class="mac w360">
+  <div class="mac-head"><h3>导入成功</h3><p>已导入 128 条书签，跳过 3 条重复项。</p></div>
+  <div class="mac-foot plain"><button class="mbtn default">知道了</button></div>
+</div>
+</figure>
+
+<figure class="d" id="A3">
+<p class="did"><b>A3 · 破坏性确认</b>（约 25 处）<span class="src">如 NovelBookshelfScreen.ets:418 / SecureDnsProfileEditHost.ets:330 / UserScriptDetailPage.ets:132</span></p>
+<div class="mac w360">
+  <div class="mac-head"><h3>移出书架</h3><p>确定将“三体”移出书架吗？</p></div>
+  <div class="mac-foot plain"><button class="mbtn">取消</button><button class="mbtn default">移出</button></div>
+</div>
+</figure>
+
+<figure class="d" id="A4">
+<p class="did"><b>A4 · 多按钮</b>（7 处，现为竖向 → 改横排）<span class="src">SyncExperienceHost.ets:581/625/653/674/720 · BrowserDownloadManagementScreen.ets:1538 · BrowserWebCapabilityAlertDialogPresenter.ets:107</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>需要升级后才能同步</h3><p>Aira 云书签同步已经切换到新协议。请升级 App 后再同步；本机书签和其他同步方式不会被删除。</p></div>
+  <div class="mac-foot plain stack"><button class="mbtn default">前往升级</button><button class="mbtn">更换同步方式</button><button class="mbtn">继续使用本地功能</button></div>
+</div>
+</figure>
+
+<figure class="d">
+<p class="did"><b>A4b · 多按钮（破坏性 + 危险态）</b><span class="src">BrowserDownloadManagementScreen.ets:1538</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>删除下载</h3><p>确定删除选中的 3 项下载吗？“仅删除任务”会让文件保留在设备上；“删除任务和文件”会把文件移入系统回收站。</p></div>
+  <div class="mac-foot plain stack"><button class="mbtn danger">删除任务和文件</button><button class="mbtn">仅删除任务</button><button class="mbtn">取消</button></div>
+</div>
+</figure>
+
+<figure class="d">
+<p class="did"><b>A4c · 证书安全警告</b><span class="src">BrowserWebCapabilityAlertDialogPresenter.ets:107，文案来自 core/web/WebRuntimeBridge.ets:273</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>证书安全警告</h3><p>该网站的证书无法验证。继续访问可能让你暴露在中间人攻击风险中，输入的密码和支付信息可能被窃取。</p></div>
+  <div class="mac-foot plain"><button class="mbtn danger">仍然继续</button><button class="mbtn default">返回安全页面</button></div>
+</div>
+</figure>
+
+</div>
+
+<!-- ================= 2. @CustomDialog ================= -->
+<h2 id="sec2"><span class="n">2</span>@CustomDialog 全量（39 个）<span class="tag">逐个</span></h2>
+<p class="note">ID 与 <code>docs/aira-desktop-dialog-inventory.md</code> 第 1 节的表号一一对应。宽度标注为建议档位（XS 360 / S 420 / M 520 / L 640 / XL 720）。</p>
+
+<div class="grid">
+
+<figure class="d" id="B01">
+<p class="did"><b>B01 · URL 订阅导入</b>（S 420）<span class="src">adblock/AdBlockCustomRulesScreen.ets:43 → AdBlockCustomRulesHost.ets:94</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>URL 订阅导入</h3><p>粘贴规则订阅地址，导入后可在规则列表中管理。</p></div>
+  <div class="mac-body"><div class="mform"><span class="lb">订阅地址：</span><span class="mfield ph">https://example.com/rules.txt</span></div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">确定</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B02">
+<p class="did"><b>B02 · 规则导入进度</b>（XS 360）<span class="src">adblock/AdBlockCustomRulesHost.ets:41 → :109</span></p>
+<div class="mac w360">
+  <div class="mac-head"><h3>正在处理</h3><p>请稍候，正在导入自定义规则。</p></div>
+  <div class="mac-body" style="padding-bottom:16px"><div class="mbar" style="width:100%;margin:0"></div></div>
+</div>
+</figure>
+
+<figure class="d" id="B03">
+<p class="did"><b>B03 · 备份导入进度</b>（XS 360）<span class="src">backup/LocalBackupImportDialog.ets:43 → LocalBackupScreen.ets:149</span></p>
+<div class="mac w360">
+  <div class="mac-head"><h3>正在导入备份</h3><p>请勿关闭 App。</p></div>
+  <div class="mac-body" style="padding-bottom:16px"><div class="mbar" style="width:100%;margin:0"></div></div>
+</div>
+</figure>
+
+<figure class="d" id="B04">
+<p class="did"><b>B04 · 选择导入内容</b>（S 420）<span class="src">backup/LocalBackupImportDialog.ets:258 → LocalBackupScreen.ets:111</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>选择导入内容</h3><p>未勾选的内容不会被覆盖。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mchk on"></span><span class="t">书签</span></div>
+    <div class="mac-row one"><span class="mchk on"></span><span class="t">历史记录</span></div>
+    <div class="mac-row one"><span class="mchk on"></span><span class="t">主页收藏</span></div>
+    <div class="mac-row one"><span class="mchk"></span><span class="t">小说书架</span></div>
+    <div class="mac-row one"><span class="mchk on"></span><span class="t">常用设置</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">导入</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B05">
+<p class="did"><b>B05 · 导入成功</b>（S 420）<span class="src">bookmarks/BookmarkImportResultDialog.ets:10 → BookmarkManagerPage.ets:261</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>导入成功</h3></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">新增</span><span class="sp"></span><span class="t" style="text-align:right">128</span></div>
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">跳过重复</span><span class="sp"></span><span class="t" style="text-align:right">3</span></div>
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">文件夹</span><span class="sp"></span><span class="t" style="text-align:right">12</span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">知道了</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B06">
+<p class="did"><b>B06 · 新建文件夹</b>（XS 360）<span class="src">bookmarks/BookmarkManagerDialogs.ets:23 → BookmarkLargeScreenWorkspace.ets:118（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>新建文件夹</h3></div>
+  <div class="mac-body"><div class="mform"><span class="lb">名称：</span><span class="mfield">收藏夹</span></div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">创建</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B07">
+<p class="did"><b>B07 · 编辑书签 / 编辑文件夹</b>（S 420）<span class="src">bookmarks/BookmarkManagerDialogs.ets:84 → BookmarkLargeScreenWorkspace.ets:131（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>编辑书签</h3></div>
+  <div class="mac-body">
+    <div class="mform" style="align-items:center">
+      <span style="flex:1;text-align:right;font-size:13px;color:var(--label-75)">图标：</span>
+      <span style="width:auto;flex:1;display:flex;justify-content:flex-start"><span class="miconsq">🌐</span></span>
+    </div>
+    <div class="mform"><span class="lb">名称：</span><span class="mfield">Aira 社区</span></div>
+    <div class="mform"><span class="lb">网址：</span><span class="mfield">community.aira.browser</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">保存</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B08">
+<p class="did"><b>B08 · 下载确认</b>（S 420）<span class="src">browser/BrowserDownloadConfirmSheet.ets:23 → :300</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>下载文件</h3><p>文件名可以直接修改。</p></div>
+  <div class="mac-body">
+    <div class="mform"><span class="lb">文件名：</span><span class="mfield focus">aira-3.3.2.hap</span></div>
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">类型</span><span class="sp"></span><span class="t" style="text-align:right">HAP 安装包</span></div>
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">大小</span><span class="sp"></span><span class="t" style="text-align:right">48.2 MB</span></div>
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">来源</span><span class="sp"></span><span class="t" style="text-align:right">community.aira.browser</span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">下载</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B09">
+<p class="did"><b>B09 · 下载设置（带子页）</b>（M 520）<span class="src">browser/BrowserDownloadSettingsDialog.ets:18 → BrowserDownloadManagementScreen.ets:141，仅大屏 native_tab</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>下载设置</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="t">HLS 分片并发数</span><span class="sp"></span><span class="t" style="color:var(--label-55)">4</span><span style="color:var(--label-45);font-size:11px">›</span></div>
+    <div class="mac-row one"><span class="t">自动清理</span><span class="sp"></span><span class="t" style="color:var(--label-55)">30 天后</span><span style="color:var(--label-45);font-size:11px">›</span></div>
+    <div class="mac-row one"><span class="t">私密下载文件</span><span class="sp"></span><span style="color:var(--label-45);font-size:11px">›</span></div>
+    <div class="mac-row one"><span class="t">私密下载记录</span><span class="sp"></span><span style="color:var(--label-45);font-size:11px">›</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B10">
+<p class="did"><b>B10 · 网页缩放（大屏）</b>（XS 360）<span class="src">browser/BrowserLargeScreenWebZoomDialog.ets:18 → pages/BrowserShellPage.ets:5457</span></p>
+<div class="mac w360">
+  <div class="mac-head" style="display:flex;align-items:center;gap:8px">
+    <h3 style="flex:1">网页缩放</h3>
+    <button class="mbtn sm">默认</button>
+  </div>
+  <div class="mac-body" style="padding-bottom:4px">
+    <div style="display:flex;align-items:center;gap:10px;justify-content:center">
+      <span class="mqty">−</span>
+      <span style="flex:1;text-align:center;font-size:13px">100%</span>
+      <span class="mqty">+</span>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B11">
+<p class="did"><b>B11 · 隐私模式切换确认</b>（S 420）<span class="src">browser/BrowserPrivateModeConfirmationDialog.ets:13 → pages/BrowserShellPage.ets:5482</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>退出隐私模式？</h3><p>退出后本次私密会话的 Cookie 和站点数据会被清除，常规资料不受影响。</p></div>
+  <div class="mac-body"><div class="mac-row" style="border:none;padding:0"><span class="mchk"></span><span class="t">同时清除本次私密数据</span></div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">退出</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B12">
+<p class="did"><b>B12 · 文件信息</b>（XS 360）<span class="src">browser/BrowserShellDialogs.ets:31 → pages/BrowserShellPage.ets:5584</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>文件信息</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">名称</span><span class="sp"></span><span class="t" style="text-align:right">Aira 用户协议.pdf</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">大小</span><span class="sp"></span><span class="t" style="text-align:right">1.2 MB</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">类型</span><span class="sp"></span><span class="t" style="text-align:right">PDF 文档</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">知道了</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B13">
+<p class="did"><b>B13 · 编辑快捷方式</b>（S 420）<span class="src">browser/BrowserShellDialogs.ets:96 → pages/BrowserShellPage.ets:5504（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>编辑快捷方式</h3><p>名称和网址会显示在主页的快捷方式卡片上。</p></div>
+  <div class="mac-body">
+    <div class="mform"><span class="lb">名称：</span><span class="mfield">Aira 社区</span></div>
+    <div class="mform"><span class="lb">网址：</span><span class="mfield focus">community.aira.browser</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">保存</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B14">
+<p class="did"><b>B14 · 举报网站</b>（S 420）<span class="src">browser/BrowserShellDialogs.ets:208 → pages/BrowserShellPage.ets:5569（未设 alignment）</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>举报网站</h3></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="mrad on"></span><span class="t">欺诈或钓鱼</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">不良信息</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">页面显示异常</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">其他</span></div>
+    </div>
+    <div class="mform"><span class="lb" style="align-self:flex-start;line-height:1.4;padding-top:3px">备注：</span><span class="mfield tall ph">备注（选填）</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">确定</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B15">
+<p class="did"><b>B15 · 安装网页</b>（S 420）<span class="src">browser/BrowserShellDialogs.ets:330 → pages/BrowserShellPage.ets:5520（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>安装网页</h3><p>图标可以从相册更换。</p></div>
+  <div class="mac-body">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="miconsq" style="width:52px;height:52px;font-size:20px">🌐</span>
+      <div style="flex:1;font-size:11px;color:var(--label-55);line-height:1.5">点击图标可从相册更换<br>community.aira.browser</div>
+      <button class="mbtn sm">恢复默认</button>
+    </div>
+    <div class="mform"><span class="lb">名称：</span><span class="mfield">Aira 社区</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">安装</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B16">
+<p class="did"><b>B16 · 网页提示（prompt）</b>（S 420）<span class="src">browser/BrowserShellDialogs.ets:473 → pages/BrowserShellPage.ets:5537（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>网页提示</h3><p>example.com 要求输入内容：</p></div>
+  <div class="mac-body"><div class="mfield">默认值</div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">确定</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B17">
+<p class="did"><b>B17 · 网页身份验证（HTTP Auth）</b>（S 420）<span class="src">browser/BrowserShellDialogs.ets:551 → pages/BrowserShellPage.ets:5553（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>192.168.1.10:8080</h3><p>该站点要求身份验证。区域：Router Admin</p></div>
+  <div class="mac-body">
+    <div class="mform"><span class="lb">用户名：</span><span class="mfield">admin</span></div>
+    <div class="mform"><span class="lb">密码：</span><span class="mfield">••••••••</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">登录</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B18">
+<p class="did"><b>B18 · 站点权限请求</b>（S 420）<span class="src">browser/BrowserSitePermissionPromptHost.ets:16 → :75（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>example.com 想要使用你的位置</h3><p>只有在你允许后，该网站才能读取位置信息。</p></div>
+  <div class="mac-foot plain stack"><button class="mbtn default">仅使用期间允许</button><button class="mbtn">本次使用允许</button><button class="mbtn">不允许</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B19">
+<p class="did"><b>B19 · 网页文字大小</b>（XS 360）<span class="src">browser/BrowserWebTextZoomSheet.ets:16 → pages/BrowserShellPage.ets:5443</span></p>
+<div class="mac w360">
+  <div class="mac-head" style="display:flex;align-items:center;gap:8px">
+    <h3 style="flex:1">网页文字大小</h3>
+    <button class="mbtn sm">默认</button>
+  </div>
+  <div class="mac-body" style="padding-bottom:4px">
+    <div style="display:flex;align-items:center;gap:10px;justify-content:center">
+      <span class="mqty">−</span><span style="flex:1;text-align:center;font-size:13px">115%</span><span class="mqty">+</span>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B20">
+<p class="did"><b>B20 · 主页设置 / 壁纸设置</b>（M 520，大屏门控）<span class="src">browser/HomePageSettingsSheet.ets:46 → BrowserSystemSurfaceHost.ets:92</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>主页设置</h3><p>选择 Aira 原生主页或自定义主页。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">Aira 原生主页</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">自定义主页</span><span class="sp"></span><span style="color:var(--label-45);font-size:11px">›</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">网址主页</span><span class="sp"></span><span style="color:var(--label-45);font-size:11px">›</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B21">
+<p class="did"><b>B21 · 添加至首页</b>（M 520，大屏门控）<span class="src">browser/HomeShortcutSelectionDialog.ets:9 → BrowserSystemSurfaceHost.ets:69</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>添加至首页</h3><p>从书签或历史记录中选择条目。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mchk"></span><span class="t">Aira 社区</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">书签</span></div>
+    <div class="mac-row one"><span class="mchk"></span><span class="t">Aira 文档</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">书签</span></div>
+    <div class="mac-row one"><span class="mchk"></span><span class="t">华为开发者联盟</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">历史</span></div>
+    <div class="mac-row one"><span class="mchk"></span><span class="t">搜索设置</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">历史</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">添加</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B22">
+<p class="did"><b>B22 · 选择音色</b>（S 420，列表限高 320）<span class="src">browser/ReaderSpeechVoiceDialog.ets:23 → OfflinePageViewerScreen.ets:138 / BrowserShellPage.ets:5595</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>选择音色</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">小艺 · 女声</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">小艺 · 男声</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">温柔女声</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">沉稳男声</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">取消</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B23">
+<p class="did"><b>B23 · 添加网址主页</b>（S 420）<span class="src">customhome/CustomHomepageRemoteUrlDialog.ets:5 → CustomHomepageSettingsScreen.ets:194（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>添加网址主页</h3><p>需要 https 开头的可访网址。</p></div>
+  <div class="mac-body">
+    <div class="mform"><span class="lb">网址：</span><span class="mfield ph">https://example.com</span></div>
+    <p class="mhint">主页内容会随网站更新。</p>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">添加</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B24">
+<p class="did"><b>B24 · 免费领取 Aira Pro</b>（S 420，唯一 <code>customStyle: true</code>）<span class="src">membership/AiraProComplimentaryClaimDialog.ets:20 → AiraProScreen.ets:109</span></p>
+<div class="mac w420">
+  <div class="mac-head center"><h3 style="font-size:14px">免费领取 Aira Pro</h3><p>活动期间每台设备可领取一次。</p></div>
+  <div class="mac-body">
+    <div style="height:120px;border-radius:16px;background:#5F63F2;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px">会员权益卡（图片）</div>
+    <div style="display:flex;align-items:baseline;gap:6px;justify-content:center"><span class="mbig">15</span><span style="font-size:12px;color:var(--label-55)">天 Aira Pro</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">领取会员</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B25">
+<p class="did"><b>B25 · 始终保持隐私模式</b>（S 420）<span class="src">settings/AlwaysPrivateModeConfirmationDialog.ets:9 → 3 个 controller</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>始终保持隐私模式</h3><p>开启后，每次启动 Aira 都会直接进入隐私模式。</p></div>
+  <div class="mac-body"><div class="mac-row" style="border:none;padding:0"><span class="mchk on"></span><span class="t">我理解重启后会默认回到隐私模式</span></div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">确认开启</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B26">
+<p class="did"><b>B26 · 清除浏览数据</b>（M 520，大屏门控）<span class="src">settings/ClearBrowsingDataDialog.ets:328 → SettingsInlineDetailPanel.ets:210</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>清除浏览数据</h3><p>时间范围适用于历史记录和最近关闭；Cookie、缓存、站点存储按系统 Web 能力清除全部。</p></div>
+  <div class="mac-body">
+    <p class="mac-sec">时间范围</p>
+    <div class="mac-group">
+      <div class="mac-row one"><span class="mrad"></span><span class="t">最近 1 小时</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">最近 24 小时</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">最近 7 天</span></div>
+      <div class="mac-row one"><span class="mrad on"></span><span class="t">全部时间</span></div>
+    </div>
+    <p class="mac-sec">数据类型</p>
+    <div class="mac-group">
+      <div class="mac-row two"><span class="mchk on"></span><span class="t">历史记录<span class="s">地址栏建议和历史页面中的访问记录</span></span></div>
+      <div class="mac-row two"><span class="mchk on"></span><span class="t">最近关闭<span class="s">主页和标签页恢复使用的最近关闭记录</span></span></div>
+      <div class="mac-row two"><span class="mchk on"></span><span class="t">Cookie<span class="s">网站登录状态和会话 Cookie</span></span></div>
+      <div class="mac-row two"><span class="mchk on"></span><span class="t">缓存<span class="s">网页资源缓存</span></span></div>
+      <div class="mac-row two"><span class="mchk on"></span><span class="t">站点存储<span class="s">网站保存的本地数据</span></span></div>
+      <div class="mac-row two"><span class="mchk on"></span><span class="t">站点权限<span class="s">已保存的相机、麦克风、位置等权限</span></span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">清除</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B27">
+<p class="did"><b>B27 · 在手机上使用桌面界面？</b>（S 420）<span class="src">settings/DesktopInterfaceModeConfirmationDialog.ets:9 → BrowserTabletInterfaceModeSettingsContent.ets:38</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>在手机上使用桌面界面？</h3><p>桌面界面主要为大屏和鼠标键盘设计。手机屏幕上可能出现内容过密、按钮过小或部分页面布局不适配。</p></div>
+  <div class="mac-body"><div class="mac-row" style="border:none;padding:0"><span class="mchk on"></span><span class="t">我了解桌面界面在手机上可能显示异常</span></div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">继续切换</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B28">
+<p class="did"><b>B28 · 添加自定义 DNS</b>（S 420，大屏门控）<span class="src">settings/SecureDnsProfileEditHost.ets:37 → SettingsLargeScreenShell.ets:207</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>添加自定义 DNS</h3></div>
+  <div class="mac-body">
+    <div class="mform"><span class="lb">名称：</span><span class="mfield focus">我的 DNS</span></div>
+    <div class="mform"><span class="lb">DoH 地址：</span><span class="mfield ph">https://dns.example.com/dns-query</span></div>
+    <p class="mhint">保存后会在安全 DNS 列表中选中。</p>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">保存并使用</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B29">
+<p class="did"><b>B29 · 交流QQ群</b>（XS 360）<span class="src">settings/SupportQqGroupDialog.ets:14 → SettingsInlineDetailPanel.ets:226 / SettingsDetailPage.ets:218</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>交流QQ群</h3><p>扫码加入或在 QQ 中搜索群号。</p></div>
+  <div class="mac-body">
+    <div style="width:180px;height:180px;margin:0 auto;border-radius:16px;background:var(--fill-group);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--label-55)">二维码</div>
+    <p style="text-align:center;margin:0;font-size:13px">群号 123456789</p>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">复制群号码</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B30">
+<p class="did"><b>B30 · 添加站点</b>（S 420）<span class="src">sitecontrols/SiteControlsManualOriginDialog.ets:11 → SiteControlsCapabilityScreen.ets:94（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>添加站点</h3><p>适用于局域网地址与端口形式的站点。</p></div>
+  <div class="mac-body"><div class="mform"><span class="lb">地址：</span><span class="mfield focus">http://192.168.1.10:8080</span></div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">继续</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B31">
+<p class="did"><b>B31 · 选择同步内容（首次开启同步，带开关）</b>（M 520，大屏门控）<span class="src">sync/SyncFirstActivationItemsSheet.ets:33/98 Toggle·Switch → sync/SyncExperienceSelectionDialog.ets:17</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>选择同步内容</h3><p>先选择要在设备之间保持一致的内容，下一步再选择同步方式。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row two"><span class="mtile" style="background:#E8F0FE">🔖</span><span class="t">书签<span class="s">同步本机书签、文件夹和排序</span></span><span class="msw on" style="align-self:center"></span></div>
+      <div class="mac-row two"><span class="mtile" style="background:#EAF6EC">🕘</span><span class="t">历史记录<span class="s">在支持的设备之间增量合并浏览历史</span></span><span class="msw on" style="align-self:center"></span></div>
+      <div class="mac-row two"><span class="mtile" style="background:#FDF2E3">⭐️</span><span class="t">主页收藏<span class="s">主页快捷方式与收藏排列</span></span><span class="msw on" style="align-self:center"></span></div>
+      <div class="mac-row two"><span class="mtile" style="background:#F3EAFB">📚</span><span class="t">小说书架<span class="s">已加入书架的小说与阅读进度</span></span><span class="msw" style="align-self:center"></span></div>
+      <div class="mac-row two"><span class="mtile" style="background:#ECEFF3">🧩</span><span class="t">常用设置<span class="s">主页外观、工具栏、阅读偏好等</span></span><span class="msw on" style="align-self:center"></span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">返回</button><button class="mbtn default">立即同步</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B32">
+<p class="did"><b>B32 · 同步失败</b>（S 420）<span class="src">sync/SyncFailureDialog.ets:10 → SyncAdvancedSettingsPage.ets:131 / SyncWebdavConfigPage.ets:146</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>同步失败</h3><p>WebDAV 服务返回 401，请检查用户名与密码。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">阶段</span><span class="sp"></span><span class="t" style="text-align:right">拉取远端快照</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">时间</span><span class="sp"></span><span class="t" style="text-align:right">14:32:07</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">复制详情</button><button class="mbtn default">知道了</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B33">
+<p class="did"><b>B33 · 同步进度</b>（XS 360，7 个 controller）<span class="src">sync/SyncOperationProgressDialog.ets:10 → SyncExperienceHost.ets:85 等 7 处</span></p>
+<div class="mac w360">
+  <div class="mac-head center" style="padding-bottom:6px"><h3 style="font-size:13px">正在合并书签 68%</h3></div>
+  <div class="mac-body" style="align-items:center;padding-bottom:14px">
+    <div style="width:56px;height:56px;border-radius:50%;border:3px solid rgba(0,0,0,.10);border-top-color:var(--accent)"></div>
+    <p class="mhint" style="text-align:center">正在写入 1,204 条记录</p>
+  </div>
+</div>
+</figure>
+
+<figure class="d" id="B34">
+<p class="did"><b>B34 · 操作结果</b>（S 420，列表限高 340）<span class="src">sync/SyncResultDialog.ets:22 → SyncAdvancedSettingsPage.ets:147 / SyncWebdavConfigPage.ets:162</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>合并完成</h3><p>本机与远端已完成双向合并。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">新增</span><span class="sp"></span><span class="t" style="text-align:right">42</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">更新</span><span class="sp"></span><span class="t" style="text-align:right">8</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">删除</span><span class="sp"></span><span class="t" style="text-align:right">2</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">跳过冲突</span><span class="sp"></span><span class="t" style="text-align:right">0</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">知道了</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B35">
+<p class="did"><b>B35 · 正在测试翻译服务（工作区版）</b>（XS 360）<span class="src">translation/TranslationProviderWorkspaceHost.ets:41 → :80</span></p>
+<div class="mac w360">
+  <div class="mac-head"><h3>正在测试翻译服务</h3><p>正在向服务端发送一段测试文本。</p></div>
+  <div class="mac-body" style="padding-bottom:16px"><div class="mbar" style="width:60%;margin:0 auto"></div></div>
+</div>
+</figure>
+
+<figure class="d" id="B36">
+<p class="did"><b>B36 · 需要升级 Aira</b>（S 420）<span class="src">update/ClientUpdateRequiredSheet.ets:18 → :110</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>需要升级 Aira</h3><p>当前版本 3.2.0 已不再支持在线服务，升级后即可继续使用。</p></div>
+  <div class="mac-body"><div class="mfield" style="justify-content:space-between"><span style="color:var(--label-55)">可用版本</span><span>3.3.2</span></div></div>
+  <div class="mac-foot"><button class="mbtn">继续使用本地功能</button><button class="mbtn default">前往升级</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B37">
+<p class="did"><b>B37 · 安装用户脚本</b>（M 520，大屏门控）<span class="src">userscripts/UserScriptInstallDialog.ets:8 → BrowserSystemSurfaceHost.ets:112</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>准备安装用户脚本</h3><p>Aira 阅读助手 v1.4.0 · 作者 lin</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">作用范围</span><span class="sp"></span><span class="t" style="text-align:right">所有网站</span></div>
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">申请权限</span><span class="sp"></span><span class="t" style="text-align:right">读写页面内容</span></div>
+    </div>
+    <p class="mhint">脚本内容来自第三方，请确认来源可信。</p>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">安装</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B38">
+<p class="did"><b>B38 · 从 URL 添加（用户脚本）</b>（S 420）<span class="src">userscripts/UserScriptManualUrlDialog.ets:10 → UserScriptManagementHost.ets:113（未设 alignment）</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>从 URL 添加</h3><p>输入 .user.js 脚本地址。</p></div>
+  <div class="mac-body"><div class="mform"><span class="lb">脚本地址：</span><span class="mfield ph">https://example.com/script.user.js</span></div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">读取</button></div>
+</div>
+</figure>
+
+<figure class="d" id="B39">
+<p class="did"><b>B39 · 正在测试翻译服务（页面版）</b>（XS 360）<span class="src">pages/TranslationProviderConfigPage.ets:38 → :80</span></p>
+<div class="mac w360">
+  <div class="mac-head"><h3>正在测试翻译服务</h3><p>正在校验接口地址与密钥。</p></div>
+  <div class="mac-body" style="padding-bottom:16px"><div class="mbar" style="width:60%;margin:0 auto"></div></div>
+</div>
+</figure>
+
+</div>
+
+<!-- ================= 3. 大屏居中卡片 ================= -->
+<h2 id="sec3"><span class="n">3</span>BrowserAdaptiveModalOverlay 全量（10 个宿主）<span class="tag">大屏专用壳</span></h2>
+<p class="note">这 10 个已经是「大屏居中卡片 + header」，只差把每处手写的 <code>desktopWidth / Min / Max</code> 换成共享档位。C5 与 C6 各有 4 个内容变体。</p>
+
+<div class="grid">
+
+<figure class="d" id="C1">
+<p class="did"><b>C1 · Aira Pro 桌面弹窗</b>（L 640）3 个内容变体<span class="src">membership/AiraProScreen.ets:217</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>登录华为账号</h3><p>登录后可跨设备同步书签，并恢复已购买的 Aira Pro 权益。</p></div>
+  <div class="mac-body">
+    <div style="display:flex;align-items:center;gap:8px"><span class="mchk on"></span><span style="font-size:11px;color:var(--label-55)">我已阅读并同意《用户服务协议》与《隐私政策》</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">稍后</button><button class="mbtn default">华为账号登录</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C2">
+<p class="did"><b>C2 · 底部工具条提示</b>（S 420，手机形态也居中 → 偏离规范）<span class="src">onboarding/BottomToolbarGuideOverlay.ets:28</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>底部工具条提示</h3><p>上滑中间区域可以展开全部工具。</p></div>
+  <div class="mac-body"><div style="height:110px;border-radius:16px;background:var(--fill-group);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--label-55)">演示视频</div></div>
+  <div class="mac-foot"><button class="mbtn">跳过</button><button class="mbtn default">开始使用</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C3">
+<p class="did"><b>C3 · 移动书签</b>（M 520，无 header）<span class="src">bookmarks/BookmarkMoveFolderSelectionSheet.ets:241</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>移动书签</h3><p>选择目标文件夹。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span style="color:var(--label-45);font-size:11px">▸</span><span class="t">收藏夹</span></div>
+    <div class="mac-row one"><span style="color:var(--label-45);font-size:11px">▸</span><span class="t">工作</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">阅读清单</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">移动到此处</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C4">
+<p class="did"><b>C4 · 新用户礼包</b>（S 420，手机形态也居中 → 偏离规范）<span class="src">browser/NewUserGiftOverlay.ets:24</span></p>
+<div class="mac w420">
+  <div class="mac-head center"><h3 style="font-size:14px">新用户礼包</h3><p>已为你解锁 15 天 Aira Pro 体验。</p></div>
+  <div class="mac-body"><div style="height:130px;border-radius:16px;background:#2A2833;display:flex;align-items:center;justify-content:center;color:#EBEBEB;font-size:13px">礼包插画</div></div>
+  <div class="mac-foot"><button class="mbtn default">收下</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C5">
+<p class="did"><b>C5 · 小说阅读器</b>（4 变体：目录 640 / 亮度与主题 520 / 阅读设置 520 / 文字 520）<span class="src">browser/BrowserSystemSurfaceHost.ets:159</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>目录</h3><p>共 128 章</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="t">第一章 楔子</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">第二章 来信</span></div>
+    <div class="mac-row one"><span class="t">第三章 出发</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C6">
+<p class="did"><b>C6 · 网页工具（大屏）</b>（M 520）4 变体：网站版本 / 网页标识 / 屏幕方向 / 站点信息<span class="src">browser/BrowserWebPageToolsOverlayHost.ets:147</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>网站版本</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad"></span><span class="t">移动版</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">桌面版</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">当前</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">跟随站点默认</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C7">
+<p class="did"><b>C7 · FeatureGate</b>（M 520）<span class="src">browser/FeatureGateOverlay.ets:23</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>需要 Aira Pro</h3><p>视频助手与小说阅读无广告等能力需要 Aira Pro。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">年付 ¥98</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">推荐</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">月付 ¥12</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">暂不开通</button><button class="mbtn default">查看权益</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C8">
+<p class="did"><b>C8 · Wi-Fi 信息</b>（M 520）<span class="src">browser/BrowserWifiQrResultOverlay.ets:64</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>Wi-Fi 信息</h3></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">名称</span><span class="sp"></span><span class="t" style="text-align:right">Aira-Office</span></div>
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">密码</span><span class="sp"></span><span class="t" style="text-align:right">aira-2026-secure</span></div>
+    </div>
+    <div style="width:150px;height:150px;margin:0 auto;border-radius:16px;background:var(--fill-group);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--label-55)">二维码</div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">复制密码</button><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C9">
+<p class="did"><b>C9 · 目标语言</b>（M 520）<span class="src">translation/WebpageTranslationTargetLanguageSheet.ets:234</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>目标语言</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">简体中文</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">English</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">日本語</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">跟随系统语言</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="C10">
+<p class="did"><b>C10 · 软件更新</b>（M 520，手机形态也居中 → 偏离规范）<span class="src">update/CommunityUpdateOverlay.ets:28</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>软件更新</h3><p>Aira 3.3.2 · 48.2 MB</p></div>
+  <div class="mac-body"><div class="mac-group" style="padding:12px">
+    <p style="margin:0 0 8px;font-size:12px;font-weight:600">本次更新</p>
+    <p style="margin:0;font-size:11.5px;line-height:1.6;color:var(--label-55)">· 居中下载设置页，并记住自定义下载目录<br>· 修复标签页缩小动画残留<br>· 视频助手支持更多站点</p>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">稍后</button><button class="mbtn default">立即更新</button></div>
+</div>
+</figure>
+
+</div>
+
+<!-- ================= 4. 居中半模态 ================= -->
+<h2 id="D"><span class="n">4</span>居中半模态（11 处）<span class="tag warn">6 种开关名</span></h2>
+<p class="note">11 处全部是条件式 <code>SheetType.CENTER</code>，但判断用的 prop 有 <b>6 种不同命名</b>：<code>shellFamily</code>(1)、<code>desktopPresentation</code>(5)、<code>pageLayoutMode</code>(1)、<code>presentationMode</code>(2)、<code>isLargeScreen</code>(1)、<code>useCenteredSheet</code>(1)。其中 5 处的 Builder 再包一层 <code>CenteredDialogSurface</code>，另 6 处直接把内容塞进居中 sheet —— 这直接导致宽度与内边距不统一。它们的<b>内容</b>与第 2、3 节重复（华为登录、跨设备标签页、备份频率、标签页样式、风险同意、开发者说明、自定义 UA、应用内代理、工具栏自定义、同步步骤流），所以下面只画「容器差异」的代表。</p>
+
+<div class="grid">
+<figure class="d">
+<p class="did"><b>D-a · 包了 CenteredDialogSurface（推荐形态）</b><span class="src">SyncAdditionalBackupHost.ets:219 · BrowserToolbarCustomizationScreen.ets:190 · BrowserUserAgentSettingsScreen.ets:201</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>备份频率</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad"></span><span class="t">每次同步</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">每天</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">每周</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d">
+<p class="did"><b>D-b · 直接塞进居中 sheet（裸内容）</b><span class="src">CrossDeviceLinkHost.ets:234/247/260 · SettingsCenterScreen.ets:323</span></p>
+<div class="mac w420">
+  <div class="mac-head" style="padding:17px 20px"><h3>确认登录 Aira-sync 扩展</h3><p>扩展请求通过本机登录同一账号。</p></div>
+  <div class="mac-foot plain"><button class="mbtn">拒绝</button><button class="mbtn default">确认登录</button></div>
+</div>
+</figure>
+
+<figure class="d">
+<p class="did"><b>D-c · 风险同意（用户脚本 / 内容过滤）</b><span class="src">SettingsEmbeddedDetailPanel.ets:235</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>使用用户脚本前，请先了解风险</h3><p>用户脚本可以读写网页内容，可能影响登录、支付与页面显示。请只安装来源可信的脚本。</p></div>
+  <div class="mac-foot plain"><button class="mbtn">不使用</button><button class="mbtn default">我了解风险</button></div>
+</div>
+</figure>
+</div>
+
+<!-- ================= 5. 自绘 ================= -->
+<h2 id="E"><span class="n">5</span>自绘居中模态（1 处）<span class="tag">半径 28 · 遮罩 18%</span></h2>
+<div class="grid">
+<figure class="d">
+<p class="did"><b>E1 · 用户脚本安装（大屏 native_tab）</b><span class="src">userscripts/UserScriptManagementHost.ets:390 buildNativeModalSurface()</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>准备安装用户脚本</h3><p>Aira 阅读助手 v1.4.0 · 作者 lin</p></div>
+  <div class="mac-body"><p class="mhint" style="margin:0">脚本内容来自第三方，安装后可在脚本管理中随时停用或删除。</p></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">安装</button></div>
+</div>
+</figure>
+</div>
+
+<!-- ================= 6. PC 上仍是底部弹窗 ================= -->
+<h2 id="F"><span class="n">6</span>PC 上仍是底部弹窗的 26 处 <span class="tag warn">三种机制 · 全部改为居中</span></h2>
+<p class="note"><b>结论：PC 壳层下不允许任何底部弹窗。</b>上一版我只扫了 <code>bindSheet</code>，得出 16 处；重扫后发现底部弹窗有 <b>三种机制</b>，实际是 <b>26 处</b>——多出来的 10 处其中 <b>5 处来自一个我完全没有审计过的机制</b>。</p>
+
+<p class="mac-sec" style="margin:18px 0 8px">机制 A · <code>bindSheet</code> + <code>SheetType.BOTTOM</code>（共 25 处调用点）</p>
+<ul style="margin:0;font-size:13px;line-height:1.75;color:var(--label-75);padding-left:20px">
+  <li><b>14 处</b> 字面量 <code>SheetType.BOTTOM</code>（无条件）。其中 <b>12 处是问题</b>，另 2 处无需处理：<code>BrowserBottomAddressPanel:776</code>（宿主大屏不挂载）、<code>UserScriptManagementHost:214</code>（仅 page 模式，大屏走自绘居中）。</li>
+  <li><b>11 处</b> 写了条件式三元 CENTER/BOTTOM。<b>其中 9 处存在隐蔽问题</b>：同一个组件也被 <code>@Entry</code> 路由页复用，而<b>那些页面不传那个 prop</b>，于是在 PC 上仍然退化成底部弹窗。只有 <code>SettingsEmbeddedDetailPanel:235</code> 与 <code>SyncAdditionalBackupHost:219</code> 的宿主只在大屏壳里，真正安全。</li>
+</ul>
+
+<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;font-size:12.5px;margin-top:8px">
+<thead><tr><th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">#</th><th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">机制 A 问题站点</th><th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">内容</th></tr></thead>
+<tbody>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A1</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>BrowserShellPage.ets:6650</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">10 种 systemSheet：发布公告 / 登录确认 / 用户脚本页面操作 / 应用内代理 / 资源候选 / 阅读文字 / 阅读外观 / 阅读设置 / 目录 / 跨设备标签页</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A2</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>SettingsDetailPage.ets:342</code> · <code>SettingsInlineDetailPanel.ets:308</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">清除浏览数据</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A3</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>AdBlockSettingsPage.ets:119</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">开启网页内容过滤？</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A4</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>SyncWebdavConfigPage.ets:265</code> · <code>BrowserCrossDeviceTabsOverlay.ets:157</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">华为登录面板</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A5</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>BookmarkManagerPage.ets:374</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">移动书签</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A6</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>WebpageTranslationSettingsScreen.ets:198</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">目标语言</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A7</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>SyncExperienceScreen.ets:233</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">选择同步内容 / 同步方式</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A8</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>LocalBackupScreen.ets:208</code> <span class="tag warn">上轮漏</span></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">选择导入内容</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A9</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>HistoryManagerScreen.ets:352</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">历史详情</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A10</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>OfflinePageViewerScreen.ets:301</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">离线网页详情</td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">A11</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">条件式 CENTER 隐藏问题：<code>BrowserToolbarCustomizationScreen:190</code> · <code>BrowserUserAgentSettingsScreen:201</code> · <code>SettingsCenterScreen:323</code> · <code>SettingsDetailContent:146</code> · <code>CustomHomepageSettingsScreen:356</code> · <code>CrossDeviceLinkHost:234/247/260</code> · <code>AiraProScreen:189</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">工具栏自定义 / 自定义 UA / 登录确认 / 标签页样式 / 开发者说明 / 登录确认×2 + 跨设备标签页 / Aira Pro 面板</td></tr>
+</tbody>
+</table>
+
+<p class="mac-sec" style="margin:22px 0 8px">机制 B · 直接使用 <code>BrowserModalBottomOverlay</code>（5 处）<span class="tag warn">上轮完全漏掉</span></p>
+<p class="note" style="margin-bottom:10px">这 5 处不经 <code>bindSheet</code>、也不经 <code>BrowserAdaptiveModalOverlay</code>，而是自己直接调底部覆盖层。所以我上一轮 grep <code>bindSheet</code> 时全部漏掉了，而它们<b>没有任何大屏分支</b>。</p>
+<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;font-size:12.5px">
+<thead><tr><th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">#</th><th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">定义位置</th><th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">高度</th><th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">挂载点</th><th style="text-align:left;padding:9px 13px;background:var(--fill-group);font-size:11px;color:var(--label-55)">大屏门控</th></tr></thead>
+<tbody>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">B1</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>BrowserHlsTakeoverSheet.ets:518</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>'78%'</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>BrowserShellPage.ets:6525</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b style="color:var(--danger)">无</b></td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">B2</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>ReaderSpeechPlayerScreen.ets:502</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">常量</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>BrowserShellPage.ets:8569</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b style="color:var(--danger)">无（且未传 layoutMode）</b></td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">B3</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>ElementInspectionOverlay.ets:258</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">常量</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>BrowserShellPage.ets:8478</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b style="color:var(--danger)">无</b></td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">B4</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>OfflinePageViewerScreen.ets:657</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">常量</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">离线页内</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b style="color:var(--danger)">无</b></td></tr>
+<tr><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">B5</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>HistoryBookmarkFolderSelectionOverlay.ets:29</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)">常量</td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><code>HistoryManagerScreen.ets:795</code></td><td style="padding:8px 13px;border-top:1px solid var(--hairline-soft)"><b style="color:var(--danger)">无</b></td></tr>
+</tbody>
+</table>
+
+<p class="mac-sec" style="margin:22px 0 8px">机制 C · 手机形态也居中的异常（3 处，不影响 PC 但登记）</p>
+<p class="note" style="margin-bottom:0"><code>CommunityUpdateOverlay.ets:33</code> · <code>NewUserGiftOverlay.ets:32</code> · <code>BottomToolbarGuideOverlay.ets:36</code> 传了 <code>phoneSheetAlignment: Alignment.Center</code>，意味着它们在<b>手机上也是居中浮层</b>，偏离手机壳的底部规范。其余 7 个 AdaptiveModalOverlay 宿主走的是 <code>Alignment.Bottom</code>。</p>
+
+<p class="mac-sec" style="margin:26px 0 8px">F0 · 同一内容：「现在（底部弹窗）」 vs 「改成居中后」</p>
+<div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
+  <figure class="d">
+    <p class="did"><b>现在：底部弹窗</b> · <code>SheetType.BOTTOM</code> + <code>dragBar: true</code><span class="src">横跨窗口宽 · 只圆上面两个角 · 顶部一条触摸拖拽条 · 从底部升起</span></p>
+    <div style="width:520px;background:#fff;border-radius:24px 24px 0 0;box-shadow:0 -8px 28px rgba(16,20,32,.13);padding:0 0 24px">
+      <div style="display:flex;justify-content:center;padding:10px 0 6px"><span style="width:36px;height:5px;border-radius:3px;background:rgba(0,0,0,.18)"></span></div>
+      <div class="mac-head" style="padding-top:6px"><h3>目标语言</h3></div>
+      <div class="mac-body"><div class="mac-group">
+        <div class="mac-row one"><span class="mrad on"></span><span class="t">简体中文</span></div>
+        <div class="mac-row one"><span class="mrad"></span><span class="t">English</span></div>
+        <div class="mac-row one"><span class="mrad"></span><span class="t">日本語</span></div>
+      </div></div>
+      <div class="mac-foot"><button class="mbtn default">完成</button></div>
+    </div>
+  </figure>
+  <figure class="d">
+    <p class="did"><b>改成居中后（M 520）</b> · 与其它居中对话框同一套壳<span class="src">内容一处未改，只换容器</span></p>
+    <div class="mac w520">
+      <div class="mac-head"><h3>目标语言</h3></div>
+      <div class="mac-body"><div class="mac-group">
+        <div class="mac-row one"><span class="mrad on"></span><span class="t">简体中文</span></div>
+        <div class="mac-row one"><span class="mrad"></span><span class="t">English</span></div>
+        <div class="mac-row one"><span class="mrad"></span><span class="t">日本語</span></div>
+      </div></div>
+      <div class="mac-foot"><button class="mbtn default">完成</button></div>
+    </div>
+  </figure>
+</div>
+
+<p class="mac-sec" style="margin:28px 0 8px">F13d · 华为登录面板（以前从未画过，5 处共用）</p>
+<div class="grid">
+<figure class="d" id="F13d">
+<p class="did"><b>F13d · 华为登录</b>（M 520）<span class="src">sync/HuaweiLoginSheetContent.ets:41/49 —— 共 5 处：SyncWebdavConfigPage:265 · CrossDeviceLinkHost:247 · SettingsCenterScreen:323 · AiraProScreen:189 · BrowserCrossDeviceTabsOverlay:157</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>Aira</h3><p>使用华为账号登录，安全同步你的书签</p></div>
+  <div class="mac-body">
+    <div style="height:96px;border-radius:16px;background:var(--fill-group);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--label-55)">华为账号卡片（头像 + 昵称）</div>
+    <div class="mac-row" style="border:none;padding:0"><span class="mchk on"></span><span class="t" style="font-size:12.5px;color:var(--label-55)">我已阅读并同意《用户服务协议》与《隐私政策》</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">暂不登录</button><button class="mbtn default">华为账号登录</button></div>
+</div>
+</figure>
+</div>
+
+<p class="mac-sec" style="margin:28px 0 8px">F7d–F10d · 阅读体验四件套（以前只画了「目录」一张）</p>
+<div class="grid">
+
+<figure class="d" id="F7d">
+<p class="did"><b>F7d · 阅读 · 目录</b>（M 520）<span class="src">reading/ReadingExperienceSystemSheet.ets:42-58 · NovelReaderCatalogSheet</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>目录</h3><p>三体 · 作者 刘慈欣 · 共 128 章</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">第一章 缨子</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">第二章 来信</span><span class="sp"></span><span style="font-size:11.5px;color:var(--accent)">当前</span></div>
+    <div class="mac-row one"><span class="t">第三章 出发</span></div>
+    <div class="mac-row one"><span class="t">第四章 红岸</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">定位到当前章</button><button class="mbtn default">关闭</button></div>
+</div>
+</figure>
+
+<figure class="d" id="F8d">
+<p class="did"><b>F8d · 阅读 · 亮度与主题</b>（M 520）<span class="src">ReadingSurfaceSettingsPanel.ets:75/84 —— 跟随系统亮度 + 亮度滑块 + 三个主题圆</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>亮度与主题</h3></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t">跟随系统亮度</span><span class="sp"></span><span class="msw on"></span></div>
+      <div class="mac-row one" style="height:44px;gap:12px">
+        <span style="font-size:13px;color:var(--label-55)">☀︎</span>
+        <span style="flex:1;height:8px;border-radius:4px;background:var(--fill-ctrl);position:relative">
+          <span style="position:absolute;left:62%;top:-4px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>
+        </span>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:0 4px">
+      <span style="width:38px;height:38px;border-radius:50%;background:#FFFFFF;box-shadow:inset 0 0 0 2px var(--accent)"></span>
+      <span style="width:38px;height:38px;border-radius:50%;background:#F5F1E8;box-shadow:inset 0 0 0 1px rgba(0,0,0,.10)"></span>
+      <span style="width:38px;height:38px;border-radius:50%;background:#1C1C1E;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)"></span>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="F9d">
+<p class="did"><b>F9d · 阅读 · 文字</b>（M 520）<span class="src">ReadingSurfaceSettingsPanel.ets:200/246 —— 字号 + 行间距</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>文字</h3></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one" style="height:44px;gap:12px"><span style="font-size:13px;color:var(--label-55);width:52px">字号</span>
+        <span style="flex:1;height:8px;border-radius:4px;background:var(--fill-ctrl);position:relative"><span style="position:absolute;left:48%;top:-4px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span></span>
+        <span style="font-size:13px;color:var(--label-55);width:20px;text-align:right">16</span></div>
+      <div class="mac-row one" style="height:44px;gap:12px"><span style="font-size:13px;color:var(--label-55);width:52px">行间距</span>
+        <span style="flex:1;height:8px;border-radius:4px;background:var(--fill-ctrl);position:relative"><span style="position:absolute;left:70%;top:-4px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span></span>
+        <span style="font-size:13px;color:var(--label-55);width:20px;text-align:right">宽</span></div>
+    </div>
+    <div style="background:var(--fill-group);border-radius:16px;padding:16px;font-size:16px;line-height:1.8;color:var(--label-75)">预览：叶文洁看着屏幕上的脉冲，忽然明白了那串数据的含义。</div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="F10d">
+<p class="did"><b>F10d · 阅读 · 阅读设置</b>（M 520）<span class="src">ReadingSurfaceSettingsPanel.ets:77/288 —— 翻页方式：左右翻页 / 左右快速 / 上下滚动</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>阅读设置</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad"></span><span class="t">左右翻页</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">左右快速</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">上下滚动</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+</div>
+
+<p class="mac-sec" style="margin:28px 0 8px">B3 · 元素检查浮层（底部锚定，从未画过）</p>
+<div class="grid">
+<figure class="d" id="B3d">
+<p class="did"><b>B3d · 元素检查（改成居中后）</b>（M 520）<span class="src">browser/ElementInspectionOverlay.ets:258 · mounted BrowserShellPage.ets:8478 · 原为 BrowserModalBottomOverlay</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>元素检查</h3><p>已隐藏 2 个元素 · 在页面上点击可继续选择</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t" style="font-size:12.5px;font-family:ui-monospace,Menlo,monospace;color:var(--label-75)">div.ad-banner</span><button class="mbtn sm">恢复</button></div>
+      <div class="mac-row one"><span class="t" style="font-size:12.5px;font-family:ui-monospace,Menlo,monospace;color:var(--label-75)">aside.promo</span><button class="mbtn sm">恢复</button></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">退出检查</button><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+</div>
+
+<p class="note" style="margin-top:14px"><b>剩下 11 处的内容与已有草图完全一致</b>，只换容器：F1 发布公告 → <a href="#G5">G5</a> · F2/F12 登录确认 → <a href="#F13d">F13d</a> 同区 · F3/F5 用户脚本页面操作 → <a href="#H7">H7</a> · F4 应用内代理 → <a href="#H13">H13</a> · F5 页面资源候选 → <a href="#H8">H8</a> · F6 跨设备标签页 → <a href="#H15">H15</a> · F11 清除浏览数据 → <a href="#B26">B26</a> · F12 内容过滤同意 → <a href="#G1">G1</a> · F14 移动书签 → <a href="#C3">C3</a> · F15 开发者说明 → <a href="#G6">G6</a> / 工具栏自定义 → <a href="#H6">H6</a> / 自定义 UA → <a href="#H4">H4</a> / 目标语言 → F0 / 选择同步内容 → <a href="#B31">B31</a> / 离线网页详情 → <a href="#H16">H16</a> / 历史详情 → <a href="#H11">H11</a> 。</p>
+
+<!-- ================= 7. 说明 / 同意 / 引导 ================= -->
+<h2 id="G"><span class="n">7</span>说明 · 同意 · 引导类弹窗（上一版漏掉的一整类）<span class="tag warn">补全</span></h2>
+<p class="note">这类弹窗的内容不是「确认一个问题」，而是「你先看懂这件事」——风险说明、开发者说明、发布公告、同步指南、法务文档。它们的共同点：<b>正文字数多、需要滚动、主操作是「我了解了」而不是「确定」</b>。目前它们的表面从 420 到 720 不等，标题字号从 17 到 24 不等。</p>
+
+<div class="grid">
+
+<figure class="d" id="G1">
+<p class="did"><b>G1 · 开启网页内容过滤？</b>（M 520）<span class="src">adblock/AdBlockRiskConsentSheet.ets:22 文案来自 core/adblock/AdBlockRiskConsentViewModel.ets:13</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>开启网页内容过滤？</h3><p>过滤规则来自第三方订阅，可能会隐藏页面部分内容，例如广告位旁的推广、评论区或登录入口。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row two"><span class="t">影响页面显示<span class="s">部分网站可能布局错位或功能失效</span></span></div>
+      <div class="mac-row two"><span class="t">不会上传浏览数据<span class="s">规则在本地匹配，不上报你访问的网址</span></span></div>
+      <div class="mac-row two"><span class="t">可随时关闭<span class="s">设置 → 网页内容过滤 中可以停用并清空统计</span></span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">暂不开启</button><button class="mbtn default">我了解了，开启</button></div>
+</div>
+</figure>
+
+<figure class="d" id="G2">
+<p class="did"><b>G2 · 启用第三方过滤规则？</b>（M 520）第二态<span class="src">adblock/AdBlockRiskConsentSheet.ets:22 文案来自 core/adblock/AdBlockRuleSourceCoordinator.ets:105</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>启用第三方过滤规则？</h3><p>该订阅由第三方维护，Aira 不会对其内容做审查或修改。规则可能随订阅方更新而变化。</p></div>
+  <div class="mac-body">
+    <div class="mfield" style="justify-content:space-between;height:26px"><span style="color:var(--label-55)">订阅地址</span><span style="font-size:12px">https://example.com/rules.txt</span></div>
+    <p class="mhint">启用后可在规则列表中单独停用。</p>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">启用</button></div>
+</div>
+</figure>
+
+<figure class="d" id="G3">
+<p class="did"><b>G3 · 使用用户脚本前，请先了解风险</b>（M 520）<span class="src">userscripts/UserScriptRiskConsentSheet.ets 文案来自 core/userscripts/UserScriptManagementSessionCoordinator.ets:35</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>使用用户脚本前，请先了解风险</h3><p>用户脚本可以读取和修改网页内容，其能力接近网页自身的脚本。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row two"><span class="t">能做什么<span class="s">改写页面、读取你输入的文本、发起网络请求</span></span></div>
+      <div class="mac-row two"><span class="t">风险在哪<span class="s">来源不明的脚本可能窃取帐号或伪造页面</span></span></div>
+      <div class="mac-row two"><span class="t">Aira 的态度<span class="s">不审查脚本内容，只提供运行环境</span></span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">不使用</button><button class="mbtn default">我了解风险</button></div>
+</div>
+</figure>
+
+<figure class="d" id="G4">
+<p class="did"><b>G4 · 脚本更新检查</b>（M 520）<span class="src">userscripts/UserScriptUpdateSheet.ets:112/125/148</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>脚本更新检查</h3><p>仅比较已安装脚本与来源地址的版本号。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t">Aira 阅读助手</span><span class="sp"></span><span style="font-size:11px;color:var(--accent)">可更新 v1.4.0 → v1.5.2</span></div>
+      <div class="mac-row one"><span class="t">图片直链</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">已是最新</span></div>
+      <div class="mac-row one"><span class="t">旧版知乎增强</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">无可用来源</span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">关闭</button><button class="mbtn default">全部更新</button></div>
+</div>
+</figure>
+
+<figure class="d" id="G5">
+<p class="did"><b>G5 · 发布公告（含更新日志）</b>（M 520）<span class="src">update/ReleaseNoticeSheet.ets:40/112，手机与大屏共用</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>关于本次更新</h3><p>Aira 3.3.2 · 建议更新</p></div>
+  <div class="mac-body">
+    <p class="mac-sec">更新日志</p>
+    <div class="mac-group" style="padding:11px 12px">
+      <p style="margin:0;font-size:11.5px;line-height:1.7;color:var(--label-55)">• 居中下载设置页，并记住自定义下载目录<br>• 修复标签页缩小动画残留的图像<br>• 视频助手支持更多站点</p>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">稍后</button><button class="mbtn default">前往更新</button></div>
+</div>
+</figure>
+
+<figure class="d" id="G6">
+<p class="did"><b>G6 · 开发者说明（自定义主页）</b>（M 520）<span class="src">customhome/CustomHomepageInfoSheet.ets:31/130，<code>presentation: 'centered'</code></span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>开发者说明</h3><p>自定义主页是一个本地 HTML 文档，由 Aira 在你的设备上加载。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row two"><span class="t">可用接口<span class="s">页面可调用 Aira 提供的搜索、书签、主题接口</span></span></div>
+      <div class="mac-row two"><span class="t">网络请求<span class="s">默认阻止外部请求，需在设置中显式允许</span></span></div>
+      <div class="mac-row two"><span class="t">兼容性<span class="s">不保证所有 CSS/JS 特性可用</span></span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">知道了</button></div>
+</div>
+</figure>
+
+<figure class="d" id="G7">
+<p class="did"><b>G7 · 同步指南（大屏桌面弹窗内容）</b>（L 640）<span class="src">sync/SyncDesktopBookmarkGuideContent.ets → AiraProScreen.ets:217 的 C1</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>在电脑上同步书签</h3><p>电脑端与手机端使用同一个 Aira 账号后，书签会自动合并。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row two"><span class="t" style="flex:none;width:22px">1</span><span class="t">在电脑上安装 Aira-sync 扩展<span class="s">从浏览器扩展商店安装</span></span></div>
+      <div class="mac-row two"><span class="t" style="flex:none;width:22px">2</span><span class="t">扫码或输入配对码<span class="s">在本页点击「华为账号登录」后完成配对</span></span></div>
+      <div class="mac-row two"><span class="t" style="flex:none;width:22px">3</span><span class="t">选择同步方式<span class="s">Aira 云 / 华为云空间 / WebDAV 均可</span></span></div>
+    </div>
+    <p class="mhint">首次同步只会合并，不会删除任一端的书签。</p>
+  </div>
+  <div class="mac-foot"><button class="mbtn">稍后</button><button class="mbtn default">开始配对</button></div>
+</div>
+</figure>
+
+<figure class="d" id="G8">
+<p class="did"><b>G8 · 法务文档（大屏桌面弹窗内容）</b>（L 640）<span class="src">AiraLegalWebDocumentContent → AiraProScreen.ets:217 的 C1</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>用户服务协议</h3><p>最近更新：2026 年 3 月 12 日</p></div>
+  <div class="mac-body">
+    <div class="mscroll" style="max-height:160px">
+      <div class="mbar" style="width:92%"></div><div class="mbar" style="width:78%"></div><div class="mbar" style="width:88%"></div><div class="mbar" style="width:64%"></div><div class="mbar" style="width:90%"></div><div class="mbar" style="width:72%"></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">关闭</button></div>
+</div>
+</figure>
+
+</div>
+<p class="note"><b>G9 · 页面内提示卡（不是弹窗，登记以免遗漏）：</b><code>adblock/AdBlockRuleNoticeCard.ets</code>，基于 <code>settings/SettingsNoticeCard.ets</code>，出现在规则列表内而不是弹出。同类还有 <code>settings/SettingsAppProxyNoticeBanner.ets</code>。两者都不需要居中对话框规范，但需与对话框共用文字色与圆角档位。</p>
+
+<!-- ================= 8. 其余 sheet 内容 ================= -->
+<h2 id="H"><span class="n">8</span>其余 sheet 内容逐个补全（上一版只列了表）<span class="tag warn">补全</span></h2>
+<p class="note">上一版把第 4、6 节只列了清单没画。这里把每一个的内容都画出来——它们大多在 PC 上以大屏居中窗口或底部弹窗两种形态出现。</p>
+
+<div class="grid">
+
+<figure class="d" id="H1">
+<p class="did"><b>H1 · 站点信息</b>（L 640，分段：站点信息 / 拦截日志）<span class="src">browser/BrowserSiteInfoSheet.ets:349/359 → C6 的 siteInfo 变体</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>站点信息</h3><p>这里只统计 Aira 实际执行的网页保护动作。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t">连接</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">HTTPS · TLS 1.3</span></div>
+      <div class="mac-row one"><span class="t">网页内容过滤</span><span class="sp"></span><span style="font-size:11px;color:var(--accent)">已拦截 12 项</span></div>
+      <div class="mac-row one"><span class="t">防跟踪防护</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">增强</span></div>
+      <div class="mac-row one"><span class="t">站点设置</span><span class="sp"></span><span style="color:var(--label-45);font-size:11px">›</span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">拦截日志</button><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H2">
+<p class="did"><b>H2 · 屏幕方向</b>（M 520）<span class="src">browser/BrowserScreenOrientationSheet.ets:77</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>屏幕方向</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad"></span><span class="t">跟随系统</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">锁定竖屏</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">锁定横屏</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H3">
+<p class="did"><b>H3 · 网页标识（UA 预设）</b>（M 520）<span class="src">browser/BrowserUserAgentPresetSheet.ets:86/143</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>网页标识</h3></div>
+  <div class="mac-body">
+    <p class="mac-sec">移动标识</p>
+    <div class="mac-group"><div class="mac-row one"><span class="mrad"></span><span class="t">Aira 默认</span></div></div>
+    <p class="mac-sec">桌面标识</p>
+    <div class="mac-group">
+      <div class="mac-row one"><span class="mrad on"></span><span class="t">Chrome · Windows</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">Safari · macOS</span></div>
+    </div>
+    <p class="mac-sec">自定义 UA</p>
+    <div class="mac-group"><div class="mac-row one"><span class="t">自定义 UA</span><span class="sp"></span><span style="color:var(--label-45);font-size:11px">›</span></div></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">返回</button><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H4">
+<p class="did"><b>H4 · 自定义 UA（表单）</b>（M 520）<span class="src">settings/BrowserUserAgentSettingsScreen.ets:201/409，大屏走 <code>CenteredDialogSurface({fillHeight:true})</code></span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>自定义 UA</h3><p>仅在当前站点或全局生效，可在列表中随时删除。</p></div>
+  <div class="mac-body">
+    <div class="mform"><span class="lb" style="width:76px">名称：</span><span class="mfield">旧版微信内置浏览器</span></div>
+    <div class="mform" style="align-items:flex-start"><span class="lb" style="width:76px;padding-top:3px">UA 字符串：</span><span class="mfield tall">Mozilla/5.0 (Linux; Android 9; WX) AppleWebKit...</span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">保存</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H5">
+<p class="did"><b>H5 · 底部工具条系统面板</b>（手机专有，大屏不挂载）<span class="src">browser/BrowserToolbarSystemSheetContent.ets:20-22</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>更多工具</h3></div>
+  <div class="mac-body">
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <span class="tile">用户脚本</span>
+      <span class="tile">应用内代理</span>
+      <span class="tile">页面资源</span>
+      <span class="tile">阅读模式</span>
+    </div>
+  </div>
+</div>
+</figure>
+
+<figure class="d" id="H6">
+<p class="did"><b>H6 · 中间区域上滑 / 选择要自定义的操作</b>（M 520）<span class="src">settings/BrowserToolbarCustomizationScreen.ets:190/425/472</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>选择要自定义的操作</h3><p>当前槽位：中间区域上滑</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">展开工具栏</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">打开标签页总览</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">新建标签页</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">不设置</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">确定</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H7">
+<p class="did"><b>H7 · 用户脚本页面操作</b>（M 520）<span class="src">userscripts/UserScriptPageActionsSheet.ets:297 与 :403 的「管理脚本」</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>页面脚本</h3><p>当前页面可用的用户脚本功能。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t">Aira 阅读助手</span><span class="sp"></span><span style="font-size:11px;color:var(--accent)">净化正文</span></div>
+      <div class="mac-row one"><span class="t">图片直链</span><span class="sp"></span><span style="font-size:11px;color:var(--accent)">复制直链</span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">管理脚本</button><button class="mbtn default">关闭</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H8">
+<p class="did"><b>H8 · 页面资源候选</b>（L 640）<span class="src">browser/BrowserMediaResourcesSheet.ets:377/422/454</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>页面资源</h3><p>已扫描到 3 个可下载流。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row two"><span class="t">video · main.m3u8<span class="s">1080p · 256 个分片 · Key 1 个</span></span><button class="mbtn sm" style="align-self:center">下载</button></div>
+      <div class="mac-row two"><span class="t">video · backup.m3u8<span class="s">720p · 128 个分片</span></span><button class="mbtn sm" style="align-self:center">下载</button></div>
+      <div class="mac-row two"><span class="t">image · 24 张<span class="s">页面内嵌图片</span></span><button class="mbtn sm" style="align-self:center">查看</button></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">关闭</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H9">
+<p class="did"><b>H9 · 图片预览（全屏，非居中）</b><span class="src">browser/BrowserMediaResourcesSheet.ets:1248 <code>bindContentCover</code></span></p>
+<div style="width:420px;height:150px;border-radius:16px;background:#1C1C1E;display:flex;align-items:center;justify-content:center;color:#B8B8BD;font-size:13px;position:relative">
+  图片（objectFit: Contain）<span style="position:absolute;right:10px;top:10px;color:#fff;font-size:15px">✕</span>
+</div>
+</figure>
+
+<figure class="d" id="H10">
+<p class="did"><b>H10 · HLS 接管准备</b>（M 520）<span class="src">browser/BrowserHlsTakeoverSheet.ets:93/193/415</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>HLS 接管准备</h3><p>会探测 master/media、清晰度、分片、Key 和请求上下文。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">清晰度</span><span class="sp"></span><span style="font-size:11px">1080p / 720p / 480p</span></div>
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">分片</span><span class="sp"></span><span style="font-size:11px">256</span></div>
+      <div class="mac-row one"><span class="t" style="color:var(--label-55)">Key</span><span class="sp"></span><span style="font-size:11px">1 个</span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">刷新解析</button><button class="mbtn default">开始下载</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H11">
+<p class="did"><b>H11 · 历史详情</b>（S 420，PC 上仍是底部弹窗）<span class="src">history/HistoryVisitDetailsSheet.ets:75/89/97</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>历史详情</h3><p>community.aira.browser</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">访问时间</span><span class="sp"></span><span class="t" style="text-align:right">今天 14:32</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">来源</span><span class="sp"></span><span class="t" style="text-align:right">主页快捷方式</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">访问次数</span><span class="sp"></span><span class="t" style="text-align:right">7</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">复制链接</button><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H12">
+<p class="did"><b>H12 · 标签页样式</b>（S 420，大屏走 CENTER sheet）<span class="src">settings/TabOverviewLayoutChoiceSheet.ets:86/137/214</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>标签页样式</h3></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="mrad on"></span><span class="t">卡片平铺</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">列表</span></div>
+    </div>
+    <div class="mac-row" style="border:none;padding:0"><span class="t">始终显示卡片关闭按钮</span><span class="sp"></span><span class="mchk"></span></div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">确定</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H13">
+<p class="did"><b>H13 · 应用内代理（快速面板）</b>（M 520）<span class="src">settings/AppProxyQuickSheetContent.ets:94/130/144/189</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>应用内代理</h3></div>
+  <div class="mac-body">
+    <div class="mac-row" style="border:none;padding:0"><span class="t">启用应用内代理</span><span class="sp"></span><span class="mchk on"></span></div>
+    <p class="mac-sec">代理配置</p>
+    <div class="mac-group">
+      <div class="mac-row one"><span class="mrad on"></span><span class="t">公司代理</span><span class="sp"></span><span style="font-size:11px;color:var(--label-55)">http · 10.0.0.1:8080</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">直连</span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">代理设置</button><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H14">
+<p class="did"><b>H14 · 同步方式（步骤流第 2 步）</b>（M 520）<span class="src">sync/SyncGoalSelectionSheet.ets:47 → SyncFirstActivationFlowSheet</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>同步方式</h3><p>第 2 步，共 2 步。可随时在设置中更改。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row two"><span class="mrad on"></span><span class="t">私有化部署<span class="s">数据只存在你自己的服务器</span></span></div>
+    <div class="mac-row two"><span class="mrad"></span><span class="t">华为云空间<span class="s">使用华为账号，免费</span></span></div>
+    <div class="mac-row two"><span class="mrad"></span><span class="t">WebDAV<span class="s">兼容任意 WebDAV 服务</span></span></div>
+    <div class="mac-row two"><span class="mrad"></span><span class="t">Aira 云<span class="s">需要 Aira Pro</span></span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">上一步</button><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H15">
+<p class="did"><b>H15 · 跨设备标签页</b>（M 520，大屏已走 CENTER sheet）<span class="src">sync/CrossDeviceLinkHost.ets:260，sheet title「跨设备标签页」</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>跨设备标签页</h3><p>来自你已配对的设备。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row two"><span class="t">Aira 文档 · 大屏适配<span class="s">MateBook · 3 分钟前</span></span></div>
+    <div class="mac-row two"><span class="t">华为开发者联盟<span class="s">手机 · 1 小时前</span></span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">关闭</button></div>
+</div>
+</figure>
+
+<figure class="d" id="H16">
+<p class="did"><b>H16 · 离线网页详情</b>（S 420，PC 上仍是底部弹窗）<span class="src">offline/OfflinePageViewerScreen.ets:301/477</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>离线网页详情</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">保存时间</span><span class="sp"></span><span class="t" style="text-align:right">3 月 12 日</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">占用空间</span><span class="sp"></span><span class="t" style="text-align:right">2.4 MB</span></div>
+    <div class="mac-row one"><span class="t" style="color:var(--label-55)">资源完整性</span><span class="sp"></span><span class="t" style="text-align:right">12 / 14</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn danger">删除</button><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+</div>
+
+<!-- ================= 9. 同步 / 开关类 ================= -->
+<h2 id="sec9"><span class="n">9</span>同步 · 开关类弹窗 <span class="tag warn">第三版补全</span></h2>
+<p class="note">上一版把「首次开启同步」那个弹窗画成了勾选框，<b>实际是开关（`Toggle({ type: ToggleType.Switch })`）</b>（`SyncFirstActivationItemsSheet.ets:98`）。而且我整套草稿里<b>根本没有开关控件</b>，这一节把开关语言补上。首步开关弹窗已并入 B31。</p>
+
+<div class="grid">
+
+<figure class="d" id="S1">
+<p class="did"><b>S1 · 开启额外备份 · 选择备份内容</b>（M 520）<span class="src">sync/SyncAdditionalBackupHost.ets:127/600 → 开关行同 SyncFirstActivationItemsSheet</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>选择备份内容</h3><p>额外备份会把选定内容以只写方式写入 WebDAV，不会反向覆盖本机。</p></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row two"><span class="mtile" style="background:#E8F0FE">🔖</span><span class="t">书签<span class="s">完整书签快照</span></span><span class="msw on" style="align-self:center"></span></div>
+      <div class="mac-row two"><span class="mtile" style="background:#FDF2E3">⭐️</span><span class="t">主页收藏<span class="s">主页快捷方式</span></span><span class="msw" style="align-self:center"></span></div>
+      <div class="mac-row two"><span class="mtile" style="background:#ECEFF3">🧩</span><span class="t">常用设置<span class="s">主页外观与阅读偏好</span></span><span class="msw on" style="align-self:center"></span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">保存并更新额外备份</button></div>
+</div>
+</figure>
+
+<figure class="d" id="S2">
+<p class="did"><b>S2 · 同步尚未开启（空态）</b>（S 420）<span class="src">core/sync/SyncExperienceViewModel.ets:313、CrossDeviceLinkViewModel.ets:189「去开启同步」</span></p>
+<div class="mac w360">
+  <div class="mac-head"><h3>同步尚未开启</h3><p>开启后，你选择的内容会在设备之间自动保持一致。随时可以暂停。</p></div>
+  <div class="mac-foot plain"><button class="mbtn">稍后</button><button class="mbtn default">去开启同步</button></div>
+</div>
+</figure>
+
+<figure class="d" id="S3">
+<p class="did"><b>S3 · 同步内容开关卡（设置页内，非弹窗）</b><span class="src">sync/SyncContentSwitchCard.ets · 与弹窗共用同一套开关语言</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>同步内容</h3></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t">书签</span><span class="sp"></span><span class="msw on"></span></div>
+      <div class="mac-row one"><span class="t">历史记录</span><span class="sp"></span><span class="msw on"></span></div>
+      <div class="mac-row one"><span class="t">主页收藏与常用设置</span><span class="sp"></span><span class="msw"></span></div>
+    </div>
+  </div>
+</div>
+</figure>
+
+</div>
+
+<!-- ================= 10. 其余弹窗 ================= -->
+<h2 id="sec10"><span class="n">10</span>其余弹窗 <span class="tag warn">第三版补全</span></h2>
+<p class="note">按「名字像弹窗/sheet 内容、但从未在草稿里出现」的全仓扫查补出。已判定为<b>页面内容而非弹窗</b>的（设置页内联面板、右键菜单、Toast、InfoBar）已单独登记，不列入。</p>
+
+<div class="grid">
+
+<figure class="d" id="T1">
+<p class="did"><b>T1 · 选择书签文件夹（历史页）</b>（M 520）<span class="src">history/HistoryBookmarkFolderSelectionOverlay.ets</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>保存到书签</h3><p>选择要保存 3 条历史记录的目标文件夹。</p></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span style="color:var(--label-45)">▸</span><span class="t">收藏夹</span></div>
+    <div class="mac-row one"><span style="color:var(--label-45)">▸</span><span class="t">工作</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">阅读清单</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">保存</button></div>
+</div>
+</figure>
+
+<figure class="d" id="T2">
+<p class="did"><b>T2 · 用户脚本安装内容（含权限清单）</b>（M 520）<span class="src">userscripts/UserScriptInstallSheetContent.ets（B37 的内容层）</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>脚本详情</h3><p>Aira 阅读助手 v1.4.0 · 作者 lin · 16.2 KB</p></div>
+  <div class="mac-body">
+    <p class="mac-sec">申请权限</p>
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t">读取与修改页面内容</span></div>
+      <div class="mac-row one"><span class="t">发起跨域请求</span></div>
+      <div class="mac-row one"><span class="t">存取本地数据</span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">取消</button><button class="mbtn default">安装</button></div>
+</div>
+</figure>
+
+<figure class="d" id="T3">
+<p class="did"><b>T3 · 阅读体验面板（亮度与主题 / 阅读设置）</b>（M 520）<span class="src">reading/ReadingExperienceSystemSheet.ets:36-58</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>亮度与主题</h3></div>
+  <div class="mac-body">
+    <p class="mac-sec">主题</p>
+    <div class="mac-group">
+      <div class="mac-row one"><span class="mrad on"></span><span class="t">跟随系统</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">日间</span></div>
+      <div class="mac-row one"><span class="mrad"></span><span class="t">夜间</span></div>
+    </div>
+    <p class="mac-sec">亮度</p>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="mqty">−</span><div style="flex:1;height:8px;border-radius:4px;background:var(--fill-ctrl)"></div><span class="mqty">+</span>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="T4">
+<p class="did"><b>T4 · 朗读播放器</b>（S 420）<span class="src">browser/ReaderSpeechPlayerScreen.ets 的 ReaderSpeechPlayerOverlay / ReaderSpeechPlayerSheet</span></p>
+<div class="mac w420">
+  <div class="mac-head"><h3>朗读</h3><p>正在朗读：第二章 来信</p></div>
+  <div class="mac-body">
+    <div style="display:flex;align-items:center;gap:12px;justify-content:center">
+      <span class="mqty">⏮</span><span class="mqty">▶</span><span class="mqty">⏭</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:12px;color:var(--label-55)">0.8×</span><div style="flex:1;height:8px;border-radius:4px;background:var(--fill-ctrl)"></div><span style="font-size:12px;color:var(--label-55)">2×</span>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn">选择音色</button><button class="mbtn default">暂停</button></div>
+</div>
+</figure>
+
+<figure class="d" id="T5">
+<p class="did"><b>T5 · 小说阅读器浮层</b>（L 640）<span class="src">browser/NovelReaderOverlay.ets:234/805</span></p>
+<div class="mac w640">
+  <div class="mac-head"><h3>三体</h3><p>第二章 来信 · 已读 12%</p></div>
+  <div class="mac-body"><div style="background:var(--fill-group);border-radius:16px;padding:16px;font-size:13.5px;line-height:1.7;color:var(--label-75)">
+    叶文洁看着屏幕上的脉冲，忽然明白了那串数据的含义。她把手放在键盘上，停了很久。
+  </div></div>
+  <div class="mac-foot stack"><button class="mbtn default">继续阅读</button><button class="mbtn">目录</button><button class="mbtn">阅读设置</button></div>
+</div>
+</figure>
+
+<figure class="d" id="T6">
+<p class="did"><b>T6 · Cookie 管理</b>（S 420）<span class="src">settings/CookieManagementContent.ets:108-110</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>Cookie</h3></div>
+  <div class="mac-body"><div class="mac-group">
+    <div class="mac-row one"><span class="mrad"></span><span class="t">不阻止</span></div>
+    <div class="mac-row one"><span class="mrad on"></span><span class="t">仅阻止第三方 Cookie</span></div>
+    <div class="mac-row one"><span class="mrad"></span><span class="t">阻止所有 Cookie</span></div>
+  </div></div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+<figure class="d" id="T7">
+<p class="did"><b>T7 · 隐藏元素 · 选择态（页内浮层）</b><span class="src">browser/ManualElementHideSelectionOverlay.ets:162，已选择 N 个元素</span></p>
+<div style="width:520px;background:#fff;border-radius:24px;box-shadow:0 8px 28px rgba(16,20,32,.13);overflow:hidden">
+  <div style="height:190px;background:var(--fill-group);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--label-55)">页面：点击元素高亮选中</div>
+  <div style="display:flex;align-items:center;gap:12px;padding:16px 20px">
+    <span class="tile" style="flex:1">已选择 3 个元素</span>
+    <button class="mbtn" style="flex:0 0 auto">取消</button>
+    <button class="mbtn default" style="flex:0 0 auto">隐藏</button>
+  </div>
+</div>
+</figure>
+
+<figure class="d" id="T8">
+<p class="did"><b>T8 · 主页外观 / 壁纸设置</b>（M 520）<span class="src">settings/HomeNativeSettingsContent.ets:107/112 · wallpaper/WallpaperSettingsScreen.ets:71/83</span></p>
+<div class="mac w520">
+  <div class="mac-head"><h3>主页外观</h3></div>
+  <div class="mac-body">
+    <div class="mac-group">
+      <div class="mac-row one"><span class="t">壁纸设置</span><span class="sp"></span><span style="font-size:13px;color:var(--label-55)">图片壁纸</span><span style="color:var(--label-45);font-size:12px">›</span></div>
+      <div class="mac-row one"><span class="t">显示收藏</span><span class="sp"></span><span class="msw on"></span></div>
+      <div class="mac-row one"><span class="t">收藏紧凑排列</span><span class="sp"></span><span class="msw"></span></div>
+    </div>
+  </div>
+  <div class="mac-foot"><button class="mbtn default">完成</button></div>
+</div>
+</figure>
+
+</div>
+
+</main>
+</body>
+</html>

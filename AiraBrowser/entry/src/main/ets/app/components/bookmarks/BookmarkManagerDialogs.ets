@@ -52,9 +52,8 @@ export struct BookmarkManagerCreateFolderDialog {
           this.folderTitle = value;
         })
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '确定',
           emphasis: 'primary',
           buttonHeight: 44,
@@ -66,7 +65,6 @@ export struct BookmarkManagerCreateFolderDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,
@@ -153,9 +151,8 @@ export struct BookmarkManagerEditNodeDialog {
           })
       }
 
-      Column({ space: 10 }) {
+      Row({ space: 12 }) {
         BrowserSheetActionButton({
-          stacked: true,
           label: '保存',
           emphasis: 'primary',
           buttonHeight: 44,
@@ -167,7 +164,6 @@ export struct BookmarkManagerEditNodeDialog {
         })
 
         BrowserSheetActionButton({
-          stacked: true,
           label: '取消',
           buttonHeight: 44,
           fontSize: 15,

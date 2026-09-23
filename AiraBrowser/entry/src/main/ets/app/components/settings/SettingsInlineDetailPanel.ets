@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import {
+  resolveCenteredDialogControllerWidth,
   resolveCenteredDialogSurfaceColor,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   showCenteredAlertDialog
@@ -104,6 +105,7 @@ import { AlwaysPrivateModeConfirmationDialog } from './AlwaysPrivateModeConfirma
 import { ClearBrowsingDataContent, ClearBrowsingDataDialog } from './ClearBrowsingDataDialog';
 import { SettingsDetailContent } from './SettingsDetailContent';
 import { SupportQqGroupDialog } from './SupportQqGroupDialog';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const AIRA_SUPPORT_QQ_GROUP_NUMBER: string = '1049806927';
 
@@ -222,6 +224,7 @@ export struct SettingsInlineDetailPanel {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('l'),
   });
   private supportQqGroupDialogController: CustomDialogController = new CustomDialogController({
     builder: SupportQqGroupDialog({
@@ -236,6 +239,7 @@ export struct SettingsInlineDetailPanel {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
   private alwaysPrivateConfirmationDialogController: CustomDialogController = new CustomDialogController({
     builder: AlwaysPrivateModeConfirmationDialog({
@@ -255,6 +259,7 @@ export struct SettingsInlineDetailPanel {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
   });
 
   aboutToAppear(): void {
@@ -305,7 +310,7 @@ export struct SettingsInlineDetailPanel {
         );
       }
     })
-      .bindSheet($$this.clearBrowsingDataSheetVisible, this.buildClearBrowsingDataSheet(), {
+      .bindSheet($$this.clearBrowsingDataSheetVisible, this.buildClearBrowsingDataSheet(), applyDesktopDialogSheetChrome({
         preferType: SheetType.BOTTOM,
         height: SheetSize.LARGE,
         dragBar: true,
@@ -313,7 +318,7 @@ export struct SettingsInlineDetailPanel {
         onDisappear: () => {
           this.clearBrowsingDataSheetVisible = false;
         }
-      })
+      }, 'l'))
   }
 
   @Builder

@@ -29,6 +29,7 @@ import {
   SettingsTargetRevealController,
   SettingsTargetRevealRegion
 } from '../settings/SettingsTargetReveal';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 @Component
 export struct WebpageTranslationSettingsScreen {
@@ -195,7 +196,7 @@ export struct WebpageTranslationSettingsContent {
     .onAreaChange((_oldArea: Area, newArea: Area) => {
       this.revealController.rememberContentArea(newArea);
     })
-    .bindSheet($$this.targetLanguageSheetVisible, this.buildTargetLanguageSheet(), {
+    .bindSheet($$this.targetLanguageSheetVisible, this.buildTargetLanguageSheet(), applyDesktopDialogSheetChrome({
       preferType: SheetType.BOTTOM,
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
@@ -203,7 +204,7 @@ export struct WebpageTranslationSettingsContent {
       onDisappear: () => {
         this.targetLanguageSheetVisible = false;
       }
-    })
+    }, 'm'))
   }
 
   @Builder

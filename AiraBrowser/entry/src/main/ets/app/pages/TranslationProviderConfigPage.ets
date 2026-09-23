@@ -1,5 +1,6 @@
 import { DEFAULT_THEME_PALETTE } from '../../features/theme/palettes/DefaultThemePalette';
 import {
+  resolveCenteredDialogControllerWidth,
   CENTERED_DIALOG_CORNER_RADIUS_VP,
   CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER,
   resolveCenteredDialogSurfaceColor,
@@ -85,6 +86,7 @@ struct TranslationProviderConfigPage {
     backgroundColor: resolveCenteredDialogSurfaceColor(),
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('xs'),
   });
   @State private draft: TranslationProviderEditDraft = this.editViewModel.buildInitialDraft('custom_http');
   @State private errorMessage: string = '';

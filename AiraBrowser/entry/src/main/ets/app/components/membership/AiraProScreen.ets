@@ -7,7 +7,7 @@ import {
 } from '../../../core/membership/AiraProOverviewViewModel';
 import { AiraProComplimentaryClaimDialog } from './AiraProComplimentaryClaimDialog';
 import { AiraProOverviewScreen } from './AiraProOverviewScreen';
-import { CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
+import { resolveCenteredDialogControllerWidth,  CENTERED_DIALOG_CORNER_RADIUS_VP } from '../common/CenteredDialogSurface';
 import {
   BrowserThemeViewState,
   BrowserThemeViewStateFactory
@@ -49,16 +49,13 @@ import {
 import { AiraComplimentaryClaimResult } from '../../../features/membership/MembershipFeature';
 import { AppServiceModeGateService } from '../../../services/settings/AppServiceModeGateService';
 import { MEMBERSHIP_REFRESH_ACCOUNT_VISIBLE_FRESH_MS } from '../../../services/membership/MembershipRefreshPolicyService';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 type AiraProSheetKind = 'none' | 'login' | 'legalDocument' | 'selfHostingGuide';
 export type AiraProPresentationMode = 'page' | 'workspace';
 export type AiraProPageLayoutMode = 'phone' | 'large_screen';
 
 const AIRA_PRO_PAGE_CONTENT_MAX_WIDTH_VP: number = 760;
-const AIRA_PRO_DESKTOP_DIALOG_MIN_WIDTH_VP: number = 520;
-const AIRA_PRO_DESKTOP_DIALOG_MAX_WIDTH_VP: number = 720;
-const AIRA_PRO_DESKTOP_DIALOG_MIN_HEIGHT_VP: number = 420;
-const AIRA_PRO_DESKTOP_DIALOG_MAX_HEIGHT_VP: number = 720;
 
 @Component
 export struct AiraProScreen {
@@ -116,6 +113,7 @@ export struct AiraProScreen {
     customStyle: true,
     backgroundBlurStyle: BlurStyle.NONE,
     cornerRadius: CENTERED_DIALOG_CORNER_RADIUS_VP,
+    width: resolveCenteredDialogControllerWidth('s'),
     autoCancel: true,
     alignment: DialogAlignment.Center
   });
@@ -186,7 +184,7 @@ export struct AiraProScreen {
     .height('100%')
     .backgroundColor(this.theme.pageBackground)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
-    .bindSheet($$this.activeSheetVisible, this.buildActiveSheet(), {
+    .bindSheet($$this.activeSheetVisible, this.buildActiveSheet(), applyDesktopDialogSheetChrome({
       preferType: this.pageLayoutMode === 'large_screen' ? SheetType.CENTER : SheetType.BOTTOM,
       height: this.resolveActiveSheetHeight(),
       dragBar: this.pageLayoutMode !== 'large_screen',
@@ -195,7 +193,7 @@ export struct AiraProScreen {
       onDisappear: () => {
         this.handleActiveSheetDisappear();
       }
-    })
+    }, 'l', this.pageLayoutMode === 'large_screen'))
   }
 
   @Builder
@@ -219,12 +217,7 @@ export struct AiraProScreen {
           layoutMode: 'large_screen',
           title: this.resolveDesktopDialogTitle(),
           showDesktopHeader: this.shouldShowDesktopDialogHeader(),
-          desktopWidth: '76%',
-          desktopHeight: this.resolveDesktopDialogHeight(),
-          desktopMinWidth: AIRA_PRO_DESKTOP_DIALOG_MIN_WIDTH_VP,
-          desktopMaxWidth: AIRA_PRO_DESKTOP_DIALOG_MAX_WIDTH_VP,
-          desktopMinHeight: AIRA_PRO_DESKTOP_DIALOG_MIN_HEIGHT_VP,
-          desktopMaxHeight: AIRA_PRO_DESKTOP_DIALOG_MAX_HEIGHT_VP,
+          tier: 'l',
           onDismiss: () => {
             this.handleActiveSheetDisappear();
           }
@@ -604,13 +597,6 @@ export struct AiraProScreen {
     return this.activeSheetKind === 'login' ||
       this.activeSheetKind === 'legalDocument' ||
       this.activeSheetKind === 'selfHostingGuide';
-  }
-
-  private resolveDesktopDialogHeight(): Length {
-    if (this.activeSheetKind === 'legalDocument' || this.activeSheetKind === 'selfHostingGuide') {
-      return '82%';
-    }
-    return 500;
   }
 
   private signInHuaweiAccount(): void {

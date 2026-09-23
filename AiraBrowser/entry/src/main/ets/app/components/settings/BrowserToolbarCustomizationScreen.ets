@@ -77,6 +77,7 @@ import {
   BrowserSheetIconButton
 } from '../browser/BrowserModalBottomSheet';
 import { CenteredDialogSurface } from '../common/CenteredDialogSurface';
+import { applyDesktopDialogSheetChrome } from '../common/DesktopDialogSheetChrome';
 
 const TOOLBAR_NEUTRAL_PRESSED_BACKGROUND: string = '#14000000';
 const TOOLBAR_PREVIEW_HEIGHT: number = 52;
@@ -187,7 +188,7 @@ export struct BrowserToolbarCustomizationScreen {
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.sheetVisible, this.buildActiveSheet(), {
+    .bindSheet($$this.sheetVisible, this.buildActiveSheet(), applyDesktopDialogSheetChrome({
       preferType: this.desktopPresentation ? SheetType.CENTER : SheetType.BOTTOM,
       height: SheetSize.LARGE,
       dragBar: !this.desktopPresentation,
@@ -197,7 +198,7 @@ export struct BrowserToolbarCustomizationScreen {
         this.sheetQuestion = 'slot';
         this.slotSheetMode = 'overview';
       }
-    })
+    }, 'm', this.desktopPresentation))
   }
 
   @Builder
