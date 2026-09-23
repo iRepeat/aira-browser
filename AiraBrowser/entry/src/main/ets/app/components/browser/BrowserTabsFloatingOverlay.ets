@@ -1,4 +1,5 @@
 import { FrameCallback } from '@kit.ArkUI';
+import { image } from '@kit.ImageKit';
 import { SiteIconView } from '../common/SiteIconView';
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import { BrowserTabPreviewState } from '../../../core/browser/BrowserTabPreviewCoordinator';
@@ -248,6 +249,15 @@ export struct BrowserTabsFloatingOverlay {
    * the covered-tab id clears.
    */
   private entryMorphPreviewLatchedTabId: string = '';
+  /**
+   * The image the shrink animation actually painted for this tab.
+   *
+   * The settled card otherwise reads the gallery preview, which can be replaced by a
+   * document-top webPageSnapshot while the morph is still showing the scrolled file.
+   * Keep the morph's URI after the overlay unmounts so the card does not swap images.
+   */
+  private entryMorphImageTabId: string = '';
+  private entryMorphImageUri: string = '';
   /**
    * True only for the cold open, whose cards are mounted as the grid is first built and can
    * fly in as they appear. A resident re-open reuses an already-built grid, so it enters
@@ -873,13 +883,45 @@ export struct BrowserTabsFloatingOverlay {
     .height(this.layoutState.itemHeight)
   }
 
+  private resolveLatchedEntryImageUri(tabId: string): string {
+    const state = this.entrySharedSnapshotState;
+    const liveUri = state.imageUri.trim();
+    if (state.direction === 'enter' && state.tabId === tabId && liveUri.length > 0 &&
+      state.phase !== 'idle' && state.phase !== 'settled') {
+      this.entryMorphImageTabId = tabId;
+      this.entryMorphImageUri = liveUri;
+      return liveUri;
+    }
+    if (this.entryMorphImageTabId === tabId && this.entryMorphImageUri.length > 0) {
+      return this.entryMorphImageUri;
+    }
+    return '';
+  }
+
+  private resolveCardSnapshotImageUri(item: BrowserTabsFloatingItem): string {
+    const latchedUri = this.resolveLatchedEntryImageUri(item.tab.id);
+    if (latchedUri.length > 0) {
+      return latchedUri;
+    }
+    return item.presentation.preview.sharedSnapshotImageUri;
+  }
+
+  private resolveCardSnapshotPixelMap(item: BrowserTabsFloatingItem): image.PixelMap | undefined {
+    // A held PixelMap makes the card ignore a newer URI. The morph image is a file,
+    // so drop the PixelMap and let that file stay on screen after the overlay unmounts.
+    if (this.resolveLatchedEntryImageUri(item.tab.id).length > 0) {
+      return undefined;
+    }
+    return item.presentation.preview.sharedSnapshotPixelMap;
+  }
+
   @Builder
   private buildCard(item: BrowserTabsFloatingItem) {
     BrowserTabOverviewItem({
       tab: item.tab,
       presentation: item.presentation,
-      snapshotImageUri: item.presentation.preview.sharedSnapshotImageUri,
-      snapshotPixelMap: item.presentation.preview.sharedSnapshotPixelMap,
+      snapshotImageUri: this.resolveCardSnapshotImageUri(item),
+      snapshotPixelMap: this.resolveCardSnapshotPixelMap(item),
       snapshotAspectFitEnabled: this.usesItemSizedCardFrame(),
       snapshotCoverEnabled: this.isStackLayout(),
       deckShadeOpacity: this.isStackLayout() ? this.resolveDeckMetrics(item).shadeOpacity : 0,

@@ -229,6 +229,14 @@ async function main() {
   assert.equal(await inFlight, false, 'a snapshot that started before the overview image must be dropped');
   assert.equal(previewCoordinator.getSharedSnapshotState(tab.id).sharedSnapshotImageUri, 'file://scrolled');
   assert.equal(previewCoordinator.getSharedSnapshotState(tab.id).captureSource, 'visible-tab-surface');
+
+  const overlay = fs.readFileSync(path.resolve(__dirname,
+    '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsFloatingOverlay.ets'), 'utf8');
+  const morphOverlay = fs.readFileSync(path.resolve(__dirname,
+    '../AiraBrowser/entry/src/main/ets/app/components/browser/BrowserTabsSharedSnapshotOverlay.ets'), 'utf8');
+  assert.match(overlay, /snapshotImageUri: this\.resolveCardSnapshotImageUri\(item\)/);
+  assert.match(overlay, /this\.entryMorphImageUri = liveUri/);
+  assert.match(morphOverlay, /if \(this\.resolveRenderableImageUri\(\)\.length > 0\) \{\s*this\.buildUriImage\(\)/);
   console.log('Tab preview lifecycle snapshot checks passed.');
 }
 

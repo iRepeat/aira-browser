@@ -83,9 +83,8 @@ export struct BrowserTabsSharedSnapshotOverlay {
   @Builder
   private buildImage() {
     Stack({ alignContent: Alignment.TopStart }) {
-      // Mirror the gallery card's preference order (uri first, pixel map fallback)
-      // so the morph shows the exact image the card renders. A late/blank session
-      // capture must never win over the known-good shared-snapshot uri.
+      // The persisted URI is what actually paints. A session PixelMap can be present
+      // and still draw blank, so it must not cover the image the shrink is showing.
       if (this.resolveRenderableImageUri().length > 0) {
         this.buildUriImage()
       } else if (this.resolveRenderablePixelMap() !== undefined) {
