@@ -92,6 +92,8 @@ export struct NovelBookshelfScreen {
   @Prop layoutMode: NovelBookshelfLayoutMode = 'phone';
   @State private desktopView: NovelBookshelfDesktopView = 'all';
   @State private desktopQuery: string = '';
+  @State private desktopBooks: NovelBookshelfBook[] = [];
+  @State private desktopContentRevision: number = 0;
   onOpenBook: (book: NovelBookshelfBook) => void = (_book: NovelBookshelfBook): void => {};
   onOpenOriginalPage: (book: NovelBookshelfBook) => void = (_book: NovelBookshelfBook): void => {};
 
@@ -152,8 +154,9 @@ export struct NovelBookshelfScreen {
       badge: this.resolveDesktopBadge(),
       searchPlaceholder: '搜索书架',
       searchQuery: this.desktopQuery,
+      contentRevision: this.desktopContentRevision,
       onSearchChange: (value: string): void => {
-        this.desktopQuery = value;
+        this.setDesktopQuery(value);
       },
       sidebar: (): void => {
         this.buildDesktopSidebar()
@@ -173,7 +176,7 @@ export struct NovelBookshelfScreen {
       selected: this.desktopView === 'all',
       iconId: 'browser.toolbar.bookshelf',
       onSelect: (): void => {
-        this.desktopView = 'all';
+        this.setDesktopView('all');
       }
     })
     ManagementLargeScreenNavItem({
@@ -182,7 +185,7 @@ export struct NovelBookshelfScreen {
       selected: this.desktopView === 'novel',
       iconId: 'browser.toolbar.reader',
       onSelect: (): void => {
-        this.desktopView = 'novel';
+        this.setDesktopView('novel');
       }
     })
     ManagementLargeScreenNavItem({
@@ -191,7 +194,7 @@ export struct NovelBookshelfScreen {
       selected: this.desktopView === 'comic',
       iconId: 'browser.toolbar.reader',
       onSelect: (): void => {
-        this.desktopView = 'comic';
+        this.setDesktopView('comic');
       }
     })
     ManagementLargeScreenNavItem({
@@ -200,7 +203,7 @@ export struct NovelBookshelfScreen {
       selected: this.desktopView === 'recent',
       iconId: 'browser.shortcut.history',
       onSelect: (): void => {
-        this.desktopView = 'recent';
+        this.setDesktopView('recent');
       }
     })
   }
@@ -214,10 +217,10 @@ export struct NovelBookshelfScreen {
         this.buildStatus('正在加载书架', '')
       } else if (this.state.errorMessage.length > 0) {
         this.buildStatus('书架暂时不可用', this.state.errorMessage)
-      } else if (this.resolveDesktopBooks().length === 0) {
+      } else if (this.desktopBooks.length === 0) {
         this.buildStatus(this.desktopQuery.trim().length > 0 ? '没有匹配的书' : '暂无收藏', '')
       } else {
-        this.buildBookGrid(this.resolveDesktopBooks())
+        this.buildDesktopBookGrid()
       }
     }
     .width('100%')
@@ -311,64 +314,36 @@ export struct NovelBookshelfScreen {
   }
 
   @Builder
+  private buildDesktopBookGrid() {
+    Grid(this.gridScroller) {
+      ForEach(this.desktopBooks, (book: NovelBookshelfBook) => {
+        this.buildBookGridItem(book)
+      }, (book: NovelBookshelfBook): string => `${this.desktopView}:${book.id}:${this.desktopContentRevision}`)
+    }
+    .width('100%')
+    .height('100%')
+    .columnsTemplate(this.resolveLayoutState().columnsTemplate)
+    .columnsGap(this.resolveLayoutState().columnGap)
+    .rowsGap(this.resolveLayoutState().rowGap)
+    .padding({
+      left: this.resolveLayoutState().horizontalPadding,
+      right: this.resolveLayoutState().horizontalPadding,
+      top: this.resolveGridContentTopInset(),
+      bottom: NOVEL_BOOKSHELF_BOTTOM_PADDING
+    })
+    .linearGradientBlur(this.resolveTopBlurRadius(), {
+      fractionStops: [[1, 0], [1, 0.05], [0, 0.14], [0, 1]],
+      direction: GradientDirection.Bottom
+    })
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+    .scrollBar(BarState.Auto)
+  }
+
+  @Builder
   private buildBookGrid(books: NovelBookshelfBook[]) {
     Grid(this.gridScroller) {
       ForEach(books, (book: NovelBookshelfBook) => {
-        GridItem() {
-          Button({ type: ButtonType.Normal }) {
-            Column({ space: 9 }) {
-              Stack() {
-                NovelBookCover({
-                  coverUrl: book.coverUrl,
-                  detailUrl: book.detailUrl,
-                  persistentlyCached: true,
-                  title: book.title,
-                  coverBackgroundColor: this.storedControlBackgroundColor,
-                  fallbackPrimaryTextColor: this.storedPrimaryTextColor,
-                  fallbackSecondaryTextColor: this.storedSecondaryTextColor,
-                  fallbackDividerColor: this.storedDividerColor
-                })
-              }
-              .width('100%')
-              .aspectRatio(0.72)
-              Text(book.title)
-                .width('100%')
-                .fontSize(15)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.storedPrimaryTextColor)
-                .textAlign(TextAlign.Start)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-            .width('100%')
-            .alignItems(HorizontalAlign.Start)
-          }
-          .width('100%')
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .stateEffect(true)
-          .accessibilityText(`打开${book.title}`)
-          .gesture(
-            GestureGroup(
-              GestureMode.Exclusive,
-              LongPressGesture({ fingers: 1, repeat: false, duration: 450 })
-                .onAction((): void => {
-                  this.contextMenuBookId = book.id;
-                }),
-              TapGesture()
-                .onAction((): void => {
-                  this.onOpenBook(book);
-                })
-            )
-          )
-          .bindContextMenu(this.contextMenuBookId === book.id, this.buildBookContextMenu(book), {
-            preview: this.buildBookContextPreview(book),
-            previewBorderRadius: 8,
-            onDisappear: (): void => {
-              this.contextMenuBookId = '';
-            }
-          })
-        }
+        this.buildBookGridItem(book)
       }, (book: NovelBookshelfBook): string => `${book.id}:${this.listRenderVersion}`)
     }
     .width('100%')
@@ -394,6 +369,65 @@ export struct NovelBookshelfScreen {
     )
   }
 
+  @Builder
+  private buildBookGridItem(book: NovelBookshelfBook) {
+    GridItem() {
+      Button({ type: ButtonType.Normal }) {
+        Column({ space: 9 }) {
+          Stack() {
+            NovelBookCover({
+              coverUrl: book.coverUrl,
+              detailUrl: book.detailUrl,
+              persistentlyCached: true,
+              title: book.title,
+              coverBackgroundColor: this.storedControlBackgroundColor,
+              fallbackPrimaryTextColor: this.storedPrimaryTextColor,
+              fallbackSecondaryTextColor: this.storedSecondaryTextColor,
+              fallbackDividerColor: this.storedDividerColor
+            })
+          }
+          .width('100%')
+          .aspectRatio(0.72)
+          Text(book.title)
+            .width('100%')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.storedPrimaryTextColor)
+            .textAlign(TextAlign.Start)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+      }
+      .width('100%')
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .stateEffect(true)
+      .accessibilityText(`打开${book.title}`)
+      .gesture(
+        GestureGroup(
+          GestureMode.Exclusive,
+          LongPressGesture({ fingers: 1, repeat: false, duration: 450 })
+            .onAction((): void => {
+              this.contextMenuBookId = book.id;
+            }),
+          TapGesture()
+            .onAction((): void => {
+              this.onOpenBook(book);
+            })
+        )
+      )
+      .bindContextMenu(this.contextMenuBookId === book.id, this.buildBookContextMenu(book), {
+        preview: this.buildBookContextPreview(book),
+        previewBorderRadius: 8,
+        onDisappear: (): void => {
+          this.contextMenuBookId = '';
+        }
+      })
+    }
+  }
+
   private resolveTabsTopInset(): number {
     return Math.max(0, Math.ceil(this.topSafeInsetVp)) + NOVEL_BOOKSHELF_HEADER_TOP_INSET +
       NOVEL_BOOKSHELF_HEADER_HEIGHT + NOVEL_BOOKSHELF_HEADER_TO_TABS_GAP;
@@ -408,6 +442,33 @@ export struct NovelBookshelfScreen {
 
   private resolveTopBlurRadius(): number {
     return this.presentationMode === 'native_tab' ? 0 : NOVEL_BOOKSHELF_TOP_BLUR_RADIUS;
+  }
+
+  private setDesktopView(view: NovelBookshelfDesktopView): void {
+    if (this.desktopView === view) {
+      return;
+    }
+    this.desktopView = view;
+    this.publishDesktopBooks();
+    this.gridScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
+  }
+
+  private setDesktopQuery(query: string): void {
+    if (this.desktopQuery === query) {
+      return;
+    }
+    this.desktopQuery = query;
+    this.publishDesktopBooks();
+  }
+
+  private applyBookshelfState(state: NovelBookshelfState): void {
+    this.state = state;
+    this.publishDesktopBooks();
+  }
+
+  private publishDesktopBooks(): void {
+    this.desktopBooks = this.resolveDesktopBooks().slice();
+    this.desktopContentRevision += 1;
   }
 
   private resolveDesktopBooks(): NovelBookshelfBook[] {
@@ -582,7 +643,7 @@ export struct NovelBookshelfScreen {
     }
     this.contextMenuBookId = '';
     this.listRenderVersion += 1;
-    this.state = result.state;
+    this.applyBookshelfState(result.state);
     this.showToast(result.message);
   }
 
@@ -602,17 +663,17 @@ export struct NovelBookshelfScreen {
 
   private refresh(): void {
     if (!this.persistentAccessAllowed) {
-      this.state = {
+      this.applyBookshelfState({
         loading: false,
         novels: [],
         comics: [],
         errorMessage: ''
-      };
+      });
       return;
     }
-    this.state = this.controller.createLoadingState();
+    this.applyBookshelfState(this.controller.createLoadingState());
     void this.controller.load().then((state: NovelBookshelfState): void => {
-      this.state = state;
+      this.applyBookshelfState(state);
       this.reconcileSelectedCategory(state);
     });
   }

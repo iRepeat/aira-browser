@@ -159,7 +159,7 @@ export struct HistoryLargeScreenTimeline {
             .borderRadius(8)
         }
 
-        if (this.hoveredVisitId === visit.id && !this.isSelected(visit.id)) {
+        if (this.selectedVisitIds.length === 0 && this.hoveredVisitId === visit.id && !this.isSelected(visit.id)) {
           Button() {
             AiraIcon({
               airaIconId: 'browser.tabs.delete',
@@ -189,6 +189,10 @@ export struct HistoryLargeScreenTimeline {
         this.hoveredVisitId = hovered ? visit.id : '';
       })
       .onClick((): void => {
+        if (this.selectedVisitIds.length > 0) {
+          this.onSelectVisit(visit.id, this.shiftPressed ? 'range' : 'toggle');
+          return;
+        }
         if (this.shiftPressed) {
           this.onSelectVisit(visit.id, 'range');
           return;
@@ -221,11 +225,7 @@ export struct HistoryLargeScreenTimeline {
       .shape(CheckBoxShape.CIRCLE)
       .select(this.isSelected(visit.id))
       .selectedColor(this.storedAccentColor)
-      .onChange((selected: boolean): void => {
-        if (selected !== this.isSelected(visit.id)) {
-          this.onSelectVisit(visit.id, 'toggle');
-        }
-      })
+      .hitTestBehavior(HitTestMode.None)
   }
 
   @Builder

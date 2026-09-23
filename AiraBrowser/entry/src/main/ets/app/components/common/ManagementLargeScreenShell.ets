@@ -112,7 +112,7 @@ export struct ManagementLargeScreenIconButton {
   private storedPrimaryTextColor: string = DEFAULT_THEME_PALETTE.light.textPrimary;
   @Prop iconId: AiraRenderableIconId = 'settings.general';
   @Prop label: string = '';
-  @Prop enabled: boolean = true;
+  @Prop isEnabled: boolean = true;
   @Prop grouped: boolean = false;
   @State private hovered: boolean = false;
   onAction: () => void = (): void => {};
@@ -130,7 +130,7 @@ export struct ManagementLargeScreenIconButton {
     .type(ButtonType.Normal)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .stateEffect(false)
-    .enabled(this.enabled)
+    .enabled(this.isEnabled)
     .backgroundColor(this.resolveBackground())
     .borderRadius(MANAGEMENT_LARGE_SCREEN_CONTROL_RADIUS)
     .accessibilityText(this.label)
@@ -138,7 +138,7 @@ export struct ManagementLargeScreenIconButton {
       this.hovered = hovered;
     })
     .onClick((): void => {
-      if (this.enabled) {
+      if (this.isEnabled) {
         this.onAction();
       }
     })
@@ -146,11 +146,11 @@ export struct ManagementLargeScreenIconButton {
 
   private resolveBackground(): ResourceColor {
     if (this.grouped) {
-      return this.hovered && this.enabled
+      return this.hovered && this.isEnabled
         ? this.storedPressedBackgroundColor
         : $r('sys.color.ohos_id_color_background_transparent');
     }
-    if (this.hovered && this.enabled) {
+    if (this.hovered && this.isEnabled) {
       return this.storedPressedBackgroundColor;
     }
     return this.storedControlBackgroundColor;
@@ -166,7 +166,7 @@ export struct ManagementLargeScreenTextButton {
   @StorageProp(BROWSER_THEME_STORAGE_TEXT_PRIMARY_KEY)
   private storedPrimaryTextColor: string = DEFAULT_THEME_PALETTE.light.textPrimary;
   @Prop label: string = '';
-  @Prop enabled: boolean = true;
+  @Prop isEnabled: boolean = true;
   @State private hovered: boolean = false;
   onAction: () => void = (): void => {};
 
@@ -179,8 +179,8 @@ export struct ManagementLargeScreenTextButton {
       .type(ButtonType.Normal)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
       .stateEffect(false)
-      .enabled(this.enabled)
-      .backgroundColor(this.hovered && this.enabled
+      .enabled(this.isEnabled)
+      .backgroundColor(this.hovered && this.isEnabled
         ? this.storedPressedBackgroundColor
         : this.storedControlBackgroundColor)
       .borderRadius(MANAGEMENT_LARGE_SCREEN_CONTROL_RADIUS)
@@ -188,7 +188,7 @@ export struct ManagementLargeScreenTextButton {
         this.hovered = hovered;
       })
       .onClick((): void => {
-        if (this.enabled) {
+        if (this.isEnabled) {
           this.onAction();
         }
       })
@@ -212,6 +212,7 @@ export struct ManagementLargeScreenActionGroup {
     .borderRadius(MANAGEMENT_LARGE_SCREEN_CONTROL_RADIUS)
   }
 
+  @Builder
   private emptyBuilder() {
   }
 }
@@ -239,6 +240,7 @@ export struct ManagementLargeScreenShell {
   @Prop searchFocusKey: string = '';
   @Prop showSidebar: boolean = true;
   @Prop showSearch: boolean = true;
+  @Prop contentRevision: number = 0;
   onSearchChange: (value: string) => void = (_value: string): void => {};
   @BuilderParam sidebar: () => void = this.emptyBuilder;
   @BuilderParam toolbarActions: () => void = this.emptyBuilder;
@@ -278,7 +280,9 @@ export struct ManagementLargeScreenShell {
           .color(this.storedDividerColor)
 
         Column() {
-          this.content()
+          if (this.contentRevision >= 0) {
+            this.content()
+          }
         }
         .layoutWeight(1)
         .width('100%')
@@ -365,6 +369,7 @@ export struct ManagementLargeScreenShell {
     .flexShrink(0)
   }
 
+  @Builder
   private emptyBuilder() {
   }
 }

@@ -164,16 +164,21 @@ export struct OfflinePagesScreen {
         this.desktopQuery = value;
       },
       toolbarActions: (): void => {
-        ManagementLargeScreenIconButton({
-          iconId: 'reader.refresh',
-          label: '刷新',
-          onAction: (): void => {
-            this.refresh();
-          }
-        })
+        this.buildDesktopToolbarActions()
       },
       content: (): void => {
         this.buildDesktopContent()
+      }
+    })
+  }
+
+  @Builder
+  private buildDesktopToolbarActions() {
+    ManagementLargeScreenIconButton({
+      iconId: 'reader.refresh',
+      label: '刷新',
+      onAction: (): void => {
+        this.refresh();
       }
     })
   }

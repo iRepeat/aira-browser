@@ -167,14 +167,14 @@ export struct HistoryLargeScreenWorkspace {
     if (this.snapshot.selectedVisitIds.length > 0) {
       ManagementLargeScreenTextButton({
         label: '打开',
-        enabled: !this.snapshot.busy,
+        isEnabled: !this.snapshot.busy,
         onAction: (): void => {
           this.confirmOpenSelection();
         }
       })
       ManagementLargeScreenTextButton({
         label: '删除',
-        enabled: !this.snapshot.busy,
+        isEnabled: !this.snapshot.busy,
         onAction: (): void => {
           this.confirmDeleteSelection();
         }
@@ -197,7 +197,7 @@ export struct HistoryLargeScreenWorkspace {
       ManagementLargeScreenIconButton({
         iconId: 'browser.tabs.delete',
         label: '清除历史记录',
-        enabled: !this.snapshot.busy && this.resolveVisibleItemCount() > 0,
+        isEnabled: !this.snapshot.busy && this.resolveVisibleItemCount() > 0,
         onAction: (): void => {
           this.confirmClearAll();
         }

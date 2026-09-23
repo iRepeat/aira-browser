@@ -40,7 +40,8 @@ import { AiraIcon } from '../common/AiraIcon';
 import {
   ManagementLargeScreenActionGroup,
   ManagementLargeScreenIconButton,
-  ManagementLargeScreenShell
+  ManagementLargeScreenShell,
+  ManagementLargeScreenTextButton
 } from '../common/ManagementLargeScreenShell';
 import {
   BrowserDesktopContextMenu,
@@ -109,6 +110,7 @@ export struct BookmarkLargeScreenWorkspace {
   @State private compactSearchVisible: boolean = false;
   @State private shiftPressed: boolean = false;
   @State private controlPressed: boolean = false;
+  @State private selectionMode: boolean = false;
   @State private draggingNodeIds: string[] = [];
   @State private draggingTitle: string = '';
   @State private transferBusy: boolean = false;
@@ -189,6 +191,7 @@ export struct BookmarkLargeScreenWorkspace {
       this.focusSearchInput();
     })
     .keyboardShortcut('a', [ModifierKey.CTRL], (): void => {
+      this.enterSelectionMode();
       this.snapshot = this.coordinator.selectAllRows();
     })
     .keyboardShortcut(FunctionKey.F2, [], (): void => {
@@ -205,6 +208,30 @@ export struct BookmarkLargeScreenWorkspace {
 
   @Builder
   private buildToolbarActions() {
+    if (this.selectionMode) {
+      ManagementLargeScreenTextButton({
+        label: '全选',
+        isEnabled: !this.snapshot.busy && this.hasSelectableRows(),
+        onAction: (): void => {
+          this.snapshot = this.coordinator.selectAllRows();
+        }
+      })
+      ManagementLargeScreenTextButton({
+        label: '删除',
+        isEnabled: !this.snapshot.busy && this.snapshot.selectedNodeIds.length > 0,
+        onAction: (): void => {
+          this.confirmDeleteSelection();
+        }
+      })
+      ManagementLargeScreenTextButton({
+        label: '完成',
+        onAction: (): void => {
+          this.exitSelectionMode();
+        }
+      })
+      return;
+    }
+
     if (!this.shouldShowFullSearch()) {
       ManagementLargeScreenIconButton({
         iconId: 'settings.search',
@@ -221,7 +248,7 @@ export struct BookmarkLargeScreenWorkspace {
         iconId: 'browser.tabs.add',
         label: '新建文件夹',
         grouped: true,
-        enabled: this.snapshot.currentFolderId.length > 0 && !this.snapshot.busy,
+        isEnabled: this.snapshot.currentFolderId.length > 0 && !this.snapshot.busy,
         onAction: (): void => {
           this.newFolderTitle = this.coordinator.buildNextFolderTitle();
           this.createFolderDialogController.open();
@@ -248,13 +275,7 @@ export struct BookmarkLargeScreenWorkspace {
       {
         value: '多项选择',
         action: (): void => {
-          this.snapshot = this.coordinator.selectAllRows();
-        }
-      },
-      {
-        value: '删除所选',
-        action: (): void => {
-          this.confirmDeleteSelection();
+          this.enterSelectionMode();
         }
       },
       {
@@ -417,6 +438,9 @@ export struct BookmarkLargeScreenWorkspace {
   private buildRecordRow(node: BookmarkNode, rowIndex: number) {
     Button() {
       Row({ space: 12 }) {
+        if (this.selectionMode && !isBookmarkRootNodeId(node.id)) {
+          this.buildSelectionControl(node)
+        }
         this.buildRecordLeading(node)
 
         Column({ space: 3 }) {
@@ -455,6 +479,13 @@ export struct BookmarkLargeScreenWorkspace {
       this.hoveredNodeId = hovered ? node.id : '';
     })
     .onClick((): void => {
+      if (this.selectionMode) {
+        if (isBookmarkRootNodeId(node.id)) {
+          return;
+        }
+        this.snapshot = this.coordinator.selectNode(node.id, this.shiftPressed ? 'range' : 'toggle');
+        return;
+      }
       if (this.shiftPressed) {
         this.snapshot = this.coordinator.selectNode(node.id, 'range');
         return;
@@ -527,6 +558,17 @@ export struct BookmarkLargeScreenWorkspace {
   }
 
   @Builder
+  private buildSelectionControl(node: BookmarkNode) {
+    Checkbox()
+      .width(18)
+      .height(18)
+      .shape(CheckBoxShape.CIRCLE)
+      .select(this.snapshot.selectedNodeIds.includes(node.id))
+      .selectedColor(this.storedAccentColor)
+      .hitTestBehavior(HitTestMode.None)
+  }
+
+  @Builder
   private buildRecordLeading(node: BookmarkNode) {
     Stack({ alignContent: Alignment.Center }) {
       if (node.type === 'folder') {
@@ -577,7 +619,7 @@ export struct BookmarkLargeScreenWorkspace {
         }
       }
 
-      if (this.snapshot.selectedNodeIds.length <= 1 && !isBookmarkRootNodeId(node.id)) {
+      if (!this.selectionMode && this.snapshot.selectedNodeIds.length <= 1 && !isBookmarkRootNodeId(node.id)) {
         MenuItemGroup() {
           BrowserDesktopContextMenuItem({
             label: '编辑',
@@ -586,6 +628,34 @@ export struct BookmarkLargeScreenWorkspace {
               this.beginEditingNode(node);
             }
           })
+        }
+      }
+
+      if (!isBookmarkRootNodeId(node.id)) {
+        MenuItemGroup() {
+          if (!this.selectionMode) {
+            BrowserDesktopContextMenuItem({
+              label: '多选',
+              onAction: (): void => {
+                this.enterSelectionMode();
+                this.snapshot = this.coordinator.selectNode(node.id, 'replace');
+              }
+            })
+          } else if (this.snapshot.selectedNodeIds.includes(node.id)) {
+            BrowserDesktopContextMenuItem({
+              label: '取消选择',
+              onAction: (): void => {
+                this.snapshot = this.coordinator.selectNode(node.id, 'toggle');
+              }
+            })
+          } else {
+            BrowserDesktopContextMenuItem({
+              label: '添加到多选',
+              onAction: (): void => {
+                this.snapshot = this.coordinator.selectNode(node.id, 'toggle');
+              }
+            })
+          }
         }
       }
 
@@ -834,8 +904,25 @@ export struct BookmarkLargeScreenWorkspace {
       this.compactSearchVisible || this.snapshot.query.length > 0;
   }
 
+  private enterSelectionMode(): void {
+    if (!this.hasSelectableRows() || this.snapshot.busy) {
+      return;
+    }
+    this.selectionMode = true;
+    this.snapshot = this.coordinator.clearNodeSelection();
+  }
+
+  private exitSelectionMode(): void {
+    this.selectionMode = false;
+    this.snapshot = this.coordinator.clearNodeSelection();
+  }
+
+  private hasSelectableRows(): boolean {
+    return this.snapshot.rows.some((node: BookmarkNode): boolean => !isBookmarkRootNodeId(node.id));
+  }
+
   private resolveWorkspaceTitle(): string {
-    if (this.snapshot.selectedNodeIds.length > 0) {
+    if (this.selectionMode) {
       return `已选择 ${this.snapshot.selectedNodeIds.length} 项`;
     }
     if (this.snapshot.query.length > 0) {
@@ -845,7 +932,7 @@ export struct BookmarkLargeScreenWorkspace {
   }
 
   private resolveWorkspaceBadge(): string {
-    if (this.snapshot.selectedNodeIds.length > 0) {
+    if (this.selectionMode) {
       return '';
     }
     if (this.privateMode) {
@@ -880,6 +967,10 @@ export struct BookmarkLargeScreenWorkspace {
       return this.snapshot.selectedNodeIds.length > 0;
     }
     if (event.keyCode === KeyCode.KEYCODE_ESCAPE) {
+      if (this.selectionMode) {
+        this.exitSelectionMode();
+        return true;
+      }
       this.snapshot = this.coordinator.clearNodeSelection();
       return true;
     }

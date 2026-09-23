@@ -298,7 +298,7 @@ export struct BrowserDownloadManagementScreen {
       })
       ManagementLargeScreenTextButton({
         label: '删除',
-        enabled: this.selectedGuids.length > 0,
+        isEnabled: this.selectedGuids.length > 0,
         onAction: (): void => {
           this.confirmDeleteSelectedRows();
         }
