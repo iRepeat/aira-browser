@@ -24,6 +24,10 @@ import {
   NovelBookshelfLayoutViewModel
 } from '../../../features/novel/NovelBookshelfLayoutViewModel';
 import { AiraIcon } from '../common/AiraIcon';
+import {
+  BrowserDesktopContextMenu,
+  BrowserDesktopContextMenuItem
+} from '../browser/BrowserDesktopContextMenu';
 import { AppEmptyState } from '../common/AppEmptyState';
 import { ManagementHdsScaffold } from '../common/ManagementHdsScaffold';
 import {
@@ -372,38 +376,54 @@ export struct NovelBookshelfScreen {
   @Builder
   private buildBookGridItem(book: NovelBookshelfBook) {
     GridItem() {
-      Button({ type: ButtonType.Normal }) {
-        Column({ space: 9 }) {
-          Stack() {
-            NovelBookCover({
-              coverUrl: book.coverUrl,
-              detailUrl: book.detailUrl,
-              persistentlyCached: true,
-              title: book.title,
-              coverBackgroundColor: this.storedControlBackgroundColor,
-              fallbackPrimaryTextColor: this.storedPrimaryTextColor,
-              fallbackSecondaryTextColor: this.storedSecondaryTextColor,
-              fallbackDividerColor: this.storedDividerColor
-            })
-          }
-          .width('100%')
-          .aspectRatio(0.72)
-          Text(book.title)
-            .width('100%')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.storedPrimaryTextColor)
-            .textAlign(TextAlign.Start)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
+      if (this.layoutMode === 'large_screen') {
+        this.buildDesktopBookButton(book)
+      } else {
+        this.buildPhoneBookButton(book)
+      }
+    }
+  }
+
+  @Builder
+  private buildBookCardContent(book: NovelBookshelfBook) {
+    Column({ space: 9 }) {
+      Stack() {
+        NovelBookCover({
+          coverUrl: book.coverUrl,
+          detailUrl: book.detailUrl,
+          persistentlyCached: true,
+          title: book.title,
+          coverBackgroundColor: this.storedControlBackgroundColor,
+          fallbackPrimaryTextColor: this.storedPrimaryTextColor,
+          fallbackSecondaryTextColor: this.storedSecondaryTextColor,
+          fallbackDividerColor: this.storedDividerColor
+        })
+      }
+      .width('100%')
+      .aspectRatio(0.72)
+      Text(book.title)
         .width('100%')
-        .alignItems(HorizontalAlign.Start)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.storedPrimaryTextColor)
+        .textAlign(TextAlign.Start)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private buildDesktopBookButton(book: NovelBookshelfBook) {
+    Column() {
+      Button({ type: ButtonType.Normal }) {
+        this.buildBookCardContent(book)
       }
       .width('100%')
       .padding(0)
       .backgroundColor(Color.Transparent)
-      .stateEffect(true)
+      .stateEffect(false)
       .accessibilityText(`打开${book.title}`)
       .gesture(
         GestureGroup(
@@ -418,13 +438,89 @@ export struct NovelBookshelfScreen {
             })
         )
       )
-      .bindContextMenu(this.contextMenuBookId === book.id, this.buildBookContextMenu(book), {
-        preview: this.buildBookContextPreview(book),
-        previewBorderRadius: 8,
+      .bindContextMenu(this.contextMenuBookId === book.id, this.buildDesktopBookContextMenu(book), {
         onDisappear: (): void => {
-          this.contextMenuBookId = '';
+          if (this.contextMenuBookId === book.id) {
+            this.contextMenuBookId = '';
+          }
         }
       })
+    }
+    .width('100%')
+    .bindContextMenu(this.buildDesktopBookContextMenu(book), ResponseType.RightClick)
+  }
+
+  @Builder
+  private buildPhoneBookButton(book: NovelBookshelfBook) {
+    Button({ type: ButtonType.Normal }) {
+      this.buildBookCardContent(book)
+    }
+    .width('100%')
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .stateEffect(true)
+    .accessibilityText(`打开${book.title}`)
+    .gesture(
+      GestureGroup(
+        GestureMode.Exclusive,
+        LongPressGesture({ fingers: 1, repeat: false, duration: 450 })
+          .onAction((): void => {
+            this.contextMenuBookId = book.id;
+          }),
+        TapGesture()
+          .onAction((): void => {
+            this.onOpenBook(book);
+          })
+      )
+    )
+    .bindContextMenu(this.contextMenuBookId === book.id, this.buildBookContextMenu(book), {
+      preview: this.buildBookContextPreview(book),
+      previewBorderRadius: 8,
+      onDisappear: (): void => {
+        this.contextMenuBookId = '';
+      }
+    })
+  }
+
+  @Builder
+  private buildDesktopBookContextMenu(book: NovelBookshelfBook) {
+    BrowserDesktopContextMenu() {
+      MenuItemGroup() {
+        BrowserDesktopContextMenuItem({
+          label: '查看原网页',
+          onAction: (): void => {
+            this.runAfterContextMenuDismiss((): void => {
+              this.onOpenOriginalPage(book);
+            });
+          }
+        })
+        BrowserDesktopContextMenuItem({
+          label: '分享',
+          onAction: (): void => {
+            this.runAfterContextMenuDismiss((): void => {
+              this.shareBook(book);
+            });
+          }
+        })
+        BrowserDesktopContextMenuItem({
+          label: '复制链接',
+          onAction: (): void => {
+            this.runAfterContextMenuDismiss((): void => {
+              this.copyBookLink(book);
+            });
+          }
+        })
+      }
+      MenuItemGroup() {
+        BrowserDesktopContextMenuItem({
+          label: '移出书架',
+          onAction: (): void => {
+            this.runAfterContextMenuDismiss((): void => {
+              this.confirmRemoveBook(book);
+            });
+          }
+        })
+      }
     }
   }
 

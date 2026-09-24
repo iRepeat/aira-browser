@@ -29,17 +29,19 @@ import { HistoryWorkspaceSelectionMode } from '../../../core/history/HistoryWork
 import { DEFAULT_THEME_PALETTE } from '../../../features/theme/palettes/DefaultThemePalette';
 import {
   RECORD_LIST_GROUP_TITLE_BOTTOM_PADDING,
-  RECORD_LIST_GROUP_TITLE_LEFT_INSET,
-  RECORD_LIST_GROUP_TITLE_RIGHT_INSET,
   RECORD_LIST_GROUP_TITLE_SIZE,
   RECORD_LIST_GROUP_TITLE_TOP_PADDING,
   RECORD_LIST_ROW_HEIGHT,
   RECORD_LIST_ROW_SUBTITLE_SIZE,
   RECORD_LIST_ROW_TITLE_SIZE
 } from '../common/RecordListTokens';
+import {
+  MANAGEMENT_LARGE_SCREEN_ROW_GAP,
+  MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+  MANAGEMENT_LARGE_SCREEN_ROW_RADIUS
+} from '../common/ManagementLargeScreenShell';
 
 const HISTORY_DESKTOP_ROW_HEIGHT: number = RECORD_LIST_ROW_HEIGHT;
-const HISTORY_DESKTOP_GROUP_PADDING: number = 4;
 
 @Component
 export struct HistoryLargeScreenTimeline {
@@ -87,7 +89,7 @@ export struct HistoryLargeScreenTimeline {
         ListItemGroup({ header: this.buildDateHeader(group) }) {
           LazyForEach(group.itemDataSource, (visit: HistoryDisplayVisit, itemIndex: number) => {
             ListItem() {
-              this.buildVisitRow(visit, itemIndex === group.itemDataSource.totalCount() - 1)
+              this.buildVisitRow(visit)
             }
             .width('100%')
           }, (visit: HistoryDisplayVisit): string => visit.id)
@@ -98,7 +100,12 @@ export struct HistoryLargeScreenTimeline {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: 8, bottom: 8 })
+    .padding({
+      left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+      right: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+      top: 8,
+      bottom: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+    })
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
     .scrollBar(BarState.Auto)
     .cachedCount(4)
@@ -115,15 +122,15 @@ export struct HistoryLargeScreenTimeline {
       .fontWeight(FontWeight.Medium)
       .fontColor(this.storedSecondaryTextColor)
       .padding({
-        left: RECORD_LIST_GROUP_TITLE_LEFT_INSET + HISTORY_DESKTOP_GROUP_PADDING,
-        right: RECORD_LIST_GROUP_TITLE_RIGHT_INSET + HISTORY_DESKTOP_GROUP_PADDING,
+        left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+        right: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
         top: RECORD_LIST_GROUP_TITLE_TOP_PADDING,
         bottom: RECORD_LIST_GROUP_TITLE_BOTTOM_PADDING
       })
   }
 
   @Builder
-  private buildVisitRow(visit: HistoryDisplayVisit, isLast: boolean) {
+  private buildVisitRow(visit: HistoryDisplayVisit) {
     Column({ space: 0 }) {
       Row({ space: 12 }) {
         if (this.selectedVisitIds.length > 0) {
@@ -180,10 +187,14 @@ export struct HistoryLargeScreenTimeline {
       }
       .width('100%')
       .height(HISTORY_DESKTOP_ROW_HEIGHT)
-      .padding({ left: 12, right: 12 })
+      .padding({
+        left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+        right: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+      })
+      .margin({ bottom: MANAGEMENT_LARGE_SCREEN_ROW_GAP })
       .alignItems(VerticalAlign.Center)
       .backgroundColor(this.resolveRowBackground(visit.id))
-      .borderRadius(0)
+      .borderRadius(MANAGEMENT_LARGE_SCREEN_ROW_RADIUS)
       .clip(true)
       .onHover((hovered: boolean): void => {
         this.hoveredVisitId = hovered ? visit.id : '';
@@ -207,12 +218,6 @@ export struct HistoryLargeScreenTimeline {
         }
       })
       .bindContextMenu(this.buildVisitContextMenu(visit), ResponseType.RightClick)
-
-      if (!isLast) {
-        Divider()
-          .margin({ left: 56, right: 12 })
-          .color(this.storedDividerColor)
-      }
     }
     .width('100%')
   }

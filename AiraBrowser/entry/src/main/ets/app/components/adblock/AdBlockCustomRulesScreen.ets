@@ -285,31 +285,103 @@ export struct AdBlockCustomRulesScreen {
 
   @Builder
   private buildSourceRow(item: AdBlockCustomRuleSourceRowView) {
+    if (this.desktopPresentation) {
+      this.buildDesktopSourceRow(item)
+    } else {
+      this.buildPhoneSourceRow(item)
+    }
+  }
+
+  @Builder
+  private buildSourceRowBody(item: AdBlockCustomRuleSourceRowView) {
+    Column() {
+      Text(item.title)
+        .width('100%')
+        .fontSize(this.desktopPresentation ? 15 : 16)
+        .fontWeight(this.desktopPresentation ? FontWeight.Regular : FontWeight.Medium)
+        .fontColor(this.storedPrimaryTextColor)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .layoutWeight(1)
+    .alignItems(HorizontalAlign.Start)
+
+    if (item.hasError) {
+      Text('更新失败')
+        .fontSize(12)
+        .fontColor(this.storedSecondaryTextColor)
+        .maxLines(1)
+    }
+
+    Toggle({ type: ToggleType.Switch, isOn: item.enabled })
+      .selectedColor(this.storedAccentColor)
+      .onChange((value: boolean) => {
+        this.onSourceEnabledChange(item.id, value);
+      })
+  }
+
+  @Builder
+  private buildDesktopSourceRow(item: AdBlockCustomRuleSourceRowView) {
+    if (item.canRefresh || item.canRemove) {
+      this.buildDesktopSourceRowWithMenu(item)
+    } else {
+      this.buildDesktopSourceRowPlain(item)
+    }
+  }
+
+  @Builder
+  private buildDesktopSourceRowWithMenu(item: AdBlockCustomRuleSourceRowView) {
+    Column() {
+      Row({ space: 12 }) {
+        this.buildSourceRowBody(item)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .backgroundColor(this.pressedSourceId === item.id
+        ? this.storedPressedBackgroundColor
+        : $r('sys.color.ohos_id_color_background_transparent'))
+      .borderRadius(20)
+      .onTouch((event: TouchEvent) => {
+        this.updatePressedSource(item.id, event.type);
+      })
+      .gesture(
+        LongPressGesture({ fingers: 1, repeat: false, duration: 450 })
+          .onAction(() => {
+            this.contextMenuSourceId = item.id;
+          })
+      )
+      .bindContextMenu(this.contextMenuSourceId === item.id, this.buildSourceContextMenu(item), {
+        onDisappear: () => {
+          if (this.contextMenuSourceId === item.id) {
+            this.contextMenuSourceId = '';
+          }
+        }
+      })
+    }
+    .width('100%')
+    .bindContextMenu(this.buildSourceContextMenu(item), ResponseType.RightClick)
+  }
+
+  @Builder
+  private buildDesktopSourceRowPlain(item: AdBlockCustomRuleSourceRowView) {
     Row({ space: 12 }) {
-      Column() {
-        Text(item.title)
-          .width('100%')
-          .fontSize(this.desktopPresentation ? 15 : 16)
-          .fontWeight(this.desktopPresentation ? FontWeight.Regular : FontWeight.Medium)
-          .fontColor(this.storedPrimaryTextColor)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+      this.buildSourceRowBody(item)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+    .backgroundColor(this.pressedSourceId === item.id
+      ? this.storedPressedBackgroundColor
+      : $r('sys.color.ohos_id_color_background_transparent'))
+    .borderRadius(20)
+    .onTouch((event: TouchEvent) => {
+      this.updatePressedSource(item.id, event.type);
+    })
+  }
 
-      if (item.hasError) {
-        Text('更新失败')
-          .fontSize(12)
-          .fontColor(this.storedSecondaryTextColor)
-          .maxLines(1)
-      }
-
-      Toggle({ type: ToggleType.Switch, isOn: item.enabled })
-        .selectedColor(this.storedAccentColor)
-        .onChange((value: boolean) => {
-          this.onSourceEnabledChange(item.id, value);
-        })
+  @Builder
+  private buildPhoneSourceRow(item: AdBlockCustomRuleSourceRowView) {
+    Row({ space: 12 }) {
+      this.buildSourceRowBody(item)
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })

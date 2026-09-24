@@ -16,6 +16,7 @@ import browserShellFontScalePolicyTest from './BrowserShellFontScalePolicy.test'
 import novelFontSubstitutionPolicyTest from './NovelFontSubstitutionPolicy.test';
 import browserLargeScreenOmniboxSearchViewModelTest from './BrowserLargeScreenOmniboxSearchViewModel.test';
 import browserLargeScreenToolbarMenuViewModelTest from './BrowserLargeScreenToolbarMenuViewModel.test';
+import browserLargeScreenOverflowFlyoutViewModelTest from './BrowserLargeScreenOverflowFlyoutViewModel.test';
 import browserPrivacyEffectPolicyTest from './BrowserPrivacyEffectPolicy.test';
 import downloadPrivacyPolicyTest from './DownloadPrivacyPolicy.test';
 import downloadSelectionModeTest from './DownloadSelectionMode.test';
@@ -81,6 +82,7 @@ export default function tests(): void {
   novelFontSubstitutionPolicyTest();
   browserLargeScreenOmniboxSearchViewModelTest();
   browserLargeScreenToolbarMenuViewModelTest();
+  browserLargeScreenOverflowFlyoutViewModelTest();
   browserPrivacyEffectPolicyTest();
   downloadPrivacyPolicyTest();
   downloadSelectionModeTest();

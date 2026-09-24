@@ -81,9 +81,17 @@ import {
   BROWSER_DESKTOP_MENU_VERTICAL_INSET_VP
 } from '../../../core/browser/BrowserDesktopMenuPresentationTokens';
 import {
+  BrowserLargeScreenWebZoomAction,
   BrowserLargeScreenWebZoomSnapshot,
   createBrowserLargeScreenWebZoomSnapshot
 } from '../../../core/browser/BrowserLargeScreenWebZoomCoordinator';
+import {
+  BROWSER_LARGE_SCREEN_OVERFLOW_FLYOUT_GAP_VP,
+  BROWSER_LARGE_SCREEN_OVERFLOW_FLYOUT_WIDTH_VP,
+  BrowserLargeScreenOverflowBookmarkItem,
+  BrowserLargeScreenOverflowHistoryItem
+} from '../../../core/browser/BrowserLargeScreenOverflowFlyoutViewModel';
+import { BrowserLargeScreenOverflowFlyoutHost } from './BrowserLargeScreenOverflowFlyout';
 import {
   BrowserUserScriptApplicationAction,
   BrowserUserScriptApplicationSnapshot,
@@ -104,6 +112,8 @@ const LARGE_SCREEN_OMNIBOX_FOCUS_DELAY_MS: number = 24;
 const LARGE_SCREEN_OMNIBOX_SELECTION_DELAY_MS: number = 0;
 const LARGE_SCREEN_OMNIBOX_BLUR_COLLAPSE_DELAY_MS: number = 120;
 const LARGE_SCREEN_OVERFLOW_MENU_WIDTH_VP: number = 272;
+const LARGE_SCREEN_OVERFLOW_FLYOUT_CLOSE_DELAY_MS: number = 200;
+const LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP: number = 28;
 const LARGE_SCREEN_OVERFLOW_MENU_WINDOW_MARGIN_VP: number = 8;
 const LARGE_SCREEN_SITE_INFO_BUTTON_SIZE_VP: number = 28;
 const LARGE_SCREEN_SITE_INFO_POPUP_WIDTH_VP: number = 520;
@@ -198,6 +208,9 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
   @State private crossDeviceTabsPopupVisible: boolean = false;
   @State private hoveredOverflowActionId: string = '';
   @State private overflowMenuVisible: boolean = false;
+  @State private overflowFlyoutKind: string = '';
+  @State private overflowFlyoutColumnCount: number = 0;
+  private overflowFlyoutCloseTimer: number = -1;
   private toolbarMenuViewModel: BrowserLargeScreenToolbarMenuViewModel =
     new BrowserLargeScreenToolbarMenuViewModel();
   private readonly modalLayoutService: AppWindowModalLayoutService = new AppWindowModalLayoutService();
@@ -206,6 +219,7 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
     this.clearFocusRequest();
     this.clearSelectionRequest();
     this.clearOmniboxBlurCollapse();
+    this.clearOverflowFlyoutTimer();
     this.onIntent({ kind: 'set_omnibox_editing', text: '', omniboxEditing: false });
   }
 
@@ -677,23 +691,29 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
     .bindPopup(this.overflowMenuVisible, {
       builder: this.buildPointerOverflowPopup,
       placement: Placement.BottomRight,
-      popupColor: this.storedSurfaceBackgroundColor,
+      popupColor: Color.Transparent,
+      backgroundBlurStyle: BlurStyle.NONE,
       enableArrow: false,
       autoCancel: true,
       mask: false,
       targetSpace: BROWSER_DESKTOP_MENU_VERTICAL_INSET_VP,
-      width: LARGE_SCREEN_OVERFLOW_MENU_WIDTH_VP,
-      radius: BROWSER_DESKTOP_MENU_CORNER_RADIUS_VP,
+      width: this.resolveOverflowPopupWidth(),
+      radius: 0,
+      borderWidth: 0,
+      outlineWidth: 0,
+      shadow: {
+        radius: 0,
+        color: '#00000000',
+        offsetX: 0,
+        offsetY: 0
+      },
       showInSubWindow: false,
       focusable: true,
-      shadow: {
-        radius: 24,
-        color: $r('app.color.elevation_shadow'),
-        offsetX: 0,
-        offsetY: 8
-      },
       onStateChange: (event: PopupStateChangeParam): void => {
         this.overflowMenuVisible = event.isVisible;
+        if (!event.isVisible) {
+          this.closeOverflowFlyout();
+        }
       }
     })
   }
@@ -750,6 +770,60 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
 
   @Builder
   private buildPointerOverflowPopup() {
+    Row() {
+      if (this.overflowFlyoutKind.length > 0) {
+        BrowserLargeScreenOverflowFlyoutHost({
+          kind: this.overflowFlyoutKind,
+          privateMode: this.activeTabChrome.privateMode,
+          canAddBookmark: this.activeTabChrome.scene === 'web',
+          maxHeightVp: this.resolvePointerOverflowMenuHeight().heightVp,
+          onColumnCountChange: (count: number): void => {
+            this.overflowFlyoutColumnCount = count;
+          },
+          onHoverChange: (hovered: boolean): void => {
+            if (hovered) {
+              this.clearOverflowFlyoutTimer();
+              return;
+            }
+            this.scheduleOverflowFlyoutClose();
+          },
+          onOpenHistory: (item: BrowserLargeScreenOverflowHistoryItem): void => {
+            this.closeOverflowMenu();
+            this.onIntent({
+              kind: 'open_history_visit',
+              text: '',
+              url: item.url,
+              title: item.title
+            });
+          },
+          onOpenBookmark: (item: BrowserLargeScreenOverflowBookmarkItem): void => {
+            this.closeOverflowMenu();
+            this.onIntent({
+              kind: 'open_bookmark_node',
+              text: '',
+              url: item.url,
+              title: item.title
+            });
+          },
+          onAddBookmark: (): void => {
+            this.closeOverflowMenu();
+            this.onIntent({ kind: 'open_bookmark_popup', text: '' });
+          },
+          onOpenManager: (): void => {
+            this.closeOverflowMenu();
+            this.onIntent({ kind: 'open_bookmarks', text: '' });
+          }
+        })
+      }
+      this.buildPointerOverflowMenuColumn()
+    }
+    .width(this.resolveOverflowPopupWidth())
+    .alignItems(VerticalAlign.Top)
+    .justifyContent(FlexAlign.End)
+  }
+
+  @Builder
+  private buildPointerOverflowMenuColumn() {
     Scroll() {
       Column() {
         ForEach(this.resolvePointerMenu().sections, (section: BrowserLargeScreenToolbarMenuSection, index: number) => {
@@ -774,13 +848,25 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
     .edgeEffect(EdgeEffect.None)
     .align(Alignment.Top)
     .clip(true)
+    .backgroundColor(this.storedSurfaceBackgroundColor)
+    .borderRadius(BROWSER_DESKTOP_MENU_CORNER_RADIUS_VP)
+    .shadow({
+      radius: 24,
+      color: $r('app.color.elevation_shadow'),
+      offsetX: 0,
+      offsetY: 8
+    })
   }
 
   @Builder
   private buildPointerOverflowSection(section: BrowserLargeScreenToolbarMenuSection) {
     Column() {
       ForEach(section.items, (entry: BrowserLargeScreenToolbarMenuEntry) => {
-        this.buildPointerOverflowRow(entry)
+        if (entry.activation === 'web_zoom') {
+          this.buildPointerOverflowZoomRow()
+        } else {
+          this.buildPointerOverflowRow(entry)
+        }
       }, (entry: BrowserLargeScreenToolbarMenuEntry) => this.buildPointerOverflowMenuItemKey(entry))
       ForEach(section.pageTools, (group: BrowserLargeScreenToolbarMenuPageToolGroup) => {
         this.buildPointerOverflowToolGroup(group)
@@ -808,7 +894,11 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
         .alignItems(VerticalAlign.Center)
       }
       ForEach(group.items, (entry: BrowserLargeScreenToolbarMenuEntry) => {
-        this.buildPointerOverflowRow(entry)
+        if (entry.activation === 'web_zoom') {
+          this.buildPointerOverflowZoomRow()
+        } else {
+          this.buildPointerOverflowRow(entry)
+        }
       }, (entry: BrowserLargeScreenToolbarMenuEntry) => this.buildPointerOverflowMenuItemKey(entry))
     }
     .width('100%')
@@ -842,14 +932,108 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
     .clip(true)
     .hoverEffect(HoverEffect.None)
     .onHover((hovered: boolean): void => {
-      this.hoveredOverflowActionId = hovered
-        ? entry.action.id
-        : (this.hoveredOverflowActionId === entry.action.id ? '' : this.hoveredOverflowActionId);
+      this.handlePointerOverflowHover(entry.action.id, hovered);
     })
     .onClick((): void => {
       this.hoveredOverflowActionId = '';
-      this.overflowMenuVisible = false;
+      this.closeOverflowMenu();
       this.dispatchOverflowEntry(entry);
+    })
+  }
+
+  @Builder
+  private buildPointerOverflowZoomRow() {
+    Row({ space: 8 }) {
+      AiraIcon({
+        airaIconId: 'browser.toolbar.search',
+        iconSize: 18,
+        iconColor: this.storedPrimaryTextColor
+      })
+      Text('缩放')
+        .fontSize(BROWSER_DESKTOP_MENU_TEXT_SIZE_FP)
+        .fontColor(this.storedPrimaryTextColor)
+        .maxLines(1)
+      Blank()
+        .layoutWeight(1)
+      this.buildOverflowZoomButton('reader.decreaseFont', '缩小网页', this.webZoomSnapshot.canDecrease, 'decrease')
+      Text(this.webZoomSnapshot.percentLabel)
+        .width(48)
+        .fontSize(13)
+        .fontColor(this.storedPrimaryTextColor)
+        .textAlign(TextAlign.Center)
+        .maxLines(1)
+        .opacity(this.webZoomSnapshot.available ? 1 : 0.38)
+        .onClick((): void => {
+          this.applyOverflowZoom('reset');
+        })
+      this.buildOverflowZoomButton('reader.increaseFont', '放大网页', this.webZoomSnapshot.canIncrease, 'increase')
+      Divider()
+        .vertical(true)
+        .strokeWidth(1)
+        .height(16)
+        .color(this.storedDividerColor)
+      this.buildOverflowFullscreenButton()
+    }
+    .width('100%')
+    .height(BROWSER_DESKTOP_MENU_ITEM_HEIGHT_VP)
+    .padding({
+      left: BROWSER_DESKTOP_MENU_ITEM_HORIZONTAL_PADDING_VP,
+      right: 6
+    })
+    .alignItems(VerticalAlign.Center)
+    .onHover((hovered: boolean): void => {
+      if (hovered) {
+        this.closeOverflowFlyout();
+      }
+    })
+  }
+
+  @Builder
+  private buildOverflowZoomButton(
+    iconId: AiraRenderableIconId,
+    label: string,
+    enabled: boolean,
+    action: BrowserLargeScreenWebZoomAction
+  ) {
+    Row() {
+      AiraIcon({
+        airaIconId: iconId,
+        iconSize: 14,
+        iconColor: this.storedPrimaryTextColor
+      })
+    }
+    .width(LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP)
+    .height(LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP)
+    .constraintSize({ minWidth: LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP })
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.storedControlBackgroundColor)
+    .borderRadius(LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP / 2)
+    .opacity(this.webZoomSnapshot.available && enabled ? 1 : 0.38)
+    .accessibilityText(label)
+    .onClick((): void => {
+      this.applyOverflowZoom(action);
+    })
+  }
+
+  @Builder
+  private buildOverflowFullscreenButton() {
+    Row() {
+      AiraIcon({
+        airaIconId: 'browser.toolbar.fullScreen',
+        iconSize: 14,
+        iconColor: this.storedPrimaryTextColor
+      })
+    }
+    .width(LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP)
+    .height(LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP)
+    .constraintSize({ minWidth: LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP })
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.storedControlBackgroundColor)
+    .borderRadius(LARGE_SCREEN_OVERFLOW_ZOOM_BUTTON_SIZE_VP / 2)
+    .opacity(this.activeTabChrome.scene === 'web' ? 1 : 0.38)
+    .accessibilityText('全屏模式')
+    .onClick((): void => {
+      this.toggleOverflowFullscreen();
     })
   }
 
@@ -894,6 +1078,11 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(16)
           .fontColor([this.storedAccentColor])
+      }
+      if (this.inputProfile !== 'touch' && this.isOverflowSubmenuAction(item.id)) {
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(12)
+          .fontColor([this.storedSecondaryTextColor])
       }
     }
     .width('100%')
@@ -991,9 +1180,112 @@ export struct BrowserLargeScreenNavigationToolbarSurface {
   }
 
   private resolveOverflowMenuItemBackground(item: BrowserBottomAddressPanelAction): ResourceColor {
-    return this.hoveredOverflowActionId === item.id
+    return this.isOverflowRowHighlighted(item.id)
       ? this.storedControlBackgroundColor
       : Color.Transparent;
+  }
+
+  private isOverflowRowHighlighted(actionId: string): boolean {
+    if (this.hoveredOverflowActionId === actionId) {
+      return true;
+    }
+    return (actionId === 'history' && this.overflowFlyoutKind === 'history') ||
+      (actionId === 'openBookmarks' && this.overflowFlyoutKind === 'bookmarks');
+  }
+
+  private isOverflowSubmenuAction(actionId: string): boolean {
+    return actionId === 'history' || actionId === 'openBookmarks';
+  }
+
+  private resolveOverflowPopupWidth(): number {
+    const flyoutSpan = this.overflowFlyoutColumnCount *
+      (BROWSER_LARGE_SCREEN_OVERFLOW_FLYOUT_WIDTH_VP + BROWSER_LARGE_SCREEN_OVERFLOW_FLYOUT_GAP_VP);
+    return LARGE_SCREEN_OVERFLOW_MENU_WIDTH_VP + flyoutSpan;
+  }
+
+  private handlePointerOverflowHover(actionId: string, hovered: boolean): void {
+    this.hoveredOverflowActionId = hovered
+      ? actionId
+      : (this.hoveredOverflowActionId === actionId ? '' : this.hoveredOverflowActionId);
+    if (!hovered) {
+      if (this.isOverflowSubmenuAction(actionId)) {
+        this.scheduleOverflowFlyoutClose();
+      }
+      return;
+    }
+    if (actionId === 'history') {
+      this.showOverflowFlyout('history');
+      return;
+    }
+    if (actionId === 'openBookmarks') {
+      this.showOverflowFlyout('bookmarks');
+      return;
+    }
+    this.closeOverflowFlyout();
+  }
+
+  private showOverflowFlyout(kind: string): void {
+    this.clearOverflowFlyoutTimer();
+    if (this.overflowFlyoutKind !== kind) {
+      this.overflowFlyoutColumnCount = 1;
+    } else if (this.overflowFlyoutColumnCount < 1) {
+      this.overflowFlyoutColumnCount = 1;
+    }
+    this.overflowFlyoutKind = kind;
+  }
+
+  private scheduleOverflowFlyoutClose(): void {
+    this.clearOverflowFlyoutTimer();
+    this.overflowFlyoutCloseTimer = setTimeout((): void => {
+      this.overflowFlyoutCloseTimer = -1;
+      this.overflowFlyoutKind = '';
+      this.overflowFlyoutColumnCount = 0;
+    }, LARGE_SCREEN_OVERFLOW_FLYOUT_CLOSE_DELAY_MS);
+  }
+
+  private closeOverflowFlyout(): void {
+    this.clearOverflowFlyoutTimer();
+    this.overflowFlyoutKind = '';
+    this.overflowFlyoutColumnCount = 0;
+  }
+
+  private closeOverflowMenu(): void {
+    this.closeOverflowFlyout();
+    this.overflowMenuVisible = false;
+  }
+
+  private clearOverflowFlyoutTimer(): void {
+    if (this.overflowFlyoutCloseTimer < 0) {
+      return;
+    }
+    clearTimeout(this.overflowFlyoutCloseTimer);
+    this.overflowFlyoutCloseTimer = -1;
+  }
+
+  private applyOverflowZoom(action: BrowserLargeScreenWebZoomAction): void {
+    if (!this.webZoomSnapshot.available) {
+      return;
+    }
+    if (action === 'decrease' && !this.webZoomSnapshot.canDecrease) {
+      return;
+    }
+    if (action === 'increase' && !this.webZoomSnapshot.canIncrease) {
+      return;
+    }
+    this.onIntent({
+      kind: 'web_zoom',
+      text: '',
+      zoomAction: action,
+      presentZoomDialog: false
+    });
+  }
+
+  private toggleOverflowFullscreen(): void {
+    if (this.activeTabChrome.scene !== 'web') {
+      return;
+    }
+    this.closeOverflowMenu();
+    this.onIntent({ kind: 'open_browser_action', text: '', actionId: 'fullScreenMode' });
   }
 
   private dispatchOverflowAction(item: BrowserBottomAddressPanelAction): void {

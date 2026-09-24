@@ -36,6 +36,13 @@ import {
 } from '../common/ManagementHdsScaffold';
 import { AppEmptyState } from '../common/AppEmptyState';
 import {
+  BrowserDesktopContextMenu,
+  BrowserDesktopContextMenuItem
+} from '../browser/BrowserDesktopContextMenu';
+import {
+  MANAGEMENT_LARGE_SCREEN_ROW_GAP,
+  MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+  MANAGEMENT_LARGE_SCREEN_ROW_RADIUS,
   ManagementLargeScreenIconButton,
   ManagementLargeScreenShell
 } from '../common/ManagementLargeScreenShell';
@@ -77,6 +84,7 @@ export struct OfflinePagesScreen {
   @State iconStates: OfflinePageIconState[] = [];
   @State desktopQuery: string = '';
   @State hoveredItemId: string = '';
+  @State desktopMenuItemId: string = '';
 
   aboutToAppear(): void {
     this.siteIconListPresenter.bindDomainUpdates(
@@ -190,7 +198,7 @@ export struct OfflinePagesScreen {
     } else if (this.resolveDesktopItems().length === 0) {
       this.buildStatus(this.desktopQuery.trim().length > 0 ? '没有匹配的网页' : this.listState.message)
     } else {
-      List({ space: 0 }) {
+      List({ space: MANAGEMENT_LARGE_SCREEN_ROW_GAP }) {
         ForEach(this.resolveDesktopItems(), (item: OfflinePageListItem) => {
           ListItem() {
             this.buildDesktopItem(item)
@@ -199,6 +207,12 @@ export struct OfflinePagesScreen {
       }
       .width('100%')
       .height('100%')
+      .padding({
+        left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+        right: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+        top: 8,
+        bottom: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+      })
       .scrollBar(BarState.Auto)
       .edgeEffect(EdgeEffect.None)
     }
@@ -236,22 +250,38 @@ export struct OfflinePagesScreen {
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
 
-      if (this.hoveredItemId === item.id) {
-        this.buildOverflowButton(item)
+      if (this.isDesktopItemActive(item.id)) {
+        this.buildDesktopOverflowButton(item)
       }
     }
     .width('100%')
     .height(52)
-    .padding({ left: 18, right: 12 })
+    .padding({
+      left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+      right: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+    })
     .alignItems(VerticalAlign.Center)
-    .backgroundColor(this.hoveredItemId === item.id
+    .backgroundColor(this.isDesktopItemActive(item.id)
       ? this.storedControlBackgroundColor
       : $r('sys.color.ohos_id_color_background_transparent'))
+    .borderRadius(MANAGEMENT_LARGE_SCREEN_ROW_RADIUS)
+    .clip(true)
     .onHover((hovered: boolean): void => {
-      this.hoveredItemId = hovered ? item.id : '';
+      this.handleDesktopItemHover(item.id, hovered);
     })
     .onClick((): void => {
+      if (this.desktopMenuItemId === item.id) {
+        return;
+      }
       this.openOfflinePageIfAvailable(item);
+    })
+    .bindContextMenu(this.buildDesktopItemMenu(item), ResponseType.RightClick, {
+      onAppear: (): void => {
+        this.desktopMenuItemId = item.id;
+      },
+      onDisappear: (): void => {
+        this.dismissDesktopItemMenu(item.id);
+      }
     })
   }
 
@@ -345,6 +375,90 @@ export struct OfflinePagesScreen {
   }
 
   @Builder
+  private buildDesktopOverflowButton(item: OfflinePageListItem) {
+    Button() {
+      Image($r('sys.media.ohos_ic_public_more'))
+        .width(18)
+        .height(18)
+        .fillColor(this.storedSecondaryTextColor)
+    }
+      .width(36)
+      .height(36)
+      .type(ButtonType.Normal)
+      .backgroundColor(this.storedControlBackgroundColor)
+      .borderRadius(18)
+      .stateEffect(false)
+      .accessibilityText('更多离线页面操作')
+      .onClick((): void => {
+        this.desktopMenuItemId = item.id;
+      })
+      .bindMenu(this.buildDesktopItemMenu(item), {
+        placement: Placement.BottomRight,
+        showInSubWindow: false,
+        onAppear: (): void => {
+          this.desktopMenuItemId = item.id;
+        },
+        onDisappear: (): void => {
+          this.dismissDesktopItemMenu(item.id);
+        }
+      })
+      .bindContextMenu(this.buildDesktopItemMenu(item), ResponseType.RightClick, {
+        onAppear: (): void => {
+          this.desktopMenuItemId = item.id;
+        },
+        onDisappear: (): void => {
+          this.dismissDesktopItemMenu(item.id);
+        }
+      })
+  }
+
+  @Builder
+  private buildDesktopItemMenu(item: OfflinePageListItem) {
+    BrowserDesktopContextMenu() {
+      MenuItemGroup() {
+        BrowserDesktopContextMenuItem({
+          label: '打开离线页面',
+          onAction: (): void => {
+            this.openOfflinePageIfAvailable(item);
+          }
+        })
+        BrowserDesktopContextMenuItem({
+          label: '打开原网页',
+          onAction: (): void => {
+            this.openOriginalPage(item.originalUrl);
+          }
+        })
+        BrowserDesktopContextMenuItem({
+          label: '复制链接',
+          onAction: (): void => {
+            this.copyOriginalUrl(item.originalUrl);
+          }
+        })
+        BrowserDesktopContextMenuItem({
+          label: '分享',
+          onAction: (): void => {
+            this.shareOriginalUrl(item);
+          }
+        })
+        BrowserDesktopContextMenuItem({
+          label: '导出网页',
+          onAction: (): void => {
+            this.exportOfflinePage(item);
+          }
+        })
+      }
+      MenuItemGroup() {
+        BrowserDesktopContextMenuItem({
+          label: '删除',
+          onAction: (): void => {
+            this.confirmDeleteItem(item);
+          }
+        })
+      }
+    }
+  }
+
+  @Builder
   private buildOverflowButton(item: OfflinePageListItem) {
     Button() {
       Image($r('sys.media.ohos_ic_public_more'))
@@ -397,6 +511,26 @@ export struct OfflinePagesScreen {
           }
         }
       ])
+  }
+
+  private isDesktopItemActive(itemId: string): boolean {
+    return this.hoveredItemId === itemId || this.desktopMenuItemId === itemId;
+  }
+
+  private handleDesktopItemHover(itemId: string, hovered: boolean): void {
+    if (hovered) {
+      this.hoveredItemId = itemId;
+      return;
+    }
+    if (this.hoveredItemId === itemId) {
+      this.hoveredItemId = '';
+    }
+  }
+
+  private dismissDesktopItemMenu(itemId: string): void {
+    if (this.desktopMenuItemId === itemId) {
+      this.desktopMenuItemId = '';
+    }
   }
 
   private refresh(): void {

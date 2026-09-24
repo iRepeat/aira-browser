@@ -112,10 +112,11 @@ export default function browserLargeScreenToolbarMenuViewModelTest(): void {
     it('keeps a fixed grouped menu instead of phone toolbar order', 0, () => {
       const plan = projectBrowserLargeScreenPointerToolbarMenu(desktopActions(), true);
 
-      expect(sectionIds(plan).join(',')).assertEqual('destinations,page,preferences');
+      expect(sectionIds(plan).join(',')).assertEqual('destinations,page,zoom,preferences');
       expect(entryIds(entriesOf(plan, 'destinations')).join(','))
         .assertEqual('history,openBookmarks,downloads,novel');
       expect(entryIds(entriesOf(plan, 'page')).join(',')).assertEqual('copyLink,share,print');
+      expect(entryIds(entriesOf(plan, 'zoom')).join(',')).assertEqual('textZoom');
       expect(entryIds(entriesOf(plan, 'preferences')).join(','))
         .assertEqual('scanQr,appProxySettings,newPrivateTab,settings');
       expect(containsAction(plan, 'bookmark')).assertFalse();
@@ -126,7 +127,7 @@ export default function browserLargeScreenToolbarMenuViewModelTest(): void {
     it('keeps page tools in the same menu when there is no web page', 0, () => {
       const plan = projectBrowserLargeScreenPointerToolbarMenu(desktopActions(), false);
 
-      expect(sectionIds(plan).join(',')).assertEqual('destinations,page,preferences');
+      expect(sectionIds(plan).join(',')).assertEqual('destinations,page,zoom,preferences');
       expect(containsAction(plan, 'copyLink')).assertTrue();
       expect(containsAction(plan, 'scripts')).assertTrue();
       expect(containsAction(plan, 'video')).assertTrue();
@@ -137,7 +138,7 @@ export default function browserLargeScreenToolbarMenuViewModelTest(): void {
       const groups = pageToolGroups(plan);
       const development = groups.find((group: BrowserLargeScreenToolbarMenuPageToolGroup): boolean =>
         group.id === 'development');
-      const zoom = groups[0].items.find((entry: BrowserLargeScreenToolbarMenuEntry): boolean =>
+      const zoom = entriesOf(plan, 'zoom').find((entry: BrowserLargeScreenToolbarMenuEntry): boolean =>
         entry.action.id === 'textZoom');
       const scriptManagement = development === undefined ? undefined : development.items[0];
 
@@ -145,7 +146,7 @@ export default function browserLargeScreenToolbarMenuViewModelTest(): void {
         .assertEqual('reading,media,development,more');
       expect(groups.map((group: BrowserLargeScreenToolbarMenuPageToolGroup): string => group.title).join('|'))
         .assertEqual('阅读|媒体|开发|');
-      expect(entryIds(groups[0].items).join(',')).assertEqual('find,textZoom,reader,translate');
+      expect(entryIds(groups[0].items).join(',')).assertEqual('find,reader,translate');
       expect(entryIds(groups[1].items).join(',')).assertEqual('video,offline');
       expect(entryIds(development === undefined ? [] : development.items).join(','))
         .assertEqual('scripts,elementInspection,manualElementHide,userAgent');

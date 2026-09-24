@@ -16,6 +16,10 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { resolveDownloadFileTypeImage } from './DownloadFileTypeIcon';
 import {
+  MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+  MANAGEMENT_LARGE_SCREEN_ROW_RADIUS
+} from '../common/ManagementLargeScreenShell';
+import {
   createFloatingGlassMaterialIfAvailable,
   resolveFloatingGlassMaterialBackgroundColor,
   resolveFloatingGlassMaterialTintForMode,
@@ -93,9 +97,16 @@ export struct BrowserDownloadManagementRow {
     }
     .width('100%')
     .constraintSize({ minHeight: 52 })
-    .padding({ left: 18, right: 16, top: 8, bottom: 8 })
+    .padding({
+      left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+      right: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+      top: 8,
+      bottom: 8
+    })
     .alignItems(VerticalAlign.Center)
     .backgroundColor(this.resolveDesktopRowBackground())
+    .borderRadius(MANAGEMENT_LARGE_SCREEN_ROW_RADIUS)
+    .clip(true)
     .onHover((hovered: boolean): void => {
       this.desktopHovered = hovered;
     })

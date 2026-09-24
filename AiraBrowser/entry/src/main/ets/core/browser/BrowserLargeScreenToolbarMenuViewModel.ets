@@ -15,7 +15,7 @@ export const BROWSER_LARGE_SCREEN_SCRIPT_MANAGEMENT_TITLE: string = '管理用�
 export const BROWSER_LARGE_SCREEN_PRIVACY_MODE_TITLE: string = '隐私模式';
 export const BROWSER_LARGE_SCREEN_WEB_ZOOM_TITLE: string = '网页缩放';
 
-export type BrowserLargeScreenToolbarMenuSectionId = 'destinations' | 'page' | 'preferences';
+export type BrowserLargeScreenToolbarMenuSectionId = 'destinations' | 'page' | 'zoom' | 'preferences';
 export type BrowserLargeScreenToolbarMenuPageToolGroupId = 'reading' | 'media' | 'development' | 'more';
 export type BrowserLargeScreenToolbarMenuActivation = 'browser_action' | 'web_zoom' | 'user_script_management';
 
@@ -78,7 +78,7 @@ const EMPTY_PAGE_TOOLS: BrowserLargeScreenToolbarMenuPageToolGroup[] = [];
 const EMPTY_MENU_PLAN: BrowserLargeScreenToolbarMenuPlan = { sections: [] };
 
 const PAGE_TOOL_GROUP_SPECS: BrowserLargeScreenToolbarMenuPageToolGroupSpec[] = [
-  { id: 'reading', title: '阅读', actionIds: ['find', 'textZoom', 'reader', 'translate'] },
+  { id: 'reading', title: '阅读', actionIds: ['find', 'reader', 'translate'] },
   { id: 'media', title: '媒体', actionIds: ['video', 'offline'] },
   { id: 'development', title: '开发', actionIds: ['scripts', 'elementInspection', 'manualElementHide', 'userAgent'] },
   { id: 'more', title: '', actionIds: ['addToDesktop', 'themeMode', 'reportSite', 'savedPages'] }
@@ -111,6 +111,15 @@ export function projectBrowserLargeScreenPointerToolbarMenu(
       id: 'page',
       items: pageItems,
       pageTools: pageTools
+    });
+  }
+  const zoomItems: BrowserLargeScreenToolbarMenuEntry[] =
+    projectEntries(actions, ['textZoom'], webZoomAvailable);
+  if (zoomItems.length > 0) {
+    sections.push({
+      id: 'zoom',
+      items: zoomItems,
+      pageTools: EMPTY_PAGE_TOOLS
     });
   }
   const preferences: BrowserLargeScreenToolbarMenuEntry[] =

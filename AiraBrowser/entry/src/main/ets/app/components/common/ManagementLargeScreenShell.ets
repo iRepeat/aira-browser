@@ -17,6 +17,9 @@ const MANAGEMENT_LARGE_SCREEN_TOOLBAR_HEIGHT: number = 60;
 const MANAGEMENT_LARGE_SCREEN_CONTROL_HEIGHT: number = 34;
 const MANAGEMENT_LARGE_SCREEN_CONTROL_RADIUS: number = 9;
 const MANAGEMENT_LARGE_SCREEN_NAV_ROW_HEIGHT: number = 34;
+export const MANAGEMENT_LARGE_SCREEN_ROW_INSET: number = 14;
+export const MANAGEMENT_LARGE_SCREEN_ROW_RADIUS: number = 10;
+export const MANAGEMENT_LARGE_SCREEN_ROW_GAP: number = 2;
 
 @Component
 export struct ManagementLargeScreenNavSection {

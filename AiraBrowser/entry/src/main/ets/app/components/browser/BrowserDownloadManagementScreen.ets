@@ -65,6 +65,8 @@ import { resolveFloatingGlassMaterialTintForMode } from '../common/FloatingGlass
 import { BROWSER_WINDOW_SAFE_TOP_INSET_STORAGE_KEY } from '../../../core/browser/BrowserWindowAvoidAreaCoordinator';
 import { FloatingSelectionToolbar } from '../common/FloatingSelectionToolbar';
 import {
+  MANAGEMENT_LARGE_SCREEN_ROW_GAP,
+  MANAGEMENT_LARGE_SCREEN_ROW_INSET,
   ManagementLargeScreenIconButton,
   ManagementLargeScreenNavItem,
   ManagementLargeScreenNavSection,
@@ -328,12 +330,16 @@ export struct BrowserDownloadManagementScreen {
           .width('100%')
           .fontSize(12)
           .fontColor(this.storedSecondaryTextColor)
-          .padding({ left: 22, right: 22, top: 12 })
+          .padding({
+            left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+            right: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+            top: 12
+          })
       }
       if (this.resolveDesktopRows().length === 0) {
         this.buildEmptyState()
       } else {
-        List({ space: 0 }) {
+        List({ space: MANAGEMENT_LARGE_SCREEN_ROW_GAP }) {
           ForEach(this.resolveDesktopRows(), (row: DownloadManagementRowState) => {
             ListItem() {
               BrowserDownloadManagementRow({
@@ -354,6 +360,12 @@ export struct BrowserDownloadManagementScreen {
         }
         .layoutWeight(1)
         .width('100%')
+        .padding({
+          left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+          right: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+          top: 8,
+          bottom: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+        })
         .scrollBar(BarState.Auto)
         .edgeEffect(EdgeEffect.None)
       }

@@ -21,6 +21,11 @@ import {
   RECORD_LIST_ROW_SUBTITLE_SIZE,
   RECORD_LIST_ROW_TITLE_SIZE
 } from '../common/RecordListTokens';
+import {
+  MANAGEMENT_LARGE_SCREEN_ROW_GAP,
+  MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+  MANAGEMENT_LARGE_SCREEN_ROW_RADIUS
+} from '../common/ManagementLargeScreenShell';
 
 const HISTORY_SITE_ROW_HEIGHT: number = 52;
 
@@ -53,17 +58,22 @@ export struct HistoryLargeScreenSites {
     (_target: SiteIconListTarget, _currentUri: string, _sourceRevision: number): void => {};
 
   build() {
-    List({ scroller: this.listScroller, space: 0 }) {
-      ForEach(this.sites, (site: HistorySiteGroup, index: number) => {
+    List({ scroller: this.listScroller, space: MANAGEMENT_LARGE_SCREEN_ROW_GAP }) {
+      ForEach(this.sites, (site: HistorySiteGroup) => {
         ListItem() {
-          this.buildSiteRow(site, index >= this.sites.length - 1)
+          this.buildSiteRow(site)
         }
         .width('100%')
       }, (site: HistorySiteGroup): string => site.key)
     }
     .width('100%')
     .height('100%')
-    .padding({ top: 8, bottom: 8 })
+    .padding({
+      left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+      right: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+      top: 8,
+      bottom: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+    })
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })
     .scrollBar(BarState.Auto)
     .cachedCount(8)
@@ -71,7 +81,7 @@ export struct HistoryLargeScreenSites {
   }
 
   @Builder
-  private buildSiteRow(site: HistorySiteGroup, isLast: boolean) {
+  private buildSiteRow(site: HistorySiteGroup) {
     Column() {
       Row({ space: 12 }) {
         WebsiteIconView({
@@ -113,23 +123,21 @@ export struct HistoryLargeScreenSites {
       }
       .width('100%')
       .height(HISTORY_SITE_ROW_HEIGHT)
-      .padding({ left: 12, right: 12 })
+      .padding({
+        left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+        right: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+      })
       .alignItems(VerticalAlign.Center)
       .backgroundColor(this.hoveredSiteKey === site.key
         ? this.storedControlBackgroundColor
         : this.storedSurfaceBackgroundColor)
-      .borderRadius(0)
+      .borderRadius(MANAGEMENT_LARGE_SCREEN_ROW_RADIUS)
+      .clip(true)
       .onHover((hovered: boolean): void => {
         this.hoveredSiteKey = hovered ? site.key : '';
       })
       .onClick((): void => this.onOpenSite(site))
       .bindContextMenu(this.buildSiteContextMenu(site), ResponseType.RightClick)
-
-      if (!isLast) {
-        Divider()
-          .margin({ left: 54, right: 12 })
-          .color(this.storedDividerColor)
-      }
     }
     .width('100%')
     .backgroundColor($r('sys.color.ohos_id_color_background_transparent'))

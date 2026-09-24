@@ -150,6 +150,7 @@ export interface BrowserLargeScreenNavigationIntent {
   openInNewTab?: boolean;
   tabId?: string;
   zoomAction?: BrowserLargeScreenWebZoomAction;
+  presentZoomDialog?: boolean;
   focusRequestVersion?: number;
   settingsDestination?: SettingsCenterDestination;
 }
@@ -624,7 +625,9 @@ export class BrowserLargeScreenShellIntentApplication {
         result.applied ? 'true' : 'false',
         result.unavailableReason
       );
-      this.presentOrUpdateWebZoom(result.snapshot);
+      if (intent.presentZoomDialog !== false) {
+        this.presentOrUpdateWebZoom(result.snapshot);
+      }
       return;
     }
     if (intent.kind === 'open_bookmark_node' && intent.url !== undefined) {

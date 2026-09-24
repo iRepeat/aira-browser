@@ -38,6 +38,9 @@ import {
 } from '../../../core/theme/BrowserThemeStorageKeys';
 import { AiraIcon } from '../common/AiraIcon';
 import {
+  MANAGEMENT_LARGE_SCREEN_ROW_GAP,
+  MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+  MANAGEMENT_LARGE_SCREEN_ROW_RADIUS,
   ManagementLargeScreenActionGroup,
   ManagementLargeScreenIconButton,
   ManagementLargeScreenShell,
@@ -61,7 +64,6 @@ import { bookmarkWorkspaceSessionRuntime } from '../../runtime/BookmarkWorkspace
 
 const BOOKMARK_WORKSPACE_COMPACT_SEARCH_BREAKPOINT: number = 840;
 const BOOKMARK_WORKSPACE_ROW_HEIGHT: number = 52;
-const BOOKMARK_WORKSPACE_ROW_RADIUS: number = 10;
 const BOOKMARK_WORKSPACE_SEARCH_FOCUS_KEY: string = 'bookmark-large-screen-search';
 const BOOKMARK_WORKSPACE_ROUTE_DEBOUNCE_MS: number = 200;
 
@@ -229,9 +231,7 @@ export struct BookmarkLargeScreenWorkspace {
           this.exitSelectionMode();
         }
       })
-      return;
-    }
-
+    } else {
     if (!this.shouldShowFullSearch()) {
       ManagementLargeScreenIconButton({
         iconId: 'settings.search',
@@ -291,6 +291,7 @@ export struct BookmarkLargeScreenWorkspace {
         }
       }
     ])
+    }
   }
 
   @Builder
@@ -353,7 +354,7 @@ export struct BookmarkLargeScreenWorkspace {
     .padding({ left: 8 + Math.min(folder.depth, 5) * 14, right: 12 })
     .alignItems(VerticalAlign.Center)
     .backgroundColor(this.resolveFolderBackground(folder.id))
-    .borderRadius(BOOKMARK_WORKSPACE_ROW_RADIUS)
+    .borderRadius(MANAGEMENT_LARGE_SCREEN_ROW_RADIUS)
     .clip(true)
     .onHover((hovered: boolean): void => {
       this.hoveredFolderId = hovered ? folder.id : '';
@@ -412,7 +413,7 @@ export struct BookmarkLargeScreenWorkspace {
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
       } else {
-        List({ space: 2 }) {
+        List({ space: MANAGEMENT_LARGE_SCREEN_ROW_GAP }) {
           ForEach(this.snapshot.rows, (node: BookmarkNode, index: number) => {
             ListItem() {
               this.buildRecordRow(node, index)
@@ -422,7 +423,11 @@ export struct BookmarkLargeScreenWorkspace {
         }
         .layoutWeight(1)
         .width('100%')
-        .padding({ left: 14, right: 14, bottom: 14 })
+        .padding({
+          left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+          right: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+          bottom: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+        })
         .scrollBar(BarState.Auto)
         .edgeEffect(EdgeEffect.None)
         .clip(true)
@@ -464,7 +469,10 @@ export struct BookmarkLargeScreenWorkspace {
       }
       .width('100%')
       .height('100%')
-      .padding({ left: 14, right: 14 })
+      .padding({
+        left: MANAGEMENT_LARGE_SCREEN_ROW_INSET,
+        right: MANAGEMENT_LARGE_SCREEN_ROW_INSET
+      })
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
@@ -473,7 +481,7 @@ export struct BookmarkLargeScreenWorkspace {
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .stateEffect(false)
     .backgroundColor(this.resolveRecordBackground(node.id))
-    .borderRadius(BOOKMARK_WORKSPACE_ROW_RADIUS)
+    .borderRadius(MANAGEMENT_LARGE_SCREEN_ROW_RADIUS)
     .clip(true)
     .onHover((hovered: boolean): void => {
       this.hoveredNodeId = hovered ? node.id : '';

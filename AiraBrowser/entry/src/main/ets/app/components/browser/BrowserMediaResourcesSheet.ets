@@ -970,6 +970,15 @@ struct BrowserResourceVideoCard {
     (_candidateId: string, _action: MediaResourceAction) => {};
 
   build() {
+    Column() {
+      this.buildVideoCard()
+    }
+    .width('100%')
+    .bindContextMenu(this.buildMenu(), ResponseType.RightClick)
+  }
+
+  @Builder
+  private buildVideoCard() {
     Row({ space: 10 }) {
       this.buildThumbnail()
 
@@ -1214,6 +1223,15 @@ struct BrowserResourceImageGridCard {
     (_candidateId: string, _action: MediaResourceAction) => {};
 
   build() {
+    Column() {
+      this.buildImageCard()
+    }
+    .width('100%')
+    .bindContextMenu(this.buildMenu(), ResponseType.RightClick)
+  }
+
+  @Builder
+  private buildImageCard() {
     Image(this.candidate.url)
       .width('100%')
       .aspectRatio(1)
