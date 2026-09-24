@@ -28,6 +28,7 @@ import {
   BrowserLargeScreenTopChromeActionViewModel
 } from './BrowserLargeScreenTopChromeActionViewModel';
 import { browserNativeTabSceneService } from './BrowserNativeTabSceneService';
+import { resolveSavedPageWebTabDisplayUrl } from '../offline/SavedPageWebTabUrl';
 import {
   BROWSER_LARGE_SCREEN_TITLE_BAR_FIXED_CHROME_WIDTH_VP
 } from './BrowserLargeScreenTitleBarTokens';
@@ -221,7 +222,9 @@ export class BrowserLargeScreenPresentationViewModel {
         scene: nativeScene ?? (activeTab.isHome ? 'home' : 'web'),
         tabId: activeTab.id,
         title: activeTab.title.trim().length > 0 ? activeTab.title : '新标签页',
-        displayUrl: nativeScene === undefined && !activeTab.isHome ? this.resolveActiveTabUrl(activeTab) : '',
+        displayUrl: nativeScene === undefined && !activeTab.isHome
+          ? resolveSavedPageWebTabDisplayUrl(this.resolveActiveTabUrl(activeTab))
+          : '',
         nativeRouteUrl: nativeScene !== undefined ? this.resolveActiveTabUrl(activeTab) : '',
         canGoBack: nativeScene !== undefined
           ? navigationIndex > 0

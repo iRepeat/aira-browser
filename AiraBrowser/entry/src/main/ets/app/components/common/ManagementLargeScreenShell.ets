@@ -20,6 +20,19 @@ const MANAGEMENT_LARGE_SCREEN_NAV_ROW_HEIGHT: number = 34;
 export const MANAGEMENT_LARGE_SCREEN_ROW_INSET: number = 14;
 export const MANAGEMENT_LARGE_SCREEN_ROW_RADIUS: number = 10;
 export const MANAGEMENT_LARGE_SCREEN_ROW_GAP: number = 2;
+const MANAGEMENT_LARGE_SCREEN_LIST_PREFERRED_WIDTH: number = 880;
+const MANAGEMENT_LARGE_SCREEN_LIST_SIDE_MARGIN_RATIO: number = 0.2;
+
+export function resolveManagementListContentWidth(contentPaneWidth: number, surfaceWidth: number): number {
+  const pane = Math.max(0, Math.round(contentPaneWidth));
+  if (pane <= MANAGEMENT_LARGE_SCREEN_LIST_PREFERRED_WIDTH) {
+    return pane;
+  }
+  const surface = Math.max(pane, Math.round(surfaceWidth));
+  const maxSideMargin = surface * MANAGEMENT_LARGE_SCREEN_LIST_SIDE_MARGIN_RATIO;
+  const marginLimitedWidth = pane - maxSideMargin * 2;
+  return Math.round(Math.min(pane, Math.max(MANAGEMENT_LARGE_SCREEN_LIST_PREFERRED_WIDTH, marginLimitedWidth)));
+}
 
 @Component
 export struct ManagementLargeScreenNavSection {
@@ -244,6 +257,9 @@ export struct ManagementLargeScreenShell {
   @Prop showSidebar: boolean = true;
   @Prop showSearch: boolean = true;
   @Prop contentRevision: number = 0;
+  @Prop limitContentWidth: boolean = true;
+  @State private surfaceWidthVp: number = 0;
+  @State private contentPaneWidthVp: number = 0;
   onSearchChange: (value: string) => void = (_value: string): void => {};
   @BuilderParam sidebar: () => void = this.emptyBuilder;
   @BuilderParam toolbarActions: () => void = this.emptyBuilder;
@@ -283,15 +299,22 @@ export struct ManagementLargeScreenShell {
           .color(this.storedDividerColor)
 
         Column() {
-          if (this.contentRevision >= 0) {
-            this.content()
+          Column() {
+            if (this.contentRevision >= 0) {
+              this.content()
+            }
           }
+          .width(this.resolveContentColumnWidth())
+          .height('100%')
         }
         .layoutWeight(1)
         .width('100%')
         .height('100%')
-        .alignItems(HorizontalAlign.Start)
+        .alignItems(HorizontalAlign.Center)
         .clip(true)
+        .onAreaChange((_oldArea: Area, newArea: Area): void => {
+          this.contentPaneWidthVp = this.toVp(newArea.width);
+        })
       }
       .layoutWeight(1)
       .height('100%')
@@ -302,6 +325,28 @@ export struct ManagementLargeScreenShell {
     .height('100%')
     .backgroundColor(this.storedPageBackgroundColor)
     .clip(true)
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      this.surfaceWidthVp = this.toVp(newArea.width);
+    })
+  }
+
+  private resolveContentColumnWidth(): Length {
+    if (!this.limitContentWidth || this.contentPaneWidthVp <= 0) {
+      return '100%';
+    }
+    const width = resolveManagementListContentWidth(this.contentPaneWidthVp, this.surfaceWidthVp);
+    if (width <= 0 || width >= this.contentPaneWidthVp) {
+      return '100%';
+    }
+    return width;
+  }
+
+  private toVp(raw: Length): number {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.round(this.getUIContext().px2vp(value)));
   }
 
   @Builder

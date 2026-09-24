@@ -27,6 +27,11 @@ import {
   isBrowserNewWindowTestUrl
 } from '../../app/debug/BrowserNewWindowTestPage';
 import { DocumentViewerService } from '../viewer/DocumentViewerService';
+import { SavedPageWebTabLoadResult } from '../../core/offline/SavedPageWebTabLoadCoordinator';
+import {
+  buildSavedPageLoadingPayload,
+  isSavedPageWebTabUrl
+} from '../../core/offline/SavedPageWebTabUrl';
 import {
   BrowserRuntimeLifecyclePort,
   BrowserRuntimeMutationPort,
@@ -112,6 +117,7 @@ export interface BrowserWebLoadRuntimeDependencies {
   resolveOfflineFastFailureCoordinator: () => BrowserOfflineFastFailureCoordinator;
   resolveLifecycleApplication: () => BrowserWebLoadLifecycleApplication;
   resolveDocumentViewerService: () => DocumentViewerService;
+  resolveSavedPageDeferredLoad?: (url: string) => Promise<SavedPageWebTabLoadResult>;
   resolveRecoveryManager: () => WebRecoveryManager;
   resolveUserAgentService: () => BrowserUserAgentService;
   resolveBrowsingIdentityPolicyCoordinator: () => BrowserBrowsingIdentityPolicyCoordinator;
@@ -202,6 +208,9 @@ export class BrowserWebLoadRuntimeCoordinator implements BrowserWebLoadExecution
 
   resolveDataPayload(targetUrl: string, tabId: string): BrowserWebLoadDataPayload | undefined {
     let payload = this.dependencies.resolveDocumentViewerService().buildLoadingPayload(targetUrl);
+    if (payload === undefined && isSavedPageWebTabUrl(targetUrl)) {
+      payload = buildSavedPageLoadingPayload(targetUrl);
+    }
     if (payload === undefined && isBrowserNewWindowTestUrl(targetUrl)) {
       const testUrl = getBrowserNewWindowTestUrl();
       payload = {
@@ -714,6 +723,25 @@ export class BrowserWebLoadRuntimeCoordinator implements BrowserWebLoadExecution
   }
 
   private scheduleDeferredDataPayloadLoad(tabId: string, targetUrl: string): void {
+    const resolveSavedPage = this.dependencies.resolveSavedPageDeferredLoad;
+    if (resolveSavedPage !== undefined && isSavedPageWebTabUrl(targetUrl)) {
+      resolveSavedPage(targetUrl)
+        .then((result: SavedPageWebTabLoadResult): void => {
+          if (!this.isTabStillTargetingUrl(tabId, targetUrl)) {
+            return;
+          }
+          if (result.payload !== undefined) {
+            this.runDataLoad(tabId, targetUrl, result.payload, true);
+            return;
+          }
+          const archiveUri = result.archiveUri.trim();
+          if (archiveUri.length > 0) {
+            this.loadUrlForTab(tabId, archiveUri, true, false, true, 'SavedPageArchive');
+          }
+        })
+        .catch((_error: Error): void => {});
+      return;
+    }
     const deferredPayload = this.resolveDeferredDataPayload(targetUrl);
     if (deferredPayload === undefined) {
       return;

@@ -110,6 +110,8 @@ import {
   DocumentViewerFileInfo,
   DocumentViewerService
 } from '../../services/viewer/DocumentViewerService';
+import { OfflinePageOpenCoordinator } from '../../core/offline/OfflinePageOpenCoordinator';
+import { SavedPageWebTabLoadCoordinator } from '../../core/offline/SavedPageWebTabLoadCoordinator';
 import {
   sharedBookmarkRepository,
   sharedAdBlockRepository,
@@ -3246,6 +3248,7 @@ struct BrowserShellPage {
     resolveOfflineFastFailureCoordinator: () => this.browserOfflineFastFailureCoordinator,
     resolveLifecycleApplication: () => this.browserWebPageLifecycleApplicationCoordinator,
     resolveDocumentViewerService: () => this.documentViewerService,
+    resolveSavedPageDeferredLoad: (url: string) => this.savedPageWebTabLoadCoordinator.resolve(url),
     resolveRecoveryManager: () => this.webRecoveryManager,
     resolveUserAgentService: () => this.browserUserAgentService,
     resolveBrowsingIdentityPolicyCoordinator: () => this.browserBrowsingIdentityPolicyCoordinator,
@@ -3385,6 +3388,9 @@ struct BrowserShellPage {
       this.errorMessage = message;
     }
   };
+  private savedPageWebTabLoadCoordinator: SavedPageWebTabLoadCoordinator = new SavedPageWebTabLoadCoordinator(
+    new OfflinePageOpenCoordinator({ repository: sharedOfflinePageRepository })
+  );
   private offlinePageSaveCoordinator: OfflinePageSaveCoordinator = new OfflinePageSaveCoordinator({
     membershipFeature: sharedMembershipFeature,
     featureGateCoordinator: this.featureGateCoordinator,

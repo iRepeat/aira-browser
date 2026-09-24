@@ -49,6 +49,7 @@ import {
 import {
   requestOpenBrowserUrlWithRouteParams
 } from '../../../core/navigation/BrowserNativeNavigationRequestCenter';
+import { buildSavedPageWebTabUrl } from '../../../core/offline/SavedPageWebTabUrl';
 import { BROWSER_SHELL_ROUTE, OFFLINE_PAGE_VIEWER_ROUTE } from '../../router/AppRoutes';
 
 const OFFLINE_PAGES_BOTTOM_PADDING: number = 28;
@@ -80,6 +81,7 @@ export struct OfflinePagesScreen {
   @Prop dataScope: string = '';
   @Prop privacyMode: string = '';
   onOpenOriginalPage: (url: string) => void = (_url: string): void => {};
+  onOpenSavedPage: (url: string, title: string) => void = (_url: string, _title: string): void => {};
   @State listState: OfflinePageListState = this.viewModel.buildLoadingState();
   @State iconStates: OfflinePageIconState[] = [];
   @State desktopQuery: string = '';
@@ -576,15 +578,22 @@ export struct OfflinePagesScreen {
     });
   }
 
-  private openOfflinePage(pageId: string): void {
+  private openOfflinePage(item: OfflinePageListItem): void {
     if (!this.coordinator.canNavigate(this.dataScope, this.privacyMode)) {
       this.showToast('当前隐私策略不允许打开离线页面');
+      return;
+    }
+    if (this.presentationMode === 'native_tab') {
+      this.onOpenSavedPage(
+        buildSavedPageWebTabUrl(item.id, this.dataScope, this.privacyMode, item.originalUrl),
+        item.title
+      );
       return;
     }
     router.pushUrl({
       url: OFFLINE_PAGE_VIEWER_ROUTE,
       params: {
-        pageId: pageId,
+        pageId: item.id,
         dataScope: this.dataScope,
         privacyMode: this.privacyMode
       }
@@ -598,7 +607,7 @@ export struct OfflinePagesScreen {
       this.showToast(item.openStatusText);
       return;
     }
-    this.openOfflinePage(item.id);
+    this.openOfflinePage(item);
   }
 
   private syncSiteIcons(): void {

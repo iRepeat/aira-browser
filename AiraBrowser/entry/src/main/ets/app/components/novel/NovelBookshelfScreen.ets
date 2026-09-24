@@ -159,6 +159,7 @@ export struct NovelBookshelfScreen {
       searchPlaceholder: '搜索书架',
       searchQuery: this.desktopQuery,
       contentRevision: this.desktopContentRevision,
+      limitContentWidth: false,
       onSearchChange: (value: string): void => {
         this.setDesktopQuery(value);
       },

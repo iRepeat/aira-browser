@@ -389,6 +389,9 @@ export struct BrowserLargeScreenPrimarySurface {
         privacyMode: this.resolveNativeTabPrivacyMode(),
         onOpenOriginalPage: (url: string): void => {
           this.onNavigationIntent({ kind: 'open_saved_page_original', text: '', url: url });
+        },
+        onOpenSavedPage: (url: string, title: string): void => {
+          this.onNavigationIntent({ kind: 'open_external_url', text: '', url: url, title: title });
         }
       })
     } else if (this.presentation?.activeTabChrome.scene === 'bookshelf') {
