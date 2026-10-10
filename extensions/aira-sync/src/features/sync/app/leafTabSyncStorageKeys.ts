@@ -3,6 +3,10 @@ export const LEAFTAB_SYNC_DEVICE_ID_REQUEST_TYPE = 'AIRA_LEAFTAB_SYNC_G2_DEVICE_
 export const LEAFTAB_SYNC_DEFAULT_ROOT_PATH = 'aira/g3/bookmarks';
 export const LEAFTAB_BOOKMARK_MAPPING_KEY = 'leaftab_sync_g2_bookmark_mapping:roots:toolbar+other';
 export const LEAFTAB_SELECTED_SYNC_SOURCE_KEY = 'leaftab_sync_g2_active_provider';
+// Device-local domain master switches. Unset means enabled, so an existing
+// install keeps syncing exactly as before until the user opts out.
+export const BOOKMARK_SYNC_DOMAIN_ENABLED_KEY = 'aira_sync_domain_bookmarks_enabled';
+export const HISTORY_SYNC_DOMAIN_ENABLED_KEY = 'aira_sync_domain_history_enabled';
 export const LEAFTAB_SYNC_HISTORY_KEY = 'leaftab_sync_g4_confirmed_bookmark_history';
 export const LEAFTAB_PENDING_BOOKMARK_CONFLICT_KEY = 'leaftab_sync_g4_pending_bookmark_conflict';
 export const AIRA_CLOUD_LAST_SYNC_AT_KEY = 'aira_cloud_bookmark_sync_g4_last_sync_at';

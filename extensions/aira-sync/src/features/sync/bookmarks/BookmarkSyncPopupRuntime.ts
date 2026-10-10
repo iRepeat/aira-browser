@@ -10,6 +10,7 @@ import {
   WEBDAV_LAST_ERROR_MESSAGE_KEY,
   WEBDAV_LAST_SYNC_AT_KEY,
 } from '@/features/sync/app/leafTabSyncStorageKeys';
+import { readBookmarkSyncDomainEnabled } from '@/features/sync/app/syncDomainPreferences';
 import {
   PersonalServerRemoteError,
   readPersonalServerConnection,
@@ -110,6 +111,7 @@ interface BookmarkSyncPopupExecutionConfig {
   cloudUid: string;
   cloudDeviceCredential: string;
   cloudSyncEnabled: boolean;
+  domainEnabled: boolean;
   cloudCapability: AiraDesktopProCapabilityStatus;
   cloudClientUpdateMessage: string;
   webdavState: WebdavStorageState;
@@ -381,6 +383,13 @@ export class BookmarkSyncPopupRuntime {
     operation: BookmarkSyncPopupOperation,
     config: BookmarkSyncPopupExecutionConfig,
   ): Extract<BookmarkSyncPopupRunOutcome, { type: 'blocked' }> | null {
+    if (!config.domainEnabled) {
+      return {
+        type: 'blocked',
+        reason: 'source-disabled',
+        message: '书签同步已在高级设置中关闭，本设备不同步书签',
+      };
+    }
     if (operation.type !== 'sync-now' && config.pendingConflict &&
       config.pendingConflict.provider !== remoteKind) {
       return {
@@ -527,6 +536,7 @@ export class BookmarkSyncPopupRuntime {
       cloudUid,
       cloudDeviceCredential,
       cloudSyncEnabled: await readAiraCloudSyncEnabledFromExtensionStorage(cloudUid),
+      domainEnabled: await readBookmarkSyncDomainEnabled(),
       cloudCapability,
       cloudClientUpdateMessage: cloudClientUpdateBlock.blocked ? cloudClientUpdateBlock.message : '',
       webdavState: {

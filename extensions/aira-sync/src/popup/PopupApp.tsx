@@ -13,6 +13,12 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/sonner';
 import { SyncToggleField } from '@/components/sync/SyncSettingsFields';
 import { LEAFTAB_SELECTED_SYNC_SOURCE_KEY } from '@/features/sync/app/leafTabSyncStorageKeys';
+import {
+  readBookmarkSyncDomainEnabled,
+  readHistorySyncDomainEnabled,
+  writeBookmarkSyncDomainEnabled,
+  writeHistorySyncDomainEnabled,
+} from '@/features/sync/app/syncDomainPreferences';
 import { useBookmarkSyncRuntimeController } from '@/features/sync/bookmarks/useBookmarkSyncRuntimeController';
 import { parseLeafTabSyncRemoteKind } from '@/sync/leaftab/source';
 import type { LeafTabSyncFacade } from '@/features/sync/app/LeafTabSyncContracts';
@@ -1388,6 +1394,12 @@ function AdvancedSettingsPage({
 }) {
   const { t } = useTranslation();
   const selectedSource = syncRuntime.state.leafTabSelectedSyncSource;
+  const [bookmarkSyncDomainEnabled, setBookmarkSyncDomainEnabled] = useState(true);
+  const [historySyncDomainEnabled, setHistorySyncDomainEnabled] = useState(true);
+  useEffect(() => {
+    void readBookmarkSyncDomainEnabled().then(setBookmarkSyncDomainEnabled);
+    void readHistorySyncDomainEnabled().then(setHistorySyncDomainEnabled);
+  }, []);
   const { sourceLabel } = resolveBookmarkSyncPresentation(syncRuntime, t);
   const remoteDataLabel = selectedSource === 'aira-cloud'
     ? t('popup.dashboard.cloudData', { defaultValue: '云端数据' })
@@ -1434,6 +1446,30 @@ function AdvancedSettingsPage({
               syncRuntime.state.leafTabSummaryLoading,
             )}
           />
+        </div>
+
+        <SectionLabel>
+          {t('popup.advanced.syncSwitches', { defaultValue: '同步开关' })}
+        </SectionLabel>
+        <div className="overflow-hidden rounded-[8px] border border-border bg-card px-3 py-2.5">
+          <SyncToggleField
+            label={t('popup.advanced.bookmarkSyncSwitch', { defaultValue: '同步书签' })}
+            checked={bookmarkSyncDomainEnabled}
+            onCheckedChange={async (enabled) => {
+              await writeBookmarkSyncDomainEnabled(enabled);
+              setBookmarkSyncDomainEnabled(enabled);
+            }}
+          />
+          <div className="mt-2 border-t border-border pt-2">
+            <SyncToggleField
+              label={t('popup.advanced.historySyncSwitch', { defaultValue: '同步历史记录' })}
+              checked={historySyncDomainEnabled}
+              onCheckedChange={async (enabled) => {
+                await writeHistorySyncDomainEnabled(enabled);
+                setHistorySyncDomainEnabled(enabled);
+              }}
+            />
+          </div>
         </div>
 
         <SectionLabel>

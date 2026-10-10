@@ -2,6 +2,7 @@ import {
   AIRA_CLOUD_LAST_ERROR_AT_KEY,
   AIRA_CLOUD_LAST_ERROR_MESSAGE_KEY,
   AIRA_CLOUD_LAST_SYNC_AT_KEY,
+  BOOKMARK_SYNC_DOMAIN_ENABLED_KEY,
   LEAFTAB_BACKGROUND_STORAGE_KEYS,
   LEAFTAB_PENDING_BOOKMARK_CONFLICT_KEY,
   LEAFTAB_SELECTED_SYNC_SOURCE_KEY,
@@ -14,6 +15,7 @@ import {
   WEBDAV_LAST_ERROR_MESSAGE_KEY,
   WEBDAV_LAST_SYNC_AT_KEY,
 } from '@/features/sync/app/leafTabSyncStorageKeys';
+import { readBookmarkSyncDomainEnabled } from '@/features/sync/app/syncDomainPreferences';
 import {
   PERSONAL_SERVER_CONNECTION_STORAGE_KEY,
   PersonalServerRemoteError,
@@ -88,6 +90,7 @@ type BackgroundSyncConfig = {
   cloudDeviceCredential: string;
   cloudSyncEnabled: boolean;
   cloudClientUpdateBlocked: boolean;
+  domainEnabled: boolean;
   webdavSyncEnabled: boolean;
   personalServerConnection: PersonalServerConnection | null;
   selectedSource: LeafTabSyncRemoteKind | null;
@@ -185,6 +188,7 @@ export function createBookmarkBackgroundSyncRuntime(
     const cloudUid = loginProfile?.uid?.trim() || '';
     const cloudDeviceCredential = loginProfile?.deviceCredential?.trim() || '';
     const cloudSyncEnabled = await readAiraCloudSyncEnabledFromExtensionStorage(cloudUid);
+    const domainEnabled = await readBookmarkSyncDomainEnabled();
     const [sharedRecord, pendingConflict, cloudClientUpdateBlock] = await Promise.all([
       readExtensionStorageRecord([LEAFTAB_SELECTED_SYNC_SOURCE_KEY]),
       readPendingBookmarkConflictWithinExecutionLock(),
@@ -224,6 +228,7 @@ export function createBookmarkBackgroundSyncRuntime(
       cloudDeviceCredential,
       cloudSyncEnabled,
       cloudClientUpdateBlocked: cloudClientUpdateBlock.blocked,
+      domainEnabled,
       webdavSyncEnabled: webdavState.syncEnabled,
       personalServerConnection,
       selectedSource,
@@ -248,6 +253,9 @@ export function createBookmarkBackgroundSyncRuntime(
   }
 
   function canRunBackgroundAutoSync(config: BackgroundSyncConfig): boolean {
+    if (!config.domainEnabled) {
+      return false;
+    }
     if (config.hasPendingConflict) {
       return false;
     }
@@ -727,6 +735,7 @@ export function createBookmarkBackgroundSyncRuntime(
         return;
       }
       const relevantKeys = [
+        BOOKMARK_SYNC_DOMAIN_ENABLED_KEY,
         LEAFTAB_SELECTED_SYNC_SOURCE_KEY,
         LEAFTAB_PENDING_BOOKMARK_CONFLICT_KEY,
         LEAFTAB_BACKGROUND_STORAGE_KEYS.airaCloudClientUpdateRequired,

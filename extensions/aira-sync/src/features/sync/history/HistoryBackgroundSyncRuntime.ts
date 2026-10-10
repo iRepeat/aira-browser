@@ -22,7 +22,11 @@ import {
   personalServerAccountScope,
   readPersonalServerConnection,
 } from '@/features/personal-server/PersonalServerConnection';
-import { LEAFTAB_SELECTED_SYNC_SOURCE_KEY } from '@/features/sync/app/leafTabSyncStorageKeys';
+import {
+  HISTORY_SYNC_DOMAIN_ENABLED_KEY,
+  LEAFTAB_SELECTED_SYNC_SOURCE_KEY,
+} from '@/features/sync/app/leafTabSyncStorageKeys';
+import { readHistorySyncDomainEnabled } from '@/features/sync/app/syncDomainPreferences';
 import { parseLeafTabSyncRemoteKind } from '@/sync/leaftab/source';
 import {
   HISTORY_MESSAGE_TYPE,
@@ -145,6 +149,10 @@ export function createHistoryBackgroundSyncRuntime(config: {
   async function runBackgroundSync(forceFullReconciliation = false): Promise<boolean> {
     if (activeRun) return activeRun;
     const run = (async () => {
+      if (!(await readHistorySyncDomainEnabled())) {
+        await clearSchedules();
+        return false;
+      }
       const resolved = await resolveSession(true);
       if (!resolved.session) {
         if (resolved.status === 'login-required' || resolved.status === 'pro-required') {
@@ -197,6 +205,7 @@ export function createHistoryBackgroundSyncRuntime(config: {
   }
 
   async function captureVisited(item: chrome.history.HistoryItem): Promise<void> {
+    if (!(await readHistorySyncDomainEnabled())) return;
     const resolved = await resolveSession(false);
     if (!resolved.session) return;
     const changed = await module.captureVisitedItem(resolved.session, item);
@@ -207,6 +216,7 @@ export function createHistoryBackgroundSyncRuntime(config: {
   }
 
   async function captureRemoval(removed: chrome.history.RemovedResult): Promise<void> {
+    if (!(await readHistorySyncDomainEnabled())) return;
     const resolved = await resolveSession(false);
     if (!resolved.session) return;
     const changed = await module.recordNativeRemoval(resolved.session, removed);
@@ -311,6 +321,22 @@ export function createHistoryBackgroundSyncRuntime(config: {
         .catch((error) => console.error('[Aira][History startup]', error));
     },
     notifyStorageChanged(changes: Record<string, unknown>, areaName: string): void {
+      if (areaName !== 'local') {
+        return;
+      }
+      if (Object.prototype.hasOwnProperty.call(changes, HISTORY_SYNC_DOMAIN_ENABLED_KEY)) {
+        void readHistorySyncDomainEnabled()
+          .then(async (enabled) => {
+            if (!enabled) {
+              await clearSchedules();
+              return;
+            }
+            await schedulePeriodic();
+            await runBackgroundSync(false);
+          })
+          .catch((error) => console.error('[Aira][History sync switch]', error));
+        return;
+      }
       if (areaName !== 'local' || (
         !Object.prototype.hasOwnProperty.call(changes, config.connectionStorageKey)
         && !Object.prototype.hasOwnProperty.call(changes, PERSONAL_SERVER_CONNECTION_STORAGE_KEY)
