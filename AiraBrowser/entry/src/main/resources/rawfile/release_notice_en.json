@@ -1,14 +1,14 @@
 {
   "enabled": true,
-  "noticeId": "aira-3.7.1-1000508",
-  "title": "Aira 3.7.1 update",
-  "updatedAt": "2026-10-09",
-  "summary": "This release fixes ad blocking repeatedly showing a download confirmation, and adjusts history, search back, and pull to refresh.",
+  "noticeId": "aira-3.7.2-1000511",
+  "title": "Aira 3.7.2 update",
+  "updatedAt": "2026-10-10",
+  "summary": "This release fixes cleared search history still showing, and makes search history more useful.",
   "items": [
-    "Blocking in-page ads with content filtering on no longer opens download confirmations over and over.",
-    "History is kept by count only, and is no longer deleted just because it is old.",
-    "Going back from the search page hides the keyboard first, then leaves search.",
-    "Pull to refresh is no longer cancelled early by the gesture."
+    "Clearing search history now takes effect immediately, with no leftover entries on the search page.",
+    "Searched terms are now remembered by default for quicker repeat searches, and can be turned off in search settings.",
+    "The search history list shows only searched terms, without recently visited pages mixed in.",
+    "Account sign-in now links your identity with a one-time authorization code, which is safer."
   ],
   "actionLabel": "View changelog"
 }

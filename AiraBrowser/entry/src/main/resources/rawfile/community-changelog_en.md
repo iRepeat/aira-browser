@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.7.2 (1000511)
+
+2026-10-10
+
+This release fixes cleared search history still showing, and makes search history more useful.
+
+- Clearing search history now takes effect immediately, with no leftover entries on the search page.
+- Searched terms are now remembered by default for quicker repeat searches, and can be turned off in search settings.
+- The search history list shows only searched terms, without recently visited pages mixed in.
+- Account sign-in now links your identity with a one-time authorization code, which is safer.
+
 ## 3.7.1 (1000508)
 
 2026-10-09

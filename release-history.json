@@ -1,14 +1,23 @@
 {
   "latestAppGalleryRelease": {
-    "versionName": "3.7.1",
-    "versionCode": 1000508,
-    "releasedAt": "2026-10-09",
+    "versionName": "3.7.2",
+    "versionCode": 1000511,
+    "releasedAt": "2026-10-10",
     "source": "formal-package-generated",
-    "notes": "Formal AppGallery package that stops content filtering from turning a blocked subframe ad into a repeating download confirmation: a subframe navigation is now matched as its own resource type, so a subframe-only rule is denied before the request is fetched, and a blocked request is answered with an empty 204. History is kept by count only, search back hides the keyboard before leaving search, and pull to refresh is no longer cancelled early by the gesture. Built from committed HEAD 88ea793 with the 3.7.1 (1000508) version and release-note changes in the same working tree, signed with the Aira release certificate and the AppGallery release Profile for com.aira.browser, with crash symbols archived. The release-signed APP build and hap-sign-tool verify-app both passed. This records a locally generated formal package and does not claim AppGallery review approval or on-shelf publication.",
-    "artifact": "AiraBrowser/build/outputs/default/Aira-official-v3.7.1-1000508-release-signed.app",
-    "sha256": "142f9b88237a2f7b9ab1dcf144893793211add5a158635e1c760f7c34229a7f0"
+    "notes": "Formal AppGallery package that fixes search-term history: clearing it from search settings now publishes a revision that invalidates the live suggestion session, so removed terms stop showing immediately; search-term recording defaults on, with a one-time restore for existing untouched preference panels; and the empty-query search history list stops mixing in recently visited pages, so clearing empties exactly what the search surfaces show. Account sign-in now links identity with a one-time authorization code exchanged server-side instead of a client-reported UnionID. Built from committed HEAD 3e484e0c with the 3.7.2 (1000511) version and release-note changes in the same working tree, signed with the Aira release certificate and the AppGallery release Profile for com.aira.browser, with crash symbols archived. The release-signed APP build and hap-sign-tool verify-app both passed. This records a locally generated formal package and does not claim AppGallery review approval or on-shelf publication.",
+    "artifact": "AiraBrowser/build/outputs/default/Aira-official-v3.7.2-1000511-release-signed.app",
+    "sha256": "c41e17e43ba4f430af17cf08a6997f67a4ab5ec37cf2aea4d39e91cf90622fb5"
   },
   "history": [
+    {
+      "versionName": "3.7.2",
+      "versionCode": 1000511,
+      "releasedAt": "2026-10-10",
+      "source": "formal-package-generated",
+      "notes": "Formal AppGallery package that fixes search-term history: clearing it from search settings now publishes a revision that invalidates the live suggestion session, so removed terms stop showing immediately; search-term recording defaults on, with a one-time restore for existing untouched preference panels; and the empty-query search history list stops mixing in recently visited pages, so clearing empties exactly what the search surfaces show. Account sign-in now links identity with a one-time authorization code exchanged server-side instead of a client-reported UnionID. Built from committed HEAD 3e484e0c with the 3.7.2 (1000511) version and release-note changes in the same working tree, signed with the Aira release certificate and the AppGallery release Profile for com.aira.browser, with crash symbols archived. The release-signed APP build and hap-sign-tool verify-app both passed. This records a locally generated formal package and does not claim AppGallery review approval or on-shelf publication.",
+      "artifact": "AiraBrowser/build/outputs/default/Aira-official-v3.7.2-1000511-release-signed.app",
+      "sha256": "c41e17e43ba4f430af17cf08a6997f67a4ab5ec37cf2aea4d39e91cf90622fb5"
+    },
     {
       "versionName": "3.7.1",
       "versionCode": 1000508,
