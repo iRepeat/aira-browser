@@ -1,11 +1,15 @@
 import { Want, common, defaultAppManager } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { resolveAppResourceText } from '../../core/resources/AppResourceText';
 import { commentManager } from '@kit.AppGalleryKit';
 import { APP_BUNDLE_NAME } from '../../common/constants/AppVersionInfo';
+import { ChangelogContentService } from '../settings/ChangelogContentService';
+import { sharedAppReviewPromptRepository } from '../../app/bootstrap/BrowserAppRuntime';
 
 export interface SystemSettingsLaunchResult {
   success: boolean;
   message: string;
+  errorCode?: number;
 }
 
 const AIRA_APPGALLERY_REVIEW_URL: string =
@@ -128,24 +132,12 @@ export class SystemSettingsLaunchService {
   }
 
   async openAppReviewPage(context: common.UIAbilityContext): Promise<SystemSettingsLaunchResult> {
-    const reviewPageResult = await this.openAppGalleryDeepLink(context, AIRA_APPGALLERY_REVIEW_URI,
-      resolveAppResourceText($r('app.string.settings_launch_review_opened')));
-    if (reviewPageResult.success) {
-      return reviewPageResult;
+    const result = await this.resolveAppReviewPageOpen(context);
+    if (result.success) {
+      sharedAppReviewPromptRepository.accept(this.resolveCurrentVersionName())
+        .catch((_error: Error) => {});
     }
-
-    const detailPageResult = await this.openAppGalleryDeepLink(context, AIRA_APPGALLERY_DETAIL_URI,
-      resolveAppResourceText($r('app.string.settings_launch_detail_opened')));
-    if (detailPageResult.success) {
-      return detailPageResult;
-    }
-
-    const promptResult = await this.showAppReviewPrompt(context);
-    if (promptResult.success) {
-      return promptResult;
-    }
-
-    return this.openExternalUrl(context, AIRA_APPGALLERY_REVIEW_URL);
+    return result;
   }
 
   async openAppGalleryDetailPage(context: common.UIAbilityContext): Promise<SystemSettingsLaunchResult> {
@@ -170,12 +162,38 @@ export class SystemSettingsLaunchService {
         success: true,
         message: resolveAppResourceText($r('app.string.settings_launch_rating_opened'))
       };
-    } catch (_error) {
+    } catch (error) {
       return {
         success: false,
-        message: resolveAppResourceText($r('app.string.settings_launch_rating_failed'))
+        message: resolveAppResourceText($r('app.string.settings_launch_rating_failed')),
+        errorCode: (error as BusinessError).code
       };
     }
+  }
+
+  private async resolveAppReviewPageOpen(context: common.UIAbilityContext): Promise<SystemSettingsLaunchResult> {
+    const reviewPageResult = await this.openAppGalleryDeepLink(context, AIRA_APPGALLERY_REVIEW_URI,
+      resolveAppResourceText($r('app.string.settings_launch_review_opened')));
+    if (reviewPageResult.success) {
+      return reviewPageResult;
+    }
+
+    const detailPageResult = await this.openAppGalleryDeepLink(context, AIRA_APPGALLERY_DETAIL_URI,
+      resolveAppResourceText($r('app.string.settings_launch_detail_opened')));
+    if (detailPageResult.success) {
+      return detailPageResult;
+    }
+
+    const promptResult = await this.showAppReviewPrompt(context);
+    if (promptResult.success) {
+      return promptResult;
+    }
+
+    return this.openExternalUrl(context, AIRA_APPGALLERY_REVIEW_URL);
+  }
+
+  private resolveCurrentVersionName(): string {
+    return new ChangelogContentService().resolveCurrentVersion().versionName;
   }
 
   private async openAppGalleryDeepLink(

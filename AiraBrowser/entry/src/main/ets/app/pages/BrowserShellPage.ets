@@ -178,7 +178,8 @@ import { AiraScrollOscProbe } from '../../common/debug/AiraScrollOscProbe';
 import {
   AppReviewPromptCoordinator,
   AppReviewPromptShell,
-  AppReviewPromptShellFacts
+  AppReviewPromptShellFacts,
+  AppReviewPromptSurface
 } from '../../core/review/AppReviewPromptCoordinator';
 import { ReleaseNoticeUiState } from '../../core/update/ReleaseNoticeCoordinator';
 import {
@@ -3533,13 +3534,16 @@ struct BrowserShellPage {
         appVisible: this.isBrowserShellVisible,
         promptBlockingFacts: this.buildTransientPromptBlockingFacts()
       };
-    },
-    showToast: (message: string): void => this.showNativeToast(message)
+    }
+  };
+  private appReviewPromptSurface: AppReviewPromptSurface = {
+    isAppReviewPromptBlocked: (facts: BrowserTransientPromptBlockingFacts): boolean =>
+      this.browserTransientSurfaceCoordinator.isAppReviewPromptBlocked(facts)
   };
   private appReviewPromptCoordinator: AppReviewPromptCoordinator = new AppReviewPromptCoordinator(
     sharedAppReviewPromptRepository,
     this.systemSettingsLaunchService,
-    this.browserTransientSurfaceCoordinator,
+    this.appReviewPromptSurface,
     this.appReviewPromptShell
   );
   private offlinePageSaveShell: OfflinePageSaveCoordinatorShell = {

@@ -91,6 +91,7 @@ import tabsOverviewSegmentGuidePolicyTest from './TabsOverviewSegmentGuidePolicy
 import crossDeviceLinkGuideCoordinatorTest from './CrossDeviceLinkGuideCoordinator.test';
 import crossDeviceLinkViewModelTest from './CrossDeviceLinkViewModel.test';
 import communityUpdateCheckCoordinatorTest from './CommunityUpdateCheckCoordinator.test';
+import appReviewPromptCoordinatorTest from './AppReviewPromptCoordinator.test';
 import browserLargeScreenWebZoomPolicyTest from './BrowserLargeScreenWebZoomPolicy.test';
 import browserToolbarActionInsertPolicyTest from './BrowserToolbarActionInsertPolicy.test';
 import browserLargeScreenTabTitleSlotPolicyTest from './BrowserLargeScreenTabTitleSlotPolicy.test';
@@ -218,6 +219,7 @@ export default function tests(): void {
   crossDeviceLinkGuideCoordinatorTest();
   crossDeviceLinkViewModelTest();
   communityUpdateCheckCoordinatorTest();
+  appReviewPromptCoordinatorTest();
   browserLargeScreenWebZoomPolicyTest();
   browserToolbarActionInsertPolicyTest();
   browserLargeScreenTabTitleSlotPolicyTest();

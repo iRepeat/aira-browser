@@ -4,7 +4,7 @@ import { AppRuntimeContext } from '../../app/runtime/AppRuntimeContext';
 const PREFERENCES_NAME: string = 'aira_app_review_prompt';
 const STATE_KEY: string = 'state_v1';
 
-export type AppReviewPromptLastAction = 'none' | 'shown' | 'deferred' | 'suppressed' | 'accepted';
+export type AppReviewPromptLastAction = 'none' | 'shown' | 'failed' | 'deferred' | 'suppressed' | 'accepted';
 
 export interface AppReviewPromptState {
   firstSeenAt: number;
@@ -80,6 +80,14 @@ export class AppReviewPromptRepository {
     return this.getState();
   }
 
+  async markPromptAttemptFailed(now: number = Date.now()): Promise<AppReviewPromptState> {
+    this.state.lastPromptAt = now;
+    this.state.lastAction = 'failed';
+    this.state.updatedAt = now;
+    await this.persist();
+    return this.getState();
+  }
+
   async defer(now: number = Date.now()): Promise<AppReviewPromptState> {
     this.state.lastDeferredAt = now;
     this.state.lastAction = 'deferred';
@@ -97,6 +105,15 @@ export class AppReviewPromptRepository {
   }
 
   async accept(versionName: string, now: number = Date.now()): Promise<AppReviewPromptState> {
+    this.state.acceptedAt = now;
+    this.state.acceptedVersionName = versionName.trim();
+    this.state.lastAction = 'accepted';
+    this.state.updatedAt = now;
+    await this.persist();
+    return this.getState();
+  }
+
+  async markCommentAlreadyPresent(versionName: string, now: number = Date.now()): Promise<AppReviewPromptState> {
     this.state.acceptedAt = now;
     this.state.acceptedVersionName = versionName.trim();
     this.state.lastAction = 'accepted';
@@ -143,7 +160,7 @@ export class AppReviewPromptRepository {
   }
 
   private normalizeLastAction(value: string | undefined): AppReviewPromptLastAction {
-    if (value === 'shown' || value === 'deferred' || value === 'suppressed' || value === 'accepted') {
+    if (value === 'shown' || value === 'failed' || value === 'deferred' || value === 'suppressed' || value === 'accepted') {
       return value;
     }
     return 'none';

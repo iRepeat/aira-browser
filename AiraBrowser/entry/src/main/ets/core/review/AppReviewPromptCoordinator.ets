@@ -1,5 +1,4 @@
 import { common } from '@kit.AbilityKit';
-import { resolveAppResourceText } from '../resources/AppResourceText';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { APP_PREVIEW_VERSION_NAME } from '../../common/constants/AppVersionInfo';
 import {
@@ -7,10 +6,7 @@ import {
   AppReviewPromptState
 } from '../../data/review/AppReviewPromptRepository';
 import { SystemSettingsLaunchService } from '../../services/system/SystemSettingsLaunchService';
-import {
-  BrowserTransientPromptBlockingFacts,
-  BrowserTransientSurfaceCoordinator
-} from '../browser/BrowserTransientSurfaceCoordinator';
+import { BrowserTransientPromptBlockingFacts } from '../browser/BrowserTransientSurfaceCoordinator';
 
 const MIN_FIRST_SEEN_AGE_MS: number = 3 * 24 * 60 * 60 * 1000;
 const MIN_LAUNCH_COUNT: number = 5;
@@ -18,12 +14,19 @@ const MIN_REGULAR_PAGE_VISIT_COUNT: number = 30;
 const DEFER_COOLDOWN_MS: number = 30 * 24 * 60 * 60 * 1000;
 const PROMPT_COOLDOWN_MS: number = 90 * 24 * 60 * 60 * 1000;
 const MAX_PROMPT_COUNT: number = 2;
-const APP_REVIEW_PROMPT_EVALUATION_DELAY_MS: number = 1200;
+const DEFAULT_APP_REVIEW_PROMPT_EVALUATION_DELAY_MS: number = 1200;
+
+/** AppGallery commentManager errors meaning the user has already reviewed, so no dialog can ever open. */
+export const APP_REVIEW_ALREADY_COMMENTED_ERROR_CODES: number[] = [1021500007, 1021500008, 1021500009];
 
 export interface AppReviewPromptVisitInput {
   url: string;
   privacyMode: string;
   dataScope: string;
+}
+
+export interface AppReviewPromptSurface {
+  isAppReviewPromptBlocked: (facts: BrowserTransientPromptBlockingFacts) => boolean;
 }
 
 export interface AppReviewPromptShellFacts {
@@ -36,14 +39,14 @@ export interface AppReviewPromptShellFacts {
 
 export interface AppReviewPromptShell {
   resolveFacts: () => AppReviewPromptShellFacts;
-  showToast: (message: string) => void;
 }
 
 export class AppReviewPromptCoordinator {
   private readonly repository: AppReviewPromptRepository;
   private readonly systemSettingsLaunchService: SystemSettingsLaunchService;
-  private readonly transientSurfaceCoordinator: BrowserTransientSurfaceCoordinator;
+  private readonly promptSurface: AppReviewPromptSurface;
   private readonly shell: AppReviewPromptShell;
+  private readonly evaluationDelayMs: number;
   private evaluateTimer: number = -1;
   private evaluationDeferredByReleaseNotice: boolean = false;
   private systemPromptInFlight: boolean = false;
@@ -51,13 +54,15 @@ export class AppReviewPromptCoordinator {
   constructor(
     repository: AppReviewPromptRepository,
     systemSettingsLaunchService: SystemSettingsLaunchService,
-    transientSurfaceCoordinator: BrowserTransientSurfaceCoordinator,
-    shell: AppReviewPromptShell
+    promptSurface: AppReviewPromptSurface,
+    shell: AppReviewPromptShell,
+    evaluationDelayMs: number = DEFAULT_APP_REVIEW_PROMPT_EVALUATION_DELAY_MS
   ) {
     this.repository = repository;
     this.systemSettingsLaunchService = systemSettingsLaunchService;
-    this.transientSurfaceCoordinator = transientSurfaceCoordinator;
+    this.promptSurface = promptSurface;
     this.shell = shell;
+    this.evaluationDelayMs = evaluationDelayMs;
   }
 
   recordRegularPageVisit(input: AppReviewPromptVisitInput): void {
@@ -75,7 +80,7 @@ export class AppReviewPromptCoordinator {
     this.evaluateTimer = setTimeout(() => {
       this.evaluateTimer = -1;
       this.evaluate();
-    }, APP_REVIEW_PROMPT_EVALUATION_DELAY_MS);
+    }, this.evaluationDelayMs);
   }
 
   handleReleaseNoticePresentationCleared(): void {
@@ -94,9 +99,7 @@ export class AppReviewPromptCoordinator {
       return;
     }
     const facts = this.shell.resolveFacts();
-    const blockingSurfaceVisible = this.transientSurfaceCoordinator.isAppReviewPromptBlocked(
-      facts.promptBlockingFacts
-    );
+    const blockingSurfaceVisible = this.promptSurface.isAppReviewPromptBlocked(facts.promptBlockingFacts);
     if (!facts.appVisible || !facts.homeVisible || facts.privateMode) {
       this.evaluationDeferredByReleaseNotice = false;
       return;
@@ -120,15 +123,23 @@ export class AppReviewPromptCoordinator {
     try {
       const result = await this.systemSettingsLaunchService.showAppReviewPrompt(context);
       if (!result.success) {
-        this.shell.showToast(result.message.length > 0 ? result.message : resolveAppResourceText($r('app.string.settings_launch_rating_failed')));
+        await this.recordSystemPromptFailure(result.errorCode);
         return;
       }
       await this.repository.markPromptShown().catch((_error: Error) => {});
     } catch (_error) {
-      this.shell.showToast(resolveAppResourceText($r('app.string.settings_launch_rating_failed')));
+      await this.recordSystemPromptFailure(undefined);
     } finally {
       this.systemPromptInFlight = false;
     }
+  }
+
+  private async recordSystemPromptFailure(errorCode: number | undefined): Promise<void> {
+    if (errorCode !== undefined && APP_REVIEW_ALREADY_COMMENTED_ERROR_CODES.indexOf(errorCode) >= 0) {
+      await this.repository.markCommentAlreadyPresent(this.resolveCurrentVersionName()).catch((_error: Error) => {});
+      return;
+    }
+    await this.repository.markPromptAttemptFailed().catch((_error: Error) => {});
   }
 
   private cancelEvaluationTimer(): void {
