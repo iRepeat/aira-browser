@@ -38,7 +38,6 @@ import {
   HISTORY_SYNC_MAX_VISITS,
   HistorySyncMutation,
   HistorySyncOutboxContext,
-  HISTORY_SYNC_RETENTION_MS,
   HistorySyncVisit,
   HuaweiSpaceHistorySyncState
 } from '../../common/models/HistorySyncModels';
@@ -2552,7 +2551,9 @@ export class BrowserDatabase {
       return 0;
     }
     const normalizedNow = Math.max(0, Math.round(now));
-    const cutoff = normalizedNow - HISTORY_SYNC_RETENTION_MS;
+    // Count-only retention: the age window is disabled (0 matches no visit), so
+    // only the newest-visit overflow budget below ever prunes the projection.
+    const cutoff = 0;
     const store = await this.getStore();
     let transactionStarted = false;
     try {

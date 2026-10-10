@@ -1,6 +1,6 @@
 import {
   HISTORY_SYNC_MAX_VISITS,
-  HISTORY_SYNC_RETENTION_MS,
+  HISTORY_SYNC_RECONCILE_DELETE_HORIZON_MS,
   historyDeviceDisplayLabel,
   type HistorySyncBootstrapResponse,
   type HistorySyncChange,
@@ -181,12 +181,15 @@ export class HistorySyncDatabase {
       }
 
       if (completeReconciliation) {
-        const retentionCutoff = now - HISTORY_SYNC_RETENTION_MS;
+        // Only visits plausibly still inside the browser's own history window may
+        // be inferred as user deletions; older entries the browser dropped by
+        // itself must stay untouched on the cloud (count-only retention).
+        const deletionHorizon = now - HISTORY_SYNC_RECONCILE_DELETE_HORIZON_MS;
         for (const ledger of ledgerRows) {
           if (
             ledger.clientId !== clientId
             || ledger.deleted
-            || ledger.visitedAt < retentionCutoff
+            || ledger.visitedAt < deletionHorizon
             || incomingNativeIds.has(ledger.nativeVisitId)
           ) {
             continue;
@@ -517,16 +520,17 @@ export class HistorySyncDatabase {
     };
   }
 
-  async pruneProjection(accountUid: string, now: number): Promise<void> {
+  async pruneProjection(accountUid: string): Promise<void> {
     const database = await this.getDatabase();
     const transaction = database.transaction(VISITS_STORE, 'readwrite');
     const done = transactionDone(transaction);
     const store = transaction.objectStore(VISITS_STORE);
     const visits = await readAccountRows<StoredVisit>(store, accountUid);
-    const cutoff = now - HISTORY_SYNC_RETENTION_MS;
     visits.sort((left, right) => right.visitedAt - left.visitedAt || right.visitId.localeCompare(left.visitId));
+    // Count-only retention: the local mirror keeps the newest HISTORY_SYNC_MAX_VISITS
+    // visits regardless of age.
     visits.forEach((visit, index) => {
-      if (visit.visitedAt < cutoff || index >= HISTORY_SYNC_MAX_VISITS) {
+      if (index >= HISTORY_SYNC_MAX_VISITS) {
         store.delete(visit.key);
       }
     });

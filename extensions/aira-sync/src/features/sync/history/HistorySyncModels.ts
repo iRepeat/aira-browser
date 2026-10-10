@@ -1,6 +1,11 @@
 export const HISTORY_SYNC_EXCHANGE_BATCH_SIZE = 200;
 export const HISTORY_SYNC_BOOTSTRAP_PAGE_SIZE = 500;
-export const HISTORY_SYNC_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+// Retention is count-only: HISTORY_SYNC_MAX_VISITS caps the synced mirror and
+// there is no age window, matching the server's count-only retention. The
+// horizon below is not a retention limit — it is the plausibility window for
+// reconciliation delete detection, so visits the browser dropped on its own are
+// never mistaken for a user deletion and never propagate as cloud deletes.
+export const HISTORY_SYNC_RECONCILE_DELETE_HORIZON_MS = 90 * 24 * 60 * 60 * 1000;
 export const HISTORY_SYNC_MAX_VISITS = 10_000;
 
 export type HistorySyncMutationKind =

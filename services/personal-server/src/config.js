@@ -1,6 +1,7 @@
 const path = require('path');
 
 const dataDir = path.resolve(process.env.AIRA_DATA_DIR || path.join(process.cwd(), 'data'));
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 module.exports = Object.freeze({
   host: String(process.env.AIRA_HOST || '0.0.0.0'),
@@ -11,6 +12,12 @@ module.exports = Object.freeze({
   publicBaseUrl: String(process.env.AIRA_PUBLIC_URL || '').trim().replace(/\/+$/, ''),
   pairingCodeTtlMs: normalizePositiveInteger(process.env.AIRA_PAIRING_CODE_TTL_MS, 10 * 60 * 1000),
   bodyLimitBytes: normalizePositiveInteger(process.env.AIRA_BODY_LIMIT_BYTES, 12 * 1024 * 1024),
+  // History retention keeps the newest historySyncMaxLiveVisits live visits and,
+  // by default, additionally drops live visits older than this window. Set
+  // AIRA_HISTORY_SYNC_RETENTION_MS=0 for count-only retention, matching the
+  // hosted Aira Cloud default.
+  historySyncRetentionMs: normalizeNonNegativeInteger(process.env.AIRA_HISTORY_SYNC_RETENTION_MS, 90 * DAY_MS),
+  historySyncMaxLiveVisits: normalizePositiveInteger(process.env.AIRA_HISTORY_SYNC_MAX_LIVE_VISITS, 10000),
 });
 
 function normalizePort(value) {
@@ -24,6 +31,14 @@ function normalizePort(value) {
 function normalizePositiveInteger(value, fallback) {
   const number = Number(value || fallback);
   if (!Number.isSafeInteger(number) || number <= 0) {
+    return fallback;
+  }
+  return number;
+}
+
+function normalizeNonNegativeInteger(value, fallback) {
+  const number = Number(value === '0' ? 0 : value || fallback);
+  if (!Number.isSafeInteger(number) || number < 0) {
     return fallback;
   }
   return number;

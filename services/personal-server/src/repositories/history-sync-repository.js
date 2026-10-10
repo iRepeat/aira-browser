@@ -1,9 +1,19 @@
 const { db } = require('../db/database');
 const { buildPublicError } = require('../errors');
+const {
+  historySyncMaxLiveVisits,
+  historySyncRetentionMs
+} = require('../config');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const RETENTION_MS = 90 * DAY_MS;
-const MAX_LIVE_VISITS = 10000;
+// The live-visit count cap always applies; the age window additionally drops
+// live visits older than historySyncRetentionMs unless it is configured to 0
+// (count-only retention). Clear-history range bookkeeping is only expired while
+// the age window is active, because with no window a paired device may still
+// upload a visit older than the window and the range is what keeps it
+// suppressed.
+const RETENTION_MS = historySyncRetentionMs;
+const MAX_LIVE_VISITS = historySyncMaxLiveVisits;
 const CLIENT_LEASE_MS = 30 * DAY_MS;
 const RECEIPT_RETENTION_MS = 120 * DAY_MS;
 const CHANGE_RETENTION_MS = 30 * DAY_MS;
@@ -414,9 +424,12 @@ function applyClearBefore(statements, uid, clearBefore, now) {
 }
 
 function applyRetention(statements, uid, now) {
-  const cutoff = now - RETENTION_MS;
+  const ageWindowActive = RETENTION_MS > 0;
+  const cutoff = ageWindowActive ? now - RETENTION_MS : null;
   const ids = new Set();
-  statements.listRetentionAgeVictims.all(uid, cutoff).forEach((row) => ids.add(row.visit_id));
+  if (ageWindowActive) {
+    statements.listRetentionAgeVictims.all(uid, cutoff).forEach((row) => ids.add(row.visit_id));
+  }
   statements.listRetentionOverflowVictims.all(uid, MAX_LIVE_VISITS).forEach((row) => ids.add(row.visit_id));
   const victims = Array.from(ids);
   for (let offset = 0; offset < victims.length; offset += RETENTION_CHANGE_CHUNK) {
@@ -427,7 +440,9 @@ function applyRetention(statements, uid, now) {
     });
     appendChange(statements, uid, seq, 'retention_prune', '', { visitIds, cutoff }, now);
   }
-  statements.deleteExpiredRanges.run(uid, cutoff);
+  if (ageWindowActive) {
+    statements.deleteExpiredRanges.run(uid, cutoff);
+  }
 }
 
 function appendChange(statements, uid, seq, kind, visitId, payload, now) {

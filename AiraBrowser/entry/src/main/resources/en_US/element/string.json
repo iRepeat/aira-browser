@@ -9910,7 +9910,7 @@
     },
     {
       "name": "settings_general_history_retention_detail",
-      "value": "Choose how many history entries to keep"
+      "value": "Choose how many history entries to keep on this device"
     },
     {
       "name": "settings_general_history_off",

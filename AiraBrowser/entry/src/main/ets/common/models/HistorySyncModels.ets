@@ -2,7 +2,9 @@ import { BrowserHistoryTransition } from './BrowserModels';
 
 export const HISTORY_SYNC_EXCHANGE_BATCH_SIZE: number = 200;
 export const HISTORY_SYNC_BOOTSTRAP_PAGE_SIZE: number = 500;
-export const HISTORY_SYNC_RETENTION_MS: number = 90 * 24 * 60 * 60 * 1000;
+// Retention is count-only: HISTORY_SYNC_MAX_VISITS caps the synced view and the
+// cloud mirror, and there is no age window (the hosted server runs the same
+// count-only retention via AIRA_HISTORY_SYNC_RETENTION_MS=0).
 export const HISTORY_SYNC_MAX_VISITS: number = 10000;
 
 /**

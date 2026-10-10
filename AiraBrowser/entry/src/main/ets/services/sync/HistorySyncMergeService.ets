@@ -1,6 +1,5 @@
 import {
   HISTORY_SYNC_MAX_VISITS,
-  HISTORY_SYNC_RETENTION_MS,
   HistorySyncDeleteRange,
   HistorySyncExactTombstone,
   HistorySyncRetentionFrontier,
@@ -151,7 +150,7 @@ export class HistorySyncMergeService {
       preferredState.retentionFrontier,
       incomingState.retentionFrontier
     );
-    const retentionCutoff = this.resolveRetentionCutoff(now);
+    const retentionCutoff = this.resolveRetentionCutoff();
     const durableCutoff = this.resolveDurableRetentionCutoff(retentionCutoff);
     if (durableCutoff > retentionFrontier.cutoffAt) {
       retentionFrontier = {
@@ -381,7 +380,7 @@ export class HistorySyncMergeService {
       preferredState.retentionFrontier,
       incomingState.retentionFrontier
     );
-    const retentionCutoff = this.resolveRetentionCutoff(now);
+    const retentionCutoff = this.resolveRetentionCutoff();
     const durableCutoff = this.resolveDurableRetentionCutoff(retentionCutoff);
     if (durableCutoff > retentionFrontier.cutoffAt) {
       retentionFrontier = {
@@ -701,8 +700,10 @@ export class HistorySyncMergeService {
     return { cutoffAt: 0, boundaryVisitedAt: 0, boundaryVisitId: '', updatedAt: 0 };
   }
 
-  private resolveRetentionCutoff(now: number): number {
-    return Math.max(0, Math.floor(now) - HISTORY_SYNC_RETENTION_MS);
+  private resolveRetentionCutoff(): number {
+    // Count-only retention: no age window, so the merged view keeps every visit
+    // within the newest-visit budget regardless of age.
+    return 0;
   }
 
   private resolveDurableRetentionCutoff(cutoff: number): number {

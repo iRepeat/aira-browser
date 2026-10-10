@@ -9910,7 +9910,7 @@
     },
     {
       "name": "settings_general_history_retention_detail",
-      "value": "選擇歷史記錄保留條數"
+      "value": "選擇本機歷史記錄保留條數"
     },
     {
       "name": "settings_general_history_off",

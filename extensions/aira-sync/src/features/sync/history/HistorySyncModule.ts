@@ -8,7 +8,6 @@ import {
   HISTORY_SYNC_BOOTSTRAP_PAGE_SIZE,
   HISTORY_SYNC_EXCHANGE_BATCH_SIZE,
   HISTORY_SYNC_MAX_VISITS,
-  HISTORY_SYNC_RETENTION_MS,
   type HistorySyncRunResult,
   type HistoryTimelinePage,
   type NativeHistoryVisitDraft,
@@ -70,10 +69,11 @@ export class HistorySyncModule {
     if (!history?.search || !history.getVisits) {
       return 0;
     }
-    const cutoff = now - HISTORY_SYNC_RETENTION_MS;
+    // Count-only retention: capture everything the browser still holds. A full
+    // reconciliation starts from the beginning of the profile's history.
     const startTime = full
-      ? cutoff
-      : Math.max(cutoff, state.lastNativeReconcileAt - INCREMENTAL_RECONCILIATION_OVERLAP_MS);
+      ? 0
+      : Math.max(0, state.lastNativeReconcileAt - INCREMENTAL_RECONCILIATION_OVERLAP_MS);
     const quality: NativeCaptureQuality = { hasInvalidTime: false, hasApproximateTime: false };
     let failedQueryCount = 0;
     const items = await readHistorySearch(history, {
@@ -91,7 +91,7 @@ export class HistorySyncModule {
           return [];
         }
         const visits = await readHistoryVisits(history, url);
-        return toNativeDrafts(item, visits, cutoff, now, quality);
+        return toNativeDrafts(item, visits, 0, now, quality);
       }));
       results.forEach((result) => {
         if (result.status === 'fulfilled') {
@@ -124,7 +124,7 @@ export class HistorySyncModule {
       reconciliationSucceeded ? now : state.lastNativeReconcileAt,
       complete,
     );
-    await this.database.pruneProjection(session.uid, now);
+    await this.database.pruneProjection(session.uid);
     return changed;
   }
 
@@ -137,10 +137,10 @@ export class HistorySyncModule {
     if (!url) return 0;
     const now = Date.now();
     const visits = history ? await readHistoryVisits(history, url) : [];
-    const drafts = toNativeDrafts(item, visits, now - HISTORY_SYNC_RETENTION_MS, now);
+    const drafts = toNativeDrafts(item, visits, 0, now);
     const eventDraft = drafts.length > 0
       ? drafts
-      : toNativeEventDraft(item, now - HISTORY_SYNC_RETENTION_MS, now);
+      : toNativeEventDraft(item, 0, now);
     const changed = await this.database.captureNativeVisits(
       session.uid,
       session.deviceId,
@@ -149,7 +149,7 @@ export class HistorySyncModule {
       false,
       now,
     );
-    await this.database.pruneProjection(session.uid, now);
+    await this.database.pruneProjection(session.uid);
     return changed;
   }
 
@@ -164,7 +164,7 @@ export class HistorySyncModule {
       removed.allHistory,
       Date.now(),
     );
-    await this.database.pruneProjection(session.uid, Date.now());
+    await this.database.pruneProjection(session.uid);
     return changed;
   }
 
@@ -224,7 +224,7 @@ export class HistorySyncModule {
         if (response.hasMore) continue;
         const remaining = await this.database.listOutbox(session.uid, 1);
         if (remaining.length > 0) continue;
-        await this.database.pruneProjection(session.uid, Date.now());
+        await this.database.pruneProjection(session.uid);
         return { appliedChangeCount, uploadedMutationCount };
       } catch (error) {
         if (resetAttempted || !requiresBootstrap(error)) throw error;
