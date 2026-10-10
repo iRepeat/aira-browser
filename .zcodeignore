@@ -1,0 +1,127 @@
+.DS_Store
+
+# macOS
+*/.DS_Store
+
+# Editor
+.idea/
+.vscode/
+
+# Logs
+*.log
+download_log.txt
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+oh_modules/
+
+# Local scratch / exported data
+.tmp/
+.tmp-*/
+.tmp-navigation-capture/
+.tmp-sync-lab/
+.planning/
+.codex/
+.codex-transfer/
+.zcode/
+scripts/setup-codex-workflow.sh
+scripts/install-codex-workflow-package.sh
+scripts/generate-aira-stroke-icons.js
+aira/
+!AiraBrowser/entry/src/main/resources/rawfile/fonts/aira/
+!AiraBrowser/entry/src/main/resources/rawfile/fonts/aira/*.ttf
+!resources/icon-sources/aira/
+!resources/icon-sources/aira/**
+**/.DS_Store
+leaftab/
+*.leaftab
+gemini-code-*.html
+
+# Local reference projects / unpacked artifacts
+.reference-repos/
+references/legacy-browser/
+references/linysbrowser-next/
+server/
+
+# Build output
+dist/
+build/
+*.hap
+*.apk
+*.aab
+*.ipa
+*.zip
+*.tgz
+*.tar.gz
+*.tsbuildinfo
+server/public/admin/
+.cache/
+.hvigor/
+AiraBrowser/entry/.test/
+AiraBrowser/entry/.cxx/
+AiraBrowser/build-profile.local.json5
+AiraBrowser/agconnect-services.local.json
+AiraBrowser/AppScope/resources/rawfile/agconnect-services.json
+AiraBrowser/build-profiles.local/
+AiraBrowser/cloud-backend.local.json
+AiraBrowser/AiraBookmarkZone*.json
+AiraBrowser/worktree-identity.local.json
+AiraBrowser/signing.local/
+aira.csr
+aira.p12
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.p8
+*.cer
+*.p7b
+*.p7c
+material/
+private-backend/
+
+# Local release packages and one-off visual review artifacts
+extensions/aira-sync/Aira-Sync-Official-v*/
+extensions/aira-sync/.tmp-local-official-pack/
+resources/icon-sources/aira/vendor/lucide/review-*/
+AiraBrowser/icon-preview-original/
+
+# Local environment files (checked-in examples remain allowed)
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+.svn/
+bower_components/
+jspm_packages/
+site-packages/
+venv/
+coverage/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）
