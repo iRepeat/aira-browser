@@ -104,6 +104,10 @@ export const popupI18nReady = popupI18n
               bookmarkSyncSwitch: 'Sync bookmarks',
               historySyncSwitch: 'Sync history',
             },
+            footer: {
+              version: 'Version {{version}}',
+              viewInStore: 'View in store',
+            },
             progress: {
               done: 'Done',
               progress: 'Progress',
@@ -266,6 +270,10 @@ export const popupI18nReady = popupI18n
               syncSwitches: '同步开关',
               bookmarkSyncSwitch: '同步书签',
               historySyncSwitch: '同步历史记录',
+            },
+            footer: {
+              version: '版本 {{version}}',
+              viewInStore: '在商店中查看',
             },
             progress: {
               done: '知道了',

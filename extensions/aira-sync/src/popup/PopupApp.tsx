@@ -19,6 +19,8 @@ import {
   writeBookmarkSyncDomainEnabled,
   writeHistorySyncDomainEnabled,
 } from '@/features/sync/app/syncDomainPreferences';
+import { readStoreListingUrl } from '@/popup/storeListing';
+import { getExtensionManifest } from '@/platform/runtime';
 import { useBookmarkSyncRuntimeController } from '@/features/sync/bookmarks/useBookmarkSyncRuntimeController';
 import { parseLeafTabSyncRemoteKind } from '@/sync/leaftab/source';
 import type { LeafTabSyncFacade } from '@/features/sync/app/LeafTabSyncContracts';
@@ -2372,7 +2374,41 @@ export function PopupApp() {
           onAction={handleDeviceTabsEntryAction}
         />
       )}
+      <VersionFooter />
       <SyncProgressDialog syncRuntime={syncRuntime} />
     </main>
+  );
+}
+
+function VersionFooter() {
+  const { t } = useTranslation();
+  const [storeUrl, setStoreUrl] = useState('');
+  useEffect(() => {
+    void readStoreListingUrl().then(setStoreUrl).catch(() => setStoreUrl(''));
+  }, []);
+  const version = getExtensionManifest()?.version?.trim() || '';
+  if (!version) {
+    return null;
+  }
+  const label = t('popup.footer.version', { defaultValue: '版本 {{version}}', version });
+  if (!storeUrl) {
+    return (
+      <footer className="px-3 pb-2 pt-1 text-center">
+        <span className="text-[11px] text-muted-foreground">{label}</span>
+      </footer>
+    );
+  }
+  return (
+    <footer className="px-3 pb-2 pt-1 text-center">
+      <a
+        href={storeUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+        title={t('popup.footer.viewInStore', { defaultValue: '在商店中查看' })}
+      >
+        {label}
+      </a>
+    </footer>
   );
 }
