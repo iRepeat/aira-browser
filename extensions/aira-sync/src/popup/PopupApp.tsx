@@ -1229,7 +1229,6 @@ function LoggedOutHome({
 
 function PersonalServerHome({
   profile,
-  personalServer,
   syncRuntime,
   onOpenAccount,
   onSelectCloud,
@@ -1241,7 +1240,6 @@ function PersonalServerHome({
   phoneTabCount,
 }: {
   profile: ConfiguredHomeState | null;
-  personalServer: PersonalServerConnection | null;
   syncRuntime: PopupSyncRuntime;
   onOpenAccount: () => void;
   onSelectCloud: () => void;
@@ -1277,19 +1275,6 @@ function PersonalServerHome({
         </div>
 
         <div className="space-y-2">
-          <SectionLabel>私有化部署</SectionLabel>
-          <MenuItem
-            icon={<RiCloudFill className="size-4" />}
-            title="使用自己的服务器"
-            description={personalServer
-              ? `${personalServer.baseUrl} · ${personalServer.instanceId.slice(-8)}`
-              : '尚未连接 Personal Server'}
-            status={personalServer ? '已连接' : undefined}
-            onClick={onOpenPersonalServer}
-          />
-        </div>
-
-        <div className="space-y-2">
           <SectionLabel>{t('popup.dashboard.bookmarkSync', { defaultValue: '书签同步' })}</SectionLabel>
           <BookmarkSyncControls
             syncRuntime={syncRuntime}
@@ -1306,7 +1291,6 @@ function PersonalServerHome({
 
 function PopupHome({
   profile,
-  personalServer,
   crossDeviceFeatures,
   syncRuntime,
   onOpenLogin,
@@ -1320,7 +1304,6 @@ function PopupHome({
   phoneTabCount,
 }: {
   profile: ConfiguredHomeState | null;
-  personalServer: PersonalServerConnection | null;
   crossDeviceFeatures: CrossDeviceFeatureState | null;
   syncRuntime: PopupSyncRuntime;
   onOpenLogin: () => void;
@@ -1338,7 +1321,6 @@ function PopupHome({
     return (
       <PersonalServerHome
         profile={profile}
-        personalServer={personalServer}
         syncRuntime={syncRuntime}
         onOpenAccount={profile ? onOpenAccount : onOpenLogin}
         onSelectCloud={onSelectCloud}
@@ -2282,7 +2264,6 @@ export function PopupApp() {
       {view === 'home' && (
         <PopupHome
           profile={configuredHomeState}
-          personalServer={personalServerConnection}
           crossDeviceFeatures={crossDeviceFeatureState}
           syncRuntime={syncRuntime}
           onOpenLogin={() => setView('login')}
