@@ -49,6 +49,12 @@ export interface DownloadPersistResult {
   finalDisplayPath: string;
   destinationLabel?: string;
   isExported: boolean;
+  /**
+   * True when a configured custom download folder was skipped (probe or write
+   * failed) and the file went to the system download location instead, so the
+   * completion message should tell the user their folder choice needs a fix.
+   */
+  customDirectoryBypassed?: boolean;
 }
 
 export interface DownloadFileResolutionAdapter {
@@ -193,6 +199,25 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
           directoryUri,
           activation.diagnosticMessage
         );
+      }
+      // A dead grant (app update, reboot) can still let path-channel opens
+      // "succeed" by creating 0-byte shells the file manager shows. Probing the
+      // URI channel with real bytes decides before any download file name is
+      // created in the user's folder, so a broken grant falls back to the
+      // system download location without leaving empty files behind.
+      if (!await directoryService.verifyDirectoryWritable(directoryUri)) {
+        hilog.warn(
+          DOWNLOAD_FILE_RESOLUTION_DOMAIN,
+          DOWNLOAD_FILE_RESOLUTION_TAG,
+          'directory probe not writable, falling back to system downloads file=%{public}s uri=%{public}s',
+          savedFileName,
+          directoryUri
+        );
+        return {
+          status: 'failed',
+          finalDisplayPath: this.buildTemporaryDisplayPath(savedFileName),
+          isExported: false
+        };
       }
       const exportResolution = this.buildExportResolution(savedFileName, directoryUri);
       const targetUri = await this.copyLocalPathWithoutOverwrite(
@@ -442,6 +467,11 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
         'copy target failed error=%{public}s',
         this.stringifyError(error)
       );
+      if (this.isPermissionError(error)) {
+        // Retrying under a conflict name cannot fix a folder-level permission
+        // failure; it would only leave a second 0-byte shell behind.
+        throw error instanceof Error ? error : new Error(this.stringifyError(error));
+      }
       const fallbackStartIndex = resolvedTarget.targetUri === targetUri ? 1 : 2;
       const fallbackTarget = await this.resolveAvailableConflictTarget(targetUri, fallbackStartIndex);
       await this.copyLocalPathToUri(sourcePath, fallbackTarget.targetUri, sourceSize, 'fallback');
@@ -620,6 +650,18 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
     try {
       return await fileIo.open(targetUri, mode);
     } catch (error) {
+      if (this.isPermissionError(error)) {
+        // A path-channel open after a permission failure does not write bytes;
+        // it only creates the 0-byte shell the file manager shows, so refuse it.
+        hilog.warn(
+          DOWNLOAD_FILE_RESOLUTION_DOMAIN,
+          DOWNLOAD_FILE_RESOLUTION_TAG,
+          'open export uri permission-denied, refusing path fallback targetUri=%{public}s error=%{public}s',
+          targetUri,
+          this.stringifyError(error)
+        );
+        throw error instanceof Error ? error : new Error(this.stringifyError(error));
+      }
       hilog.warn(
         DOWNLOAD_FILE_RESOLUTION_DOMAIN,
         DOWNLOAD_FILE_RESOLUTION_TAG,
@@ -628,6 +670,14 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
       );
       return await fileIo.open(this.resolvePathFromUri(targetUri), mode);
     }
+  }
+
+  private isPermissionError(error: Object | Error | undefined | null): boolean {
+    if (error === undefined || error === null) {
+      return false;
+    }
+    const businessError = error as BusinessError;
+    return businessError.code === 13900001 || businessError.code === 13900012;
   }
 
   private async rewriteFileDescriptors(inputFd: number, outputFd: number): Promise<void> {
@@ -699,9 +749,12 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
 
   private async deleteZeroByteExport(targetUri: string): Promise<void> {
     const visibleSize = await this.readCommittedExportSize(targetUri);
-    if (visibleSize !== 0) {
+    if (visibleSize > 0) {
       return;
     }
+    // visibleSize <= 0 covers both a confirmed 0-byte shell and an entry whose
+    // size cannot be read through either channel — the typical state of a
+    // permission-broken shell. Unlink either way; a missing entry simply fails.
     try {
       await fileIo.unlink(targetUri);
       return;

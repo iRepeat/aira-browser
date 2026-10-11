@@ -16,6 +16,7 @@ const DOWNLOAD_DIRECTORY_URI_MAX_LENGTH: number = 2048;
 const DOWNLOAD_DIRECTORY_LABEL_MAX_LENGTH: number = 80;
 const DOWNLOAD_DIRECTORY_LOCATION_TAIL_SEGMENTS: number = 2;
 const DOWNLOAD_DIRECTORY_PROBE_FILE_NAME: string = '.aira-write-probe';
+const DOWNLOAD_DIRECTORY_PROBE_PAYLOAD: string = 'aira-probe';
 
 export interface DownloadLocationDirectorySelection {
   uri: string;
@@ -340,25 +341,39 @@ export class DownloadLocationDirectoryService {
   /**
    * Advisory only — callers must NOT refuse the user's choice on a false here.
    *
-   * The folder URI is turned into a path through `fileUri.FileUri` before it
-   * reaches `fileIo`, which is the pattern the official DOWNLOAD-mode sample
-   * uses. Handing a hand-concatenated URI straight to `fileIo` is not reliable:
-   * the share-app-file guide states the system cannot guarantee the usability of
-   * URIs an app concatenates itself, because the conversion involves encoding.
-   * Doing it the naive way made this probe report "not writable" for folders
-   * that were perfectly writable.
+   * The probe runs entirely through the URI channel with real bytes. When a
+   * folder grant is dead (app update, reboot), a path-channel open can still
+   * "succeed" by creating a 0-byte shell the file manager shows; probing the
+   * path channel would then report a broken folder as writable and litter it.
+   * The official share-app-file caveat about hand-concatenated URIs is handled
+   * by keeping the probe file name plain ASCII, so no encoding can break it.
    */
   async verifyDirectoryWritable(uri: string): Promise<boolean> {
     if (!this.isAcceptableDirectoryUri(uri)) {
       return false;
     }
     const probeUri = `${uri}/${DOWNLOAD_DIRECTORY_PROBE_FILE_NAME}`;
-    let probeCreated = false;
+    let probeOpened = false;
     try {
-      const probePath = new fileUri.FileUri(probeUri).path;
-      const file = await fileIo.open(probePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE);
-      probeCreated = true;
+      const file = await fileIo.open(
+        probeUri,
+        fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC
+      );
+      probeOpened = true;
+      await fileIo.write(file.fd, DOWNLOAD_DIRECTORY_PROBE_PAYLOAD);
       await fileIo.close(file);
+      const stat = await fileIo.stat(probeUri);
+      if (stat.size !== DOWNLOAD_DIRECTORY_PROBE_PAYLOAD.length) {
+        hilog.warn(
+          DOWNLOAD_DIRECTORY_DOMAIN,
+          DOWNLOAD_DIRECTORY_TAG,
+          'write probe size mismatch uri=%{public}s expected=%{public}d actual=%{public}d',
+          uri,
+          DOWNLOAD_DIRECTORY_PROBE_PAYLOAD.length,
+          stat.size
+        );
+        return false;
+      }
       return true;
     } catch (error) {
       hilog.warn(
@@ -370,17 +385,21 @@ export class DownloadLocationDirectoryService {
       );
       return false;
     } finally {
-      if (probeCreated) {
+      if (probeOpened) {
         try {
-          await fileIo.unlink(new fileUri.FileUri(probeUri).path);
-        } catch (error) {
-          hilog.warn(
-            DOWNLOAD_DIRECTORY_DOMAIN,
-            DOWNLOAD_DIRECTORY_TAG,
-            'write probe cleanup failed uri=%{public}s error=%{public}s',
-            probeUri,
-            this.stringifyError(error)
-          );
+          await fileIo.unlink(probeUri);
+        } catch (_uriError) {
+          try {
+            await fileIo.unlink(new fileUri.FileUri(probeUri).path);
+          } catch (error) {
+            hilog.warn(
+              DOWNLOAD_DIRECTORY_DOMAIN,
+              DOWNLOAD_DIRECTORY_TAG,
+              'write probe cleanup failed uri=%{public}s error=%{public}s',
+              probeUri,
+              this.stringifyError(error)
+            );
+          }
         }
       }
     }

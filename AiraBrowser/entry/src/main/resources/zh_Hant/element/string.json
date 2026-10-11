@@ -20129,6 +20129,10 @@
       "value": "下載完成，已儲存到%1$s：%2$s。"
     },
     {
+      "name": "download_completed_custom_folder_unavailable",
+      "value": "下載完成，已儲存到%1$s：%2$s。設置的下載文件夾暫不可用，請在下載設置中重新選擇。"
+    },
+    {
       "name": "download_system_downloads",
       "value": "系統下載目錄"
     },

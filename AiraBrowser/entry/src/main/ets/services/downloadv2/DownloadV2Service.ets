@@ -1771,6 +1771,7 @@ export class DownloadV2Service {
     boundary: DownloadTaskBoundary
   ): Promise<DownloadPersistResult | undefined> {
     const savePolicy = this.downloadPolicyService.resolveSavePolicy(boundary);
+    let customDirectoryBypassed = false;
     if (!savePolicy.isPrivateSession) {
       const customDirectory = resolveCustomDownloadDirectory(savePolicy.settings);
       if (customDirectory !== undefined) {
@@ -1783,9 +1784,14 @@ export class DownloadV2Service {
         if (persisted !== undefined && persisted.isExported) {
           return persisted;
         }
+        customDirectoryBypassed = true;
       }
     }
-    return this.fileResolutionService.persistToSystemDownloads(localPath, suggestedFileName);
+    const fallbackPersisted = await this.fileResolutionService.persistToSystemDownloads(localPath, suggestedFileName);
+    if (customDirectoryBypassed && fallbackPersisted !== undefined && fallbackPersisted.isExported) {
+      fallbackPersisted.customDirectoryBypassed = true;
+    }
+    return fallbackPersisted;
   }
 
   private buildSavedLocationMessage(
@@ -1796,6 +1802,11 @@ export class DownloadV2Service {
     const location = persisted?.destinationLabel !== undefined && persisted.destinationLabel.length > 0
       ? persisted.destinationLabel
       : resolveAppResourceText($r('app.string.download_system_downloads'));
+    if (kind === 'completed' && persisted?.customDirectoryBypassed === true) {
+      return resolveAppResourceText(
+        $r('app.string.download_completed_custom_folder_unavailable', location, fileName)
+      );
+    }
     return resolveAppResourceText(kind === 'saved'
       ? $r('app.string.download_saved_to_location', location, fileName)
       : $r('app.string.download_completed_saved_to', location, fileName));

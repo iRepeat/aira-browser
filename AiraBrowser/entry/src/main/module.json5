@@ -2,7 +2,11 @@
   "module": {
     "name": "entry",
     "type": "entry",
-    "metadata": [],
+    "metadata": [
+      {
+        "name": "ohos.fileshare.supportPreservePersistentPermission"
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET",

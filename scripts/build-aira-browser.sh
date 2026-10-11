@@ -45,6 +45,7 @@ HISTORY_RETRY_BACKOFF_TEST="${REPO_ROOT}/scripts/check-aira-history-retry-backof
 SYNC_DIAGNOSTICS_TEST="${REPO_ROOT}/scripts/check-aira-sync-diagnostics.cjs"
 WEBDAV_LOCK_NULL_PLACEHOLDER_TEST="${REPO_ROOT}/scripts/check-aira-webdav-lock-null-placeholder.cjs"
 DIALOG_ACTION_LAYOUT_TEST="${REPO_ROOT}/scripts/check-aira-dialog-action-layout.cjs"
+DOWNLOAD_EXPORT_GHOST_GUARD_TEST="${REPO_ROOT}/scripts/check-aira-download-export-ghost-guard.cjs"
 BOOKMARK_SNAPSHOT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-bookmark-snapshot-contract.sh"
 HOME_SHORTCUT_SEED_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-home-shortcut-seed-contract.sh"
 NEW_USER_GIFT_GUARD_SCRIPT="${REPO_ROOT}/scripts/check-aira-new-user-gift-contract.sh"
@@ -342,6 +343,7 @@ node "${HISTORY_RETRY_BACKOFF_TEST}"
 node "${SYNC_DIAGNOSTICS_TEST}"
 node "${WEBDAV_LOCK_NULL_PLACEHOLDER_TEST}"
 node "${DIALOG_ACTION_LAYOUT_TEST}"
+node "${DOWNLOAD_EXPORT_GHOST_GUARD_TEST}"
 
 if [ ! -x "${BOOKMARK_SNAPSHOT_GUARD_SCRIPT}" ]; then
   fail "Bookmark snapshot contract guard not executable: ${BOOKMARK_SNAPSHOT_GUARD_SCRIPT}"

@@ -20129,6 +20129,10 @@
       "value": "Download complete. Saved to %1$s: %2$s."
     },
     {
+      "name": "download_completed_custom_folder_unavailable",
+      "value": "Download complete. Saved to %1$s: %2$s. Your download folder is unavailable; please re-select it in download settings."
+    },
+    {
       "name": "download_system_downloads",
       "value": "System downloads"
     },
