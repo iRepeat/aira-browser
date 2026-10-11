@@ -69,4 +69,6 @@ export const LEAFTAB_BACKGROUND_STORAGE_KEYS = {
   autoSyncLastError: 'leaftab_sync_g4_background_auto_sync_last_error',
   autoSyncRetryProvider: 'leaftab_sync_g4_background_auto_sync_retry_provider',
   airaCloudClientUpdateRequired: 'leaftab_sync_g4_aira_cloud_client_update_required',
+  localApplyVerificationFailureCount: 'leaftab_sync_g4_background_local_apply_verification_failure_count',
+  localApplyVerificationPausedAt: 'leaftab_sync_g4_background_local_apply_verification_paused_at',
 } as const;

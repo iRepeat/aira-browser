@@ -58,6 +58,7 @@ import {
   persistAiraCloudClientUpdateBlock,
   readAiraCloudClientUpdateBlock,
 } from './airaCloudClientUpdateBlock';
+import { clearLeafTabLocalApplyVerificationBreaker } from './localApplyVerificationBreaker';
 import {
   clearPendingLeafTabLocalBookmarkChangesInExtensionStorage,
   readPendingLeafTabLocalBookmarkChangedAtFromExtensionStorage,
@@ -305,6 +306,7 @@ export class BookmarkSyncPopupRuntime {
           await clearPendingBookmarkConflict();
         }
         await this.markSuccess(remoteKind);
+        await clearLeafTabLocalApplyVerificationBreaker();
         return {
           type: 'completed',
           result,

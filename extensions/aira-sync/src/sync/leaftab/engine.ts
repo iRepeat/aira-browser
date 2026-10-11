@@ -6,7 +6,11 @@ import {
   type LeafTabSyncMergeIntent,
   type LeafTabSyncMergeResult,
 } from './merge';
-import type { LeafTabSyncSnapshot } from './schema';
+import type {
+  LeafTabSyncBookmarkFolderEntity,
+  LeafTabSyncBookmarkItemEntity,
+  LeafTabSyncSnapshot,
+} from './schema';
 import type { LeafTabSyncHistoryDescriptor } from './schema';
 import { countLeafTabLiveBookmarkEntities } from './snapshot';
 import { canonicalizeSnapshotBookmarkUrls } from './chromeBookmarkUrl';
@@ -172,6 +176,69 @@ const createSyncResult = (
 
 const REMOTE_CONFIRMATION_RETRY_DELAYS_MS = [250, 750] as const;
 
+// Local apply/verify is the only step that can fail deterministically on a poisoned
+// local tree while the remote write keeps succeeding; auto-sync must be able to tell
+// that failure class apart (2026-10 conflict-dialog loop, uid 2029059012955225536).
+export class LeafTabSyncLocalApplyVerificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LeafTabSyncLocalApplyVerificationError';
+  }
+}
+
+const RUNAWAY_DELETION_MIN_ENTITIES = 50;
+const RUNAWAY_DELETION_RATIO = 0.5;
+const RUNAWAY_DUPLICATE_CREATION_LIMIT = 50;
+
+const createRunawayContentKey = (
+  entity: LeafTabSyncBookmarkFolderEntity | LeafTabSyncBookmarkItemEntity,
+) => `${entity.type}|${entity.parentId || '__root__'}|${entity.title}|${
+  entity.type === 'bookmark-item' ? entity.url : ''
+}`;
+
+// Steady-state runaway protection: one full-sync round silently deleting most of the
+// account, or exploding duplicate-content creations, is the signature of a sick identity
+// layer rather than user edits (the 2026-10 incident grew 400+ duplicates this way).
+// Abort before any local apply or remote write so the failure cannot spread to other
+// devices. First joins have no baseline and legitimately create a complete tree.
+const evaluateLeafTabSyncRunawayGuard = (
+  baseSnapshot: LeafTabSyncSnapshot,
+  nextSnapshot: LeafTabSyncSnapshot,
+): string | null => {
+  const baseEntities = [
+    ...Object.values(baseSnapshot.bookmarkFolders),
+    ...Object.values(baseSnapshot.bookmarkItems),
+  ];
+  const nextIds = new Set([
+    ...Object.keys(nextSnapshot.bookmarkFolders),
+    ...Object.keys(nextSnapshot.bookmarkItems),
+  ]);
+  const deletions = baseEntities.filter((entity) => !nextIds.has(entity.id)).length;
+  if (deletions > RUNAWAY_DELETION_MIN_ENTITIES
+    && deletions > baseEntities.length * RUNAWAY_DELETION_RATIO) {
+    return `本轮同步将删除 ${deletions} 条书签（超过现有书签的一半），已自动中止以保护数据。如确需批量删除，请分批操作后再同步。`;
+  }
+
+  const baseIds = new Set(baseEntities.map((entity) => entity.id));
+  const nextEntities = [
+    ...Object.values(nextSnapshot.bookmarkFolders),
+    ...Object.values(nextSnapshot.bookmarkItems),
+  ];
+  const nextContentCounts = new Map<string, number>();
+  nextEntities.forEach((entity) => {
+    const key = createRunawayContentKey(entity);
+    nextContentCounts.set(key, (nextContentCounts.get(key) || 0) + 1);
+  });
+  const duplicateCreations = nextEntities.filter((entity) => (
+    !baseIds.has(entity.id)
+    && (nextContentCounts.get(createRunawayContentKey(entity)) || 0) > 1
+  )).length;
+  if (duplicateCreations > RUNAWAY_DUPLICATE_CREATION_LIMIT) {
+    return `本轮同步将新增 ${duplicateCreations} 条内容完全相同的重复书签，已自动中止。请先清理本机重复书签后再同步。`;
+  }
+  return null;
+};
+
 const waitForRemoteConfirmationRetry = (delayMs: number) => new Promise<void>((resolve) => {
   globalThis.setTimeout(resolve, delayMs);
 });
@@ -324,8 +391,14 @@ export class LeafTabSyncEngine {
           progress: 86,
           message: '正在将最新结果写入本地',
         });
-        await this.config.applyLocalSnapshot(cloneSnapshot(confirmed.snapshot));
-        await this.config.verifyLocalSnapshot(cloneSnapshot(confirmed.snapshot));
+        try {
+          await this.config.applyLocalSnapshot(cloneSnapshot(confirmed.snapshot));
+          await this.config.verifyLocalSnapshot(cloneSnapshot(confirmed.snapshot));
+        } catch (error) {
+          throw new LeafTabSyncLocalApplyVerificationError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
       }
       await this.persistCompletedState(
         baseline,
@@ -449,6 +522,13 @@ export class LeafTabSyncEngine {
       });
     }
 
+    if (hasBaseline) {
+      const runawayGuardError = evaluateLeafTabSyncRunawayGuard(baseSnapshot, finalSnapshot);
+      if (runawayGuardError) {
+        throw new Error(runawayGuardError);
+      }
+    }
+
     const remoteNeedsWrite = historyPlan.requiresRemoteHistoryWrite
       || !sameSnapshotContent(remoteSnapshot, finalSnapshot);
     let committedSnapshot = finalSnapshot;
@@ -479,8 +559,14 @@ export class LeafTabSyncEngine {
         progress: 86,
         message: '正在将最新结果写入本地',
       });
-      await this.config.applyLocalSnapshot(cloneSnapshot(committedSnapshot));
-      await this.config.verifyLocalSnapshot(cloneSnapshot(committedSnapshot));
+      try {
+        await this.config.applyLocalSnapshot(cloneSnapshot(committedSnapshot));
+        await this.config.verifyLocalSnapshot(cloneSnapshot(committedSnapshot));
+      } catch (error) {
+        throw new LeafTabSyncLocalApplyVerificationError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
 
     reportProgress(runOptions?.onProgress, {
