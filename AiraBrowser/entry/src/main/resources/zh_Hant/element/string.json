@@ -10701,6 +10701,10 @@
       "value": "編輯書籤"
     },
     {
+      "name": "bookmark_edit_folder_field",
+      "value": "資料夾"
+    },
+    {
       "name": "bookmark_open_new_tab",
       "value": "在新標籤頁中開啟"
     },
@@ -11161,6 +11165,10 @@
       "value": "新增網頁..."
     },
     {
+      "name": "bookmark_bar_edit_bookmark",
+      "value": "編輯書籤..."
+    },
+    {
       "name": "bookmark_bar_add_folder",
       "value": "新增資料夾..."
     },
@@ -11219,6 +11227,14 @@
     {
       "name": "bookmark_bar_renamed",
       "value": "已重新命名。"
+    },
+    {
+      "name": "bookmark_bar_bookmark_updated",
+      "value": "書籤已更新。"
+    },
+    {
+      "name": "bookmark_bar_bookmark_update_failed",
+      "value": "書籤儲存失敗，請稍後重試。"
     },
     {
       "name": "bookmark_bar_folder_created",

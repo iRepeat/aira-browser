@@ -12,8 +12,13 @@ import {
 import { BookmarkRepository } from '../../data/repositories/BrowserRepositories';
 import { PreferencesRepository } from '../../data/preferences/PreferencesRepository';
 import { BookmarkMutationService } from '../../services/bookmarks/BookmarkMutationService';
+import { BookmarkTreeQueryService } from '../../services/bookmarks/BookmarkTreeQueryService';
 import { BrowserClipboardCopyTextRequest } from '../../services/share/BrowserClipboardService';
 import { DesktopBookmarkClipboardSignal } from '../bookmarks/DesktopBookmarkClipboardSignal';
+import {
+  BookmarkFolderOptionView,
+  BookmarkFolderSelectionViewModel
+} from './BookmarkFolderSelectionViewModel';
 import { BrowserConfirmationRequest } from './BrowserConfirmationSink';
 import { BrowserDesktopBookmarkBarNodeActionKind, BrowserDesktopBookmarkBarRootActionKind } from './BrowserDesktopBookmarkBarViewModel';
 import { setDesktopBookmarkBarVisibility } from './DesktopBookmarkBarVisibility';
@@ -39,6 +44,13 @@ export interface BrowserDesktopBookmarkBarBookmarkEditorRequest {
   title: string;
   url: string;
   dialogTitle: ResourceStr;
+  /** Empty means "add"; a node id switches the dialog to edit that bookmark, offering the folder picker. */
+  nodeId: string;
+  /** Storage scope of the edited node, used to build the move-target folder list. */
+  scope: BookmarkStorageScope;
+  /** Move targets for the folder picker; empty hides the picker, which is the "add" presentation. */
+  folderOptions: BookmarkFolderOptionView[];
+  initialFolderId: string;
 }
 
 export interface BrowserDesktopBookmarkBarActionShell {
@@ -71,6 +83,7 @@ export class BrowserDesktopBookmarkBarActionCoordinator {
   private readonly options: BrowserDesktopBookmarkBarActionCoordinatorOptions;
   private readonly mutationService: BookmarkMutationService;
   private readonly shell: BrowserDesktopBookmarkBarActionShell;
+  private readonly folderSelectionViewModel: BookmarkFolderSelectionViewModel = new BookmarkFolderSelectionViewModel();
   private clipboard?: BrowserDesktopBookmarkBarClipboardEntry;
 
   constructor(
@@ -139,7 +152,11 @@ export class BrowserDesktopBookmarkBarActionCoordinator {
       parentId: rootId,
       title: page?.title ?? '',
       url: page?.url ?? '',
-      dialogTitle: $r('app.string.bookmark_bar_add_to_named', this.resolveToolbarRootTitle(scope))
+      dialogTitle: $r('app.string.bookmark_bar_add_to_named', this.resolveToolbarRootTitle(scope)),
+      nodeId: '',
+      scope: scope,
+      folderOptions: [],
+      initialFolderId: ''
     });
   }
 
@@ -153,11 +170,24 @@ export class BrowserDesktopBookmarkBarActionCoordinator {
     void this.applyFolderName(request, sanitized);
   }
 
-  /** Confirmed by the bookmark editor dialog. */
-  handleBookmarkSubmitted(request: BrowserDesktopBookmarkBarBookmarkEditorRequest, title: string, url: string): void {
+  /** Confirmed by the bookmark editor dialog; a node id edits, otherwise it adds. */
+  handleBookmarkSubmitted(
+    request: BrowserDesktopBookmarkBarBookmarkEditorRequest,
+    title: string,
+    url: string,
+    targetFolderId: string
+  ): void {
     const sanitizedUrl = url.trim();
     if (sanitizedUrl.length === 0) {
       this.shell.showToast($r('app.string.bookmark_url_required'));
+      return;
+    }
+    if (request.nodeId.length > 0) {
+      if (title.trim().length === 0) {
+        this.shell.showToast($r('app.string.bookmark_bar_name_required'));
+        return;
+      }
+      void this.applyBookmarkEdit(request, title.trim(), sanitizedUrl, targetFolderId);
       return;
     }
     void this.applyBookmark(request, title, sanitizedUrl);
@@ -206,8 +236,65 @@ export class BrowserDesktopBookmarkBarActionCoordinator {
     }
   }
 
+  /** The edit path rewrites title and url, then moves the bookmark when the picked folder differs. */
+  private async applyBookmarkEdit(
+    request: BrowserDesktopBookmarkBarBookmarkEditorRequest,
+    title: string,
+    url: string,
+    targetFolderId: string
+  ): Promise<void> {
+    try {
+      const updated = await this.mutationService.updateNode({
+        id: request.nodeId,
+        title: title,
+        url: url
+      });
+      if (updated === undefined) {
+        this.shell.showToast($r('app.string.bookmark_bar_missing'));
+        return;
+      }
+      await this.moveEditedBookmarkIfNeeded(updated, targetFolderId.trim());
+      this.shell.showToast($r('app.string.bookmark_bar_bookmark_updated'));
+    } catch (_error) {
+      this.shell.showToast($r('app.string.bookmark_bar_bookmark_update_failed'));
+    }
+  }
+
+  private async moveEditedBookmarkIfNeeded(node: BookmarkNode, targetFolderId: string): Promise<void> {
+    if (targetFolderId.length <= 0 || targetFolderId === (node.parentId ?? '').trim()) {
+      return;
+    }
+    const scope = this.resolveNodeScope(node);
+    const parentId = this.resolveWritableParentId(targetFolderId, scope);
+    if (parentId === (node.parentId ?? '').trim()) {
+      return;
+    }
+    const targetIndex = this.options.repository.listChildren(parentId, scope).length;
+    await this.mutationService.moveSubtree({
+      nodeId: node.id,
+      parentId: parentId,
+      targetIndex: targetIndex
+    });
+  }
+
+  /** Folders rename in place; a bookmark opens the full editor so name, url, and folder change together. */
   private requestRename(node: BookmarkNode): void {
     if (isBookmarkRootNodeId(node.id)) {
+      return;
+    }
+    if (node.type === 'bookmark') {
+      const scope = this.resolveNodeScope(node);
+      const folderOptions = this.buildEditorFolderOptions(scope, node.id);
+      this.shell.presentBookmarkEditor({
+        parentId: node.parentId ?? '',
+        title: node.title,
+        url: node.url ?? '',
+        dialogTitle: $r('app.string.bookmark_edit_bookmark'),
+        nodeId: node.id,
+        scope: scope,
+        folderOptions: folderOptions,
+        initialFolderId: this.resolveEditorInitialFolderId(node.parentId ?? '', scope, folderOptions)
+      });
       return;
     }
     this.shell.presentFolderNameDialog({
@@ -217,6 +304,33 @@ export class BrowserDesktopBookmarkBarActionCoordinator {
       dialogTitle: $r('app.string.bookmark_bar_rename_title'),
       fieldPlaceholder: $r('app.string.ui_name')
     });
+  }
+
+  /** The edited bookmark may not move into itself, so it is excluded from the move targets. */
+  private buildEditorFolderOptions(scope: BookmarkStorageScope, nodeId: string): BookmarkFolderOptionView[] {
+    const nodes = this.options.repository.getSnapshot(false, scope).nodes;
+    const folderCounts = new BookmarkTreeQueryService(this.options.repository, scope).buildFolderBookmarkCounts();
+    return this.folderSelectionViewModel.buildMoveTargetOptionsFromData(nodes, [nodeId], folderCounts);
+  }
+
+  private resolveEditorInitialFolderId(
+    parentId: string,
+    scope: BookmarkStorageScope,
+    options: BookmarkFolderOptionView[]
+  ): string {
+    const normalized = parentId.trim();
+    if (this.containsFolderOption(options, normalized)) {
+      return normalized;
+    }
+    const toolbarRootId = scope === 'private' ? PRIVATE_BOOKMARK_TOOLBAR_ROOT_ID : BOOKMARK_TOOLBAR_ROOT_ID;
+    if (this.containsFolderOption(options, toolbarRootId)) {
+      return toolbarRootId;
+    }
+    return options.length > 0 ? options[0].id : '';
+  }
+
+  private containsFolderOption(options: BookmarkFolderOptionView[], folderId: string): boolean {
+    return options.some((option: BookmarkFolderOptionView): boolean => option.id === folderId);
   }
 
   private requestDelete(node: BookmarkNode): void {
@@ -274,7 +388,11 @@ export class BrowserDesktopBookmarkBarActionCoordinator {
       parentId: parentId,
       title: page?.title ?? '',
       url: page?.url ?? '',
-      dialogTitle: $r('app.string.bookmark_bar_add_to_named', this.resolveParentTitle(node, parentId))
+      dialogTitle: $r('app.string.bookmark_bar_add_to_named', this.resolveParentTitle(node, parentId)),
+      nodeId: '',
+      scope: this.resolveScopeForParentId(parentId),
+      folderOptions: [],
+      initialFolderId: ''
     });
   }
 

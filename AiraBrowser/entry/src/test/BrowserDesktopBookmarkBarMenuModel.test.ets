@@ -115,7 +115,7 @@ export default function browserDesktopBookmarkBarMenuModelTest(): void {
       expect(findItem(model.groups, 'open_new_tab')).assertUndefined();
     });
 
-    it('gives a bookmark the open entries, clipboard group, and the manager entry', 0, () => {
+    it('gives a bookmark the open entries, the editor entry, clipboard group, and the manager entry', 0, () => {
       const model = buildDesktopBookmarkBarMenuModel({
         node: bookmarkNode('page', 'bookmark', 'Aira', 'https://aira.example'),
         barVisibility: 'new_tab_only',
@@ -124,6 +124,7 @@ export default function browserDesktopBookmarkBarMenuModelTest(): void {
 
       expect(menuIds(model.groups)).assertEqual(
         'open_new_tab,open_new_window,open_private_window,' +
+          'rename_node,' +
           'cut_node,copy_node,paste_node,' +
           'delete_node,' +
           'add_bookmark,add_folder,' +
@@ -133,6 +134,8 @@ export default function browserDesktopBookmarkBarMenuModelTest(): void {
       expect(isAppString(findItem(model.groups, 'open_new_tab')?.label ?? '', $r('app.string.history_open_new_tab'))).assertTrue();
       expect(isAppString(findItem(model.groups, 'open_new_window')?.label ?? '', $r('app.string.bookmark_bar_open_new_window'))).assertTrue();
       expect(isAppString(findItem(model.groups, 'open_private_window')?.label ?? '', $r('app.string.bookmark_bar_open_private'))).assertTrue();
+      expect(isAppString(findItem(model.groups, 'rename_node')?.label ?? '', $r('app.string.bookmark_bar_edit_bookmark'))).assertTrue();
+      expect(findItem(model.groups, 'rename_node')?.enabled).assertTrue();
       expect(isAppString(findItem(model.groups, 'open_manager')?.label ?? '', $r('app.string.bookmark_bar_open_manager'))).assertTrue();
       expect(findItem(model.groups, 'bar_visibility_new_tab_only')?.checked).assertTrue();
       expect(findItem(model.groups, 'bar_visibility_never')?.checked).assertFalse();

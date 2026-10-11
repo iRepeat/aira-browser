@@ -935,6 +935,7 @@ import {
   BrowserDesktopBookmarkBarBookmarkEditorRequest,
   BrowserDesktopBookmarkBarFolderNameRequest
 } from '../../core/browser/BrowserDesktopBookmarkBarActionCoordinator';
+import { BookmarkFolderOptionView } from '../../core/browser/BookmarkFolderSelectionViewModel';
 import {
   BrowserWebCapabilityAlertDialogPresenter
 } from '../components/browser/BrowserWebCapabilityAlertDialogPresenter';
@@ -5235,6 +5236,8 @@ struct BrowserShellPage {
   @State private bookmarkBarLinkUrl: string = '';
   @State private bookmarkBarLinkType: string = 'bookmark';
   @State private bookmarkBarLinkIconPath: string = '';
+  @State private bookmarkBarLinkFolderId: string = '';
+  @State private bookmarkBarFolderOptions: BookmarkFolderOptionView[] = [];
   private bookmarkBarFolderRequest?: BrowserDesktopBookmarkBarFolderNameRequest = undefined;
   private bookmarkBarBookmarkRequest?: BrowserDesktopBookmarkBarBookmarkEditorRequest = undefined;
   private huaweiPaymentLaunchVisible: boolean = false;
@@ -5288,6 +5291,11 @@ struct BrowserShellPage {
       nodeType: $bookmarkBarLinkType,
       iconPath: $bookmarkBarLinkIconPath,
       dialogTitleOverride: $bookmarkBarDialogTitle,
+      folderOptions: this.bookmarkBarFolderOptions,
+      initialFolderId: this.bookmarkBarLinkFolderId,
+      onFolderChange: (folderId: string): void => {
+        this.bookmarkBarLinkFolderId = folderId;
+      },
       confirm: (): void => this.confirmBookmarkBarBookmark()
     }),
     customStyle: false,
@@ -8919,6 +8927,8 @@ struct BrowserShellPage {
     this.bookmarkBarLinkUrl = request.url;
     this.bookmarkBarLinkType = 'bookmark';
     this.bookmarkBarLinkIconPath = '';
+    this.bookmarkBarFolderOptions = request.folderOptions;
+    this.bookmarkBarLinkFolderId = request.initialFolderId;
     this.bookmarkBarBookmarkDialogController.open();
   }
 
@@ -8931,7 +8941,8 @@ struct BrowserShellPage {
     this.browserDesktopBookmarkBarActionCoordinator.handleBookmarkSubmitted(
       request,
       this.bookmarkBarLinkTitle,
-      this.bookmarkBarLinkUrl
+      this.bookmarkBarLinkUrl,
+      this.bookmarkBarLinkFolderId
     );
   }
 

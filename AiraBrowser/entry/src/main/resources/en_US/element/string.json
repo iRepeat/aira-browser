@@ -10701,6 +10701,10 @@
       "value": "Edit bookmark"
     },
     {
+      "name": "bookmark_edit_folder_field",
+      "value": "Folder"
+    },
+    {
       "name": "bookmark_open_new_tab",
       "value": "Open in new tab"
     },
@@ -11161,6 +11165,10 @@
       "value": "Add page…"
     },
     {
+      "name": "bookmark_bar_edit_bookmark",
+      "value": "Edit bookmark…"
+    },
+    {
       "name": "bookmark_bar_add_folder",
       "value": "Add folder…"
     },
@@ -11219,6 +11227,14 @@
     {
       "name": "bookmark_bar_renamed",
       "value": "Renamed."
+    },
+    {
+      "name": "bookmark_bar_bookmark_updated",
+      "value": "Bookmark updated."
+    },
+    {
+      "name": "bookmark_bar_bookmark_update_failed",
+      "value": "Couldn't save the bookmark. Try again later."
     },
     {
       "name": "bookmark_bar_folder_created",

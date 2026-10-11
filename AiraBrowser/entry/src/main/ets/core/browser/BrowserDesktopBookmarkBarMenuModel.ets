@@ -57,6 +57,7 @@ const OPEN_NEW_TAB_LABEL: ResourceStr = $r('app.string.history_open_new_tab');
 const OPEN_NEW_WINDOW_LABEL: ResourceStr = $r('app.string.bookmark_bar_open_new_window');
 const OPEN_PRIVATE_WINDOW_LABEL: ResourceStr = $r('app.string.bookmark_bar_open_private');
 const RENAME_LABEL: ResourceStr = $r('app.string.bookmark_bar_rename');
+const EDIT_BOOKMARK_LABEL: ResourceStr = $r('app.string.bookmark_bar_edit_bookmark');
 const CUT_LABEL: ResourceStr = $r('app.string.ui_cut');
 const COPY_LABEL: ResourceStr = $r('app.string.ui_copy');
 const PASTE_LABEL: ResourceStr = $r('app.string.ui_paste');
@@ -120,6 +121,7 @@ export function buildDesktopBookmarkBarMenuModel(
     buildItem('open_new_window', OPEN_NEW_WINDOW_LABEL, true),
     buildItem('open_private_window', OPEN_PRIVATE_WINDOW_LABEL, true)
   ]);
+  groups.push([buildItem('rename_node', EDIT_BOOKMARK_LABEL, mutable)]);
   groups.push([
     buildItem('cut_node', CUT_LABEL, mutable),
     buildItem('copy_node', COPY_LABEL, true),

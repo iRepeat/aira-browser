@@ -13,11 +13,13 @@ import {
   SiteIconListResolvedIcon,
   SiteIconListTarget
 } from '../../../core/siteicons/SiteIconListPresenter';
+import { BookmarkFolderOptionView } from '../../../core/browser/BookmarkFolderSelectionViewModel';
 import { BookmarkFolderIcon } from './BookmarkFolderIcon';
 import { SiteIconView } from '../common/SiteIconView';
 import { CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER } from '../common/CenteredDialogSurface';
 import { BrowserSheetActionButton } from '../browser/BrowserModalBottomSheet';
-import { hasAppResourceText } from '../../../core/resources/AppResourceText';
+import { hasAppResourceText, resolveAppResourceText } from '../../../core/resources/AppResourceText';
+import { resolveBookmarkNodeDisplayTitle } from '../../../core/resources/HistoryBookmarkDisplayText';
 
 const BOOKMARK_EDIT_ICON_TARGET_ID: string = 'bookmark-edit-node-dialog';
 
@@ -100,14 +102,20 @@ export struct BookmarkManagerEditNodeDialog {
   @Link iconPath: string;
   /** Callers that add instead of edit override the heading; empty keeps the edit wording. */
   @Prop dialogTitleOverride: ResourceStr = '';
+  /** Move targets for the edited bookmark; empty keeps the picker row hidden for non-bar callers. */
+  @Prop folderOptions: BookmarkFolderOptionView[] = [];
+  @Prop initialFolderId: string = '';
   confirm: () => void = () => {};
+  onFolderChange: (folderId: string) => void = (_folderId: string) => {};
   @State private iconStates: SiteIconListRenderState[] = [];
+  @State private currentFolderId: string = '';
   private iconTargetUrl: string = '';
   private siteIconListPresenter: SiteIconListPresenter = new SiteIconListPresenter();
 
   aboutToAppear(): void {
     this.iconStates = [];
     this.iconTargetUrl = this.nodeUrl.trim();
+    this.currentFolderId = this.initialFolderId;
     this.siteIconListPresenter.bindDomainUpdates(
       (): SiteIconListTarget[] => this.buildIconTargets(),
       (result: SiteIconListResolvedIcon): void => this.applyResolvedIcon(result)
@@ -160,6 +168,10 @@ export struct BookmarkManagerEditNodeDialog {
           })
       }
 
+      if (this.nodeType === 'bookmark' && this.folderOptions.length > 0) {
+        this.buildFolderPicker()
+      }
+
       Column({ space: 8 }) {
         BrowserSheetActionButton({
           label: $r('app.string.ui_save'),
@@ -187,6 +199,68 @@ export struct BookmarkManagerEditNodeDialog {
       .width('100%')
     }
     .attributeModifier(CENTERED_DIALOG_SYSTEM_SURFACE_MODIFIER)
+  }
+
+  @Builder
+  private buildFolderPicker() {
+    Row({ space: 8 }) {
+      Text($r('app.string.bookmark_edit_folder_field'))
+        .fontSize(15)
+        .fontColor(this.storedSecondaryTextColor)
+
+      Blank()
+
+      Text(this.resolveSelectedFolderTitle())
+        .fontSize(15)
+        .fontColor(this.storedPrimaryTextColor)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .constraintSize({ maxWidth: '60%' })
+
+      SymbolGlyph($r('sys.symbol.chevron_down'))
+        .fontSize(14)
+        .fontColor([this.storedSecondaryTextColor])
+    }
+    .width('100%')
+    .height(44)
+    .border({ width: { bottom: 1 }, color: this.storedDividerColor })
+    .accessibilityText($r('app.string.bookmark_edit_folder_field'))
+    .bindMenu(this.buildFolderMenu())
+  }
+
+  @Builder
+  private buildFolderMenu() {
+    Menu() {
+      ForEach(this.folderOptions, (folder: BookmarkFolderOptionView) => {
+        MenuItem({ content: this.buildFolderMenuLabel(folder) })
+          .onClick(() => {
+            this.selectFolder(folder.id);
+          })
+      }, (folder: BookmarkFolderOptionView) => folder.id)
+    }
+    .width(256)
+  }
+
+  private selectFolder(folderId: string): void {
+    this.currentFolderId = folderId;
+    this.onFolderChange(folderId);
+  }
+
+  private resolveSelectedFolderTitle(): string {
+    const folder = this.folderOptions.find(
+      (candidate: BookmarkFolderOptionView): boolean => candidate.id === this.currentFolderId
+    );
+    if (folder === undefined) {
+      return '';
+    }
+    return resolveAppResourceText(resolveBookmarkNodeDisplayTitle(folder.id, folder.title));
+  }
+
+  /** Roots keep their stored Chinese title, and nested folders indent one space per depth. */
+  private buildFolderMenuLabel(folder: BookmarkFolderOptionView): string {
+    const title = resolveAppResourceText(resolveBookmarkNodeDisplayTitle(folder.id, folder.title));
+    const indent = '　'.repeat(folder.depth);
+    return indent + title;
   }
 
   @Builder

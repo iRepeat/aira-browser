@@ -73,6 +73,16 @@ export class BookmarkFolderSelectionViewModel {
     return this.buildOptionsFromNodesAsync(nodes, excludedFolderIds, folderBookmarkCounts);
   }
 
+  /** Sync counterpart of buildMoveTargetOptionsFromDataAsync for callers already holding the nodes. */
+  buildMoveTargetOptionsFromData(
+    nodes: BookmarkNode[],
+    movingNodeIds: string[],
+    folderBookmarkCounts: BookmarkFolderBookmarkCountsResult
+  ): BookmarkFolderOptionView[] {
+    const excludedFolderIds = this.buildExcludedMoveFolderIds(nodes, movingNodeIds);
+    return this.buildOptionsFromNodes(nodes, excludedFolderIds, folderBookmarkCounts);
+  }
+
   private buildOptionsFromNodes(
     nodes: BookmarkNode[],
     excludedFolderIds: string[],
