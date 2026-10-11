@@ -19,6 +19,7 @@ import {
   AiraCloudBookmarkApiAuthProvider,
   AiraCloudBookmarkApiHttpAdapter,
   AiraCloudBookmarkRemoteStore,
+  AIRA_CLOUD_BOOKMARK_SYNC_PROTOCOL,
   parseAiraCloudBookmarkHttpError,
   RuntimeAiraCloudBookmarkApiAuthProvider
 } from '../main/ets/services/sync/AiraCloudBookmarkRemoteStore';
@@ -225,6 +226,48 @@ class FixtureCloudAdapter implements AiraCloudBookmarkApiHttpAdapter {
   }
 }
 
+class RecordingCloudAccessTokenProvider implements HuaweiAccountAccessTokenProvider {
+  forceRefreshRequests: boolean[] = [];
+
+  getCurrentAccessToken(forceRefresh: boolean): Promise<string> {
+    this.forceRefreshRequests.push(forceRefresh);
+    return Promise.resolve(forceRefresh ? 'refreshed-token' : 'cached-token');
+  }
+
+  getCurrentAccessTokenForUid(_uid: string, forceRefresh: boolean): Promise<string> {
+    this.forceRefreshRequests.push(forceRefresh);
+    return Promise.resolve(forceRefresh ? 'refreshed-token' : 'cached-token');
+  }
+}
+
+class UnauthorizedOnceCloudAdapter implements AiraCloudBookmarkApiHttpAdapter {
+  authorizations: string[] = [];
+
+  post(
+    _url: string,
+    _body: Object,
+    authorization: string,
+    _timeoutMs: number
+  ): Promise<Object | string | null | undefined> {
+    this.authorizations.push(authorization);
+    if (this.authorizations.length === 1) {
+      return Promise.resolve(JSON.stringify({
+        ok: false,
+        code: 'http_error',
+        message: 'unauthorized',
+        status: 401
+      }));
+    }
+    return Promise.resolve(JSON.stringify({
+      ok: true,
+      protocol: AIRA_CLOUD_BOOKMARK_SYNC_PROTOCOL,
+      commitId: null,
+      snapshot: null,
+      history: null
+    }));
+  }
+}
+
 async function createRepository(nodes: BookmarkNode[]): Promise<FixtureBookmarkRepository> {
   const repository = new FixtureBookmarkRepository();
   await repository.upsertSyncNodes(nodes);
@@ -358,6 +401,25 @@ export default function airaBookmarkSnapshotServiceTest(): void {
 
       expect(authorization).assertEqual('Bearer local-test-token');
       expect(tokenProvider.lastRequestedUid).assertEqual('fixture-user');
+    });
+
+    it('uses the cached token first and retries once with a forced refresh after a 401', 0, async () => {
+      const tokenProvider = new RecordingCloudAccessTokenProvider();
+      const adapter = new UnauthorizedOnceCloudAdapter();
+      const store = new AiraCloudBookmarkRemoteStore(
+        'https://sync.example.test/sync/v4/bookmarks',
+        'fixture-user',
+        new RuntimeAiraCloudBookmarkApiAuthProvider(tokenProvider),
+        adapter
+      );
+
+      const state = await store.readState();
+
+      expect(state.snapshot).assertNull();
+      expect(adapter.authorizations.length).assertEqual(2);
+      expect(adapter.authorizations[0]).assertEqual('Bearer cached-token');
+      expect(adapter.authorizations[1]).assertEqual('Bearer refreshed-token');
+      expect(JSON.stringify(tokenProvider.forceRefreshRequests)).assertEqual(JSON.stringify([false, true]));
     });
   });
 }

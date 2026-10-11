@@ -72,6 +72,7 @@ interface AiraCloudHistoryApiResponseBody {
   ok?: boolean;
   code?: string;
   message?: string;
+  status?: number;
   acknowledgements?: HistorySyncMutationAcknowledgement[];
   changes?: HistorySyncChange[];
   nextCursor?: number;
@@ -120,7 +121,8 @@ class NetworkAiraCloudHistoryApiHttpAdapter implements AiraCloudHistoryApiHttpAd
         return {
           ok: false,
           code: 'http_error',
-          message: `Aira 云历史记录同步请求失败（${response.responseCode}）。`
+          message: `Aira 云历史记录同步请求失败（${response.responseCode}）。`,
+          status: response.responseCode
         } as AiraCloudHistoryApiResponseBody;
       }
       return response.result as string | Object | null | undefined;
@@ -132,10 +134,12 @@ class NetworkAiraCloudHistoryApiHttpAdapter implements AiraCloudHistoryApiHttpAd
 
 export class HistorySyncRemoteError extends Error {
   readonly code: string;
+  readonly status: number;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, status: number = 0) {
     super(message);
     this.code = code;
+    this.status = Number.isFinite(status) ? Math.max(0, Math.floor(status)) : 0;
   }
 }
 
@@ -228,7 +232,37 @@ export class NetworkAiraCloudHistoryRemoteStore implements AiraCloudHistoryRemot
   }
 
   private async post(path: string, body: Object): Promise<AiraCloudHistoryApiResponseBody> {
-    const authorization = await this.authProvider.getAuthorizationHeader(this.uid);
+    try {
+      return await this.performPost(path, body, false);
+    } catch (error) {
+      if (error instanceof HistorySyncRemoteError && error.status === 401) {
+        hilog.warn(
+          DOMAIN,
+          TAG,
+          'access token rejected path=%{public}s uid=%{public}s, refreshing token and retrying once',
+          path,
+          this.maskUid(this.uid)
+        );
+        return await this.performPost(path, body, true);
+      }
+      throw this.resolveRethrownError(error);
+    }
+  }
+
+  /** ArkTS rejects throwing the untyped catch value, so keep the original error when it already is one. */
+  private resolveRethrownError(error: Object | Error | undefined | null): Error {
+    if (error instanceof Error) {
+      return error;
+    }
+    return new Error(error === undefined || error === null ? 'unknown' : JSON.stringify(error));
+  }
+
+  private async performPost(
+    path: string,
+    body: Object,
+    forceRefresh: boolean
+  ): Promise<AiraCloudHistoryApiResponseBody> {
+    const authorization = await this.authProvider.getAuthorizationHeader(this.uid, forceRefresh);
     try {
       const value = await this.adapter.post(
         `${this.endpoint}${path}`,
@@ -240,7 +274,8 @@ export class NetworkAiraCloudHistoryRemoteStore implements AiraCloudHistoryRemot
       if (response.ok !== true) {
         throw new HistorySyncRemoteError(
           (response.code ?? 'history_sync_failed').trim(),
-          response.message ?? 'Aira 云历史记录同步暂时失败。'
+          response.message ?? 'Aira 云历史记录同步暂时失败。',
+          response.status ?? 0
         );
       }
       return response;

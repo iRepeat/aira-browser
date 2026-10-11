@@ -1,3 +1,4 @@
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppRuntimeContext } from '../../app/runtime/AppRuntimeContext';
 import { AiraSyncSettings } from '../../common/models/AiraSyncModels';
 import { SyncService } from '../../services/sync/SyncService';
@@ -16,6 +17,9 @@ import {
 } from './SyncActivationModels';
 
 export type SyncExperienceHuaweiIdentityChangeHandler = (uid: string) => Promise<void>;
+
+const SYNC_PROVIDER_ACTIVATION_DOMAIN: number = 0x0000;
+const SYNC_PROVIDER_ACTIVATION_TAG: string = 'SyncProviderActivation';
 
 export class SyncExperienceProviderActivation {
   private syncService: SyncService;
@@ -55,7 +59,7 @@ export class SyncExperienceProviderActivation {
     try {
       await this.syncService.initializeAiraSyncSettings();
       await this.ensureHuaweiAuthInitialized();
-      const identity = await this.huaweiAuthService.signInForBookmarkSync(true);
+      const identity = await this.huaweiAuthService.signInForBookmarkSync(false);
       const settings = await this.syncService.saveHuaweiCloudConfig(
         identity.uid,
         identity.displayName,
@@ -71,6 +75,12 @@ export class SyncExperienceProviderActivation {
         settings
       );
     } catch (error) {
+      hilog.warn(
+        SYNC_PROVIDER_ACTIVATION_DOMAIN,
+        SYNC_PROVIDER_ACTIVATION_TAG,
+        'huawei account sign-in failed error=%{public}s',
+        JSON.stringify(error)
+      );
       return this.failed('aira_cloud', '登录失败', this.stringifyError(error as Error), 'huawei-auth-failed');
     }
   }
@@ -79,7 +89,7 @@ export class SyncExperienceProviderActivation {
     try {
       await this.syncService.initializeAiraSyncSettings();
       await this.ensureHuaweiAuthInitialized();
-      const identity = await this.huaweiAuthService.signInForBookmarkSync(true);
+      const identity = await this.huaweiAuthService.signInForBookmarkSync(false);
       await this.syncService.checkHuaweiSpaceCapability(
         identity.uid,
         AIRA_HUAWEI_SPACE_BOOKMARK_DATABASE_NAME
@@ -99,6 +109,12 @@ export class SyncExperienceProviderActivation {
         settings
       );
     } catch (error) {
+      hilog.warn(
+        SYNC_PROVIDER_ACTIVATION_DOMAIN,
+        SYNC_PROVIDER_ACTIVATION_TAG,
+        'huawei space readiness failed error=%{public}s',
+        JSON.stringify(error)
+      );
       return this.failed('huawei_space', '华为云空间暂不可用', this.stringifyError(error as Error), 'huawei-space-readiness-failed');
     }
   }
@@ -125,6 +141,12 @@ export class SyncExperienceProviderActivation {
         settings
       );
     } catch (error) {
+      hilog.warn(
+        SYNC_PROVIDER_ACTIVATION_DOMAIN,
+        SYNC_PROVIDER_ACTIVATION_TAG,
+        'huawei account identity refresh failed error=%{public}s',
+        JSON.stringify(error)
+      );
       return this.failed('aira_cloud', '账号信息刷新失败', this.stringifyError(error as Error), 'huawei-auth-failed');
     }
   }

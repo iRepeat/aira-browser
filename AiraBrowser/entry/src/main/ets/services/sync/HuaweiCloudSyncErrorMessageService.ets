@@ -23,6 +23,18 @@ export class HuaweiCloudSyncErrorMessageService {
         technicalMessage: technicalMessage
       };
     }
+    if (this.isHuaweiAccountAuthRejected(technicalMessage)) {
+      return {
+        userMessage: this.buildAuthRejectedMessage(),
+        technicalMessage: technicalMessage
+      };
+    }
+    if (this.isSerializedJsonDetail(technicalMessage)) {
+      return {
+        userMessage: '未知错误，请稍后重试。',
+        technicalMessage: technicalMessage
+      };
+    }
     return {
       userMessage: technicalMessage.length > 0 ? technicalMessage : '未知错误',
       technicalMessage: technicalMessage.length > 0 ? technicalMessage : '未知错误'
@@ -49,6 +61,31 @@ export class HuaweiCloudSyncErrorMessageService {
 
   private isCloudDatabaseObjectMissing(message: string): boolean {
     return message.toLowerCase().indexOf('object type is not found') >= 0;
+  }
+
+  /**
+   * The AGC auth layer rejects a request with a bare `{"code":401}` body or a
+   * BusinessError whose only field is code 401; both end up in the technical
+   * message after stringify.
+   */
+  private isHuaweiAccountAuthRejected(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.indexOf('"code":401') >= 0 ||
+      normalized.indexOf("'code':401") >= 0 ||
+      normalized.indexOf('code=401') >= 0;
+  }
+
+  private buildAuthRejectedMessage(): string {
+    return '华为账号登录状态已失效，请重新登录后再试。';
+  }
+
+  /**
+   * A message that is only serialized JSON carries nothing a user can read;
+   * show a generic message and keep the JSON as technical detail.
+   */
+  private isSerializedJsonDetail(message: string): boolean {
+    const trimmed = message.trim();
+    return trimmed.startsWith('{') || trimmed.startsWith('[');
   }
 
   private buildPermissionDeniedMessage(context: HuaweiCloudSyncErrorMessageContext): string {

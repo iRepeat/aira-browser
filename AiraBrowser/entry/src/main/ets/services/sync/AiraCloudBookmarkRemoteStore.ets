@@ -126,7 +126,7 @@ interface AiraCloudBookmarkApiResponseEnvelope {
 }
 
 export interface AiraCloudBookmarkApiAuthProvider {
-  getAuthorizationHeader(expectedUid: string): Promise<string>;
+  getAuthorizationHeader(expectedUid: string, forceRefresh?: boolean): Promise<string>;
 }
 
 export interface AiraCloudBookmarkApiHttpAdapter {
@@ -153,8 +153,10 @@ export class RuntimeAiraCloudBookmarkApiAuthProvider implements AiraCloudBookmar
     this.tokenProvider = tokenProvider ?? sharedHuaweiAccountAccessTokenProvider;
   }
 
-  async getAuthorizationHeader(expectedUid: string): Promise<string> {
-    const tokenString = (await this.tokenProvider.getCurrentAccessTokenForUid(expectedUid, true)).trim();
+  async getAuthorizationHeader(expectedUid: string, forceRefresh: boolean = false): Promise<string> {
+    // The AGC SDK refreshes an expired token itself; forcing a refresh on every
+    // request hammers Huawei's token endpoint, so force only when 401 recovery needs it.
+    const tokenString = (await this.tokenProvider.getCurrentAccessTokenForUid(expectedUid, forceRefresh)).trim();
     if (tokenString.length <= 0) {
       throw new Error('华为账号登录凭证为空，请重新登录后再开启书签同步。');
     }
@@ -297,7 +299,37 @@ export class AiraCloudBookmarkRemoteStore implements AiraSyncRemoteStore {
   }
 
   private async post(path: string, body: Object): Promise<AiraCloudBookmarkApiResponseBody> {
-    const authorization = await this.authProvider.getAuthorizationHeader(this.uid);
+    try {
+      return await this.performPost(path, body, false);
+    } catch (error) {
+      if (error instanceof AiraCloudBookmarkRemoteError && error.status === 401) {
+        hilog.warn(
+          AIRA_CLOUD_BOOKMARK_API_LOG_DOMAIN,
+          AIRA_CLOUD_BOOKMARK_API_LOG_TAG,
+          'access token rejected path=%{public}s uid=%{public}s, refreshing token and retrying once',
+          path,
+          this.maskUid(this.uid)
+        );
+        return await this.performPost(path, body, true);
+      }
+      throw this.resolveRethrownError(error);
+    }
+  }
+
+  /** ArkTS rejects throwing the untyped catch value, so keep the original error when it already is one. */
+  private resolveRethrownError(error: Object | Error | undefined | null): Error {
+    if (error instanceof Error) {
+      return error;
+    }
+    return new Error(error === undefined || error === null ? 'unknown' : JSON.stringify(error));
+  }
+
+  private async performPost(
+    path: string,
+    body: Object,
+    forceRefresh: boolean
+  ): Promise<AiraCloudBookmarkApiResponseBody> {
+    const authorization = await this.authProvider.getAuthorizationHeader(this.uid, forceRefresh);
     try {
       const value = await this.adapter.post(
         `${this.endpoint}${path}`,

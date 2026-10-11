@@ -39,6 +39,7 @@ interface AiraCloudConditionalSnapshotTransportError {
   ok: boolean;
   code: string;
   message: string;
+  status?: number;
 }
 
 interface AiraCloudConditionalSnapshotWriteRequest<T extends Object> {
@@ -53,6 +54,7 @@ interface AiraCloudConditionalSnapshotResponseBody<T extends Object> {
   ok?: boolean;
   code?: string;
   message?: string;
+  status?: number;
   snapshot?: T | null;
   revision?: string;
   updatedAt?: number;
@@ -64,6 +66,7 @@ interface AiraCloudConditionalSnapshotResponseEnvelope<T extends Object> {
   ok?: boolean;
   code?: string;
   message?: string;
+  status?: number;
   snapshot?: T | null;
   revision?: string;
   updatedAt?: number;
@@ -96,12 +99,17 @@ class NetworkAiraCloudConditionalSnapshotHttpAdapter implements AiraCloudConditi
       if (response.responseCode < 200 || response.responseCode >= 300) {
         const responseBody = `${response.result ?? ''}`.trim();
         if (responseBody.length > 0) {
-          return responseBody;
+          const envelope: AiraCloudConditionalSnapshotResponseEnvelope<Object> = {
+            body: responseBody,
+            status: response.responseCode
+          };
+          return envelope;
         }
         const failure: AiraCloudConditionalSnapshotTransportError = {
           ok: false,
           code: 'http_error',
-          message: `Aira 云同步请求失败（${response.responseCode}）。`
+          message: `Aira 云同步请求失败（${response.responseCode}）。`,
+          status: response.responseCode
         };
         return failure;
       }
@@ -109,6 +117,16 @@ class NetworkAiraCloudConditionalSnapshotHttpAdapter implements AiraCloudConditi
     } finally {
       request.destroy();
     }
+  }
+}
+
+export class AiraCloudConditionalSnapshotRemoteError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number = 0) {
+    super(message);
+    this.name = 'AiraCloudConditionalSnapshotRemoteError';
+    this.status = Number.isFinite(status) ? Math.max(0, Math.floor(status)) : 0;
   }
 }
 
@@ -164,7 +182,34 @@ export class AiraCloudConditionalSnapshotRemoteStore<T extends Object> {
   }
 
   private async post(path: string, body: Object): Promise<AiraCloudConditionalSnapshotResponseBody<T>> {
-    const authorization = await this.authProvider.getAuthorizationHeader(this.uid);
+    try {
+      return await this.performPost(path, body, false);
+    } catch (error) {
+      if (error instanceof AiraCloudConditionalSnapshotRemoteError && error.status === 401) {
+        hilog.warn(DOMAIN, TAG,
+          'access token rejected path=%{public}s uid=%{public}s, refreshing token and retrying once',
+          path,
+          this.maskUid(this.uid));
+        return await this.performPost(path, body, true);
+      }
+      throw this.resolveRethrownError(error);
+    }
+  }
+
+  /** ArkTS rejects throwing the untyped catch value, so keep the original error when it already is one. */
+  private resolveRethrownError(error: Object | Error | undefined | null): Error {
+    if (error instanceof Error) {
+      return error;
+    }
+    return new Error(error === undefined || error === null ? 'unknown' : JSON.stringify(error));
+  }
+
+  private async performPost(
+    path: string,
+    body: Object,
+    forceRefresh: boolean
+  ): Promise<AiraCloudConditionalSnapshotResponseBody<T>> {
+    const authorization = await this.authProvider.getAuthorizationHeader(this.uid, forceRefresh);
     try {
       const value = await this.adapter.post(
         `${this.endpoint}${path}`,
@@ -177,8 +222,10 @@ export class AiraCloudConditionalSnapshotRemoteStore<T extends Object> {
         if (response.code === this.options.conflictResponseCode) {
           throw new Error(this.options.conflictErrorMessage);
         }
-        throw new Error(response.message ??
-          `${this.options.serviceLabel}返回失败：${response.code ?? 'unknown'}`);
+        throw new AiraCloudConditionalSnapshotRemoteError(
+          response.message ?? `${this.options.serviceLabel}返回失败：${response.code ?? 'unknown'}`,
+          response.status ?? 0
+        );
       }
       return response;
     } catch (error) {
@@ -223,7 +270,11 @@ export class AiraCloudConditionalSnapshotRemoteStore<T extends Object> {
     const body = raw.body;
     if (typeof body === 'string') {
       try {
-        return JSON.parse(body) as AiraCloudConditionalSnapshotResponseBody<T>;
+        const parsedBody = JSON.parse(body) as AiraCloudConditionalSnapshotResponseBody<T>;
+        if (parsedBody.status === undefined && raw.status !== undefined) {
+          parsedBody.status = raw.status;
+        }
+        return parsedBody;
       } catch (_error) {
         return {
           ok: false,
