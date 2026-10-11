@@ -14,6 +14,10 @@ import {
 const DOWNLOAD_FILE_RESOLUTION_DOMAIN = 0x0000;
 const DOWNLOAD_FILE_RESOLUTION_TAG = 'DownloadFileResolution';
 const LOCAL_COPY_CHUNK_BYTES = 256 * 1024;
+const USER_DOWNLOAD_DOCS_ROOT_URI = 'file://docs/storage/Users/currentUser/Download';
+const USER_DOWNLOAD_DOCS_MARKER = '/storage/Users/currentUser/Download/';
+const AIRA_DOWNLOAD_FOLDER_NAME = 'Aira';
+const PUBLIC_DOWNLOAD_ROOT_LABEL = 'Download';
 
 export type DownloadLocalDeleteResult =
   'deleted' |
@@ -225,6 +229,96 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
   }
 
   async persistToSystemDownloads(localPath: string, suggestedFileName: string): Promise<DownloadPersistResult | undefined> {
+    const directResult = await this.persistToAiraDownloadFolder(localPath, suggestedFileName);
+    if (directResult !== undefined) {
+      return directResult;
+    }
+    return this.persistViaSystemDownloadPicker(localPath, suggestedFileName);
+  }
+
+  /**
+   * Tries to write straight into the user-visible `Download/Aira` folder.
+   *
+   * The system download picker (DOWNLOAD mode) names its own subfolder
+   * `Download/<bundleName>` and some device file managers do not surface that
+   * folder, while the in-app copy has always promised `Download/Aira`. Public
+   * user directories are grant-scoped, so this is best-effort: when the folder
+   * cannot be created or written the caller falls back to the system picker.
+   */
+  private async persistToAiraDownloadFolder(localPath: string, suggestedFileName: string): Promise<DownloadPersistResult | undefined> {
+    const savedFileName = this.sanitizeFileName(suggestedFileName);
+    const folderUri = `${USER_DOWNLOAD_DOCS_ROOT_URI}/${AIRA_DOWNLOAD_FOLDER_NAME}`;
+    const folderPath = this.resolvePathFromUri(folderUri);
+    try {
+      if (!await this.pathExists(folderPath)) {
+        await fileIo.mkdir(folderPath, true);
+      }
+      hilog.info(
+        DOWNLOAD_FILE_RESOLUTION_DOMAIN,
+        DOWNLOAD_FILE_RESOLUTION_TAG,
+        'direct folder ready path=%{public}s file=%{public}s',
+        folderPath,
+        savedFileName
+      );
+      const exportResolution = this.buildExportResolution(savedFileName, folderUri);
+      const targetUri = await this.copyLocalPathWithoutOverwrite(
+        localPath,
+        exportResolution.targetUri,
+        exportResolution.conflictResolvedUri
+      );
+      const folderLabel = this.buildPublicDownloadFolderLabel(targetUri);
+      return {
+        status: 'exported',
+        finalFileUri: targetUri,
+        finalDisplayPath: `${folderLabel}/${savedFileName}`,
+        destinationLabel: folderLabel,
+        isExported: true
+      };
+    } catch (error) {
+      hilog.warn(
+        DOWNLOAD_FILE_RESOLUTION_DOMAIN,
+        DOWNLOAD_FILE_RESOLUTION_TAG,
+        'direct folder unavailable, falling back to system download picker file=%{public}s path=%{public}s error=%{public}s',
+        savedFileName,
+        folderPath,
+        this.stringifyError(error)
+      );
+      await this.removeFolderIfEmpty(folderPath);
+      return undefined;
+    }
+  }
+
+  private async removeFolderIfEmpty(folderPath: string): Promise<void> {
+    try {
+      await fileIo.rmdir(folderPath);
+      hilog.info(
+        DOWNLOAD_FILE_RESOLUTION_DOMAIN,
+        DOWNLOAD_FILE_RESOLUTION_TAG,
+        'direct folder removed empty path=%{public}s',
+        folderPath
+      );
+    } catch (_error) {
+    }
+  }
+
+  private buildPublicDownloadFolderLabel(fileUri: string): string {
+    const baseUri = this.resolveBaseUriFromUri(fileUri);
+    const markerIndex = baseUri.indexOf(USER_DOWNLOAD_DOCS_MARKER);
+    if (markerIndex < 0) {
+      return resolveAppResourceText($r('app.string.download_system_downloads'));
+    }
+    const folderTail = baseUri.substring(markerIndex + USER_DOWNLOAD_DOCS_MARKER.length);
+    if (folderTail.length <= 0) {
+      return PUBLIC_DOWNLOAD_ROOT_LABEL;
+    }
+    try {
+      return `${PUBLIC_DOWNLOAD_ROOT_LABEL}/${decodeURIComponent(folderTail)}`;
+    } catch (_error) {
+      return `${PUBLIC_DOWNLOAD_ROOT_LABEL}/${folderTail}`;
+    }
+  }
+
+  private async persistViaSystemDownloadPicker(localPath: string, suggestedFileName: string): Promise<DownloadPersistResult | undefined> {
     try {
       const savedFileName = this.sanitizeFileName(suggestedFileName);
       const sourceSize = await this.getFileSize(localPath);
@@ -261,10 +355,12 @@ export class DownloadFileResolutionService implements DownloadFileResolutionAdap
         exportResolution.targetUri,
         exportResolution.conflictResolvedUri
       );
+      const folderLabel = this.buildPublicDownloadFolderLabel(targetUri);
       return {
         status: 'exported',
         finalFileUri: targetUri,
-        finalDisplayPath: targetUri,
+        finalDisplayPath: `${folderLabel}/${savedFileName}`,
+        destinationLabel: folderLabel,
         isExported: true
       };
     } catch (error) {
